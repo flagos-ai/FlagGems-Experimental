@@ -1,0 +1,42 @@
+name: sync-infra-ci-to-kernelgen
+
+# Trigger: only when a PR targeting infra-ci is merged.
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - infra-ci
+
+permissions:
+  contents: write
+
+jobs:
+  merge-into-kernelgen:
+    # Guard: skip if the PR was merely closed without merging.
+    if: github.event.pull_request.merged == true
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository (full history)
+        uses: ./.github/actions/checkout-retry
+        with:
+          # Fetch all history so the merge has the complete graph.
+          fetch-depth: "0"
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch feat/kernelgen
+        run: git fetch origin feat/kernelgen
+
+      - name: Merge infra-ci into feat/kernelgen
+        run: |
+          git checkout feat/kernelgen
+          # --no-edit: accept the auto-generated merge commit message.
+          git merge --no-edit origin/infra-ci
+
+      - name: Push feat/kernelgen
+        run: git push origin feat/kernelgen
