@@ -8,10 +8,29 @@ from . import accuracy_utils as utils
 
 @pytest.mark.ne
 @pytest.mark.parametrize("shape", utils.POINTWISE_SHAPES)
-@pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
+@pytest.mark.parametrize(
+    "dtype", utils.ALL_FLOAT_DTYPES + utils.ALL_INT_DTYPES + utils.BOOL_TYPES
+)
 def test_ne(shape, dtype):
-    inp1 = torch.randint(0, 10, shape, dtype=dtype, device=flag_gems.device)
-    inp2 = torch.randint(0, 10, shape, dtype=dtype, device=flag_gems.device)
+    if dtype in utils.ALL_FLOAT_DTYPES:
+        inp1 = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+        inp2 = inp1.clone()
+        if inp2.numel() > 0:
+            inp2.reshape(-1)[0] = inp2.reshape(-1)[0] + 1
+    elif dtype in utils.ALL_INT_DTYPES:
+        inp1 = torch.randint(-1000, 1000, shape, dtype=dtype, device="cpu").to(
+            flag_gems.device
+        )
+        inp2 = torch.randint(-1000, 1000, shape, dtype=dtype, device="cpu").to(
+            flag_gems.device
+        )
+    elif dtype in utils.BOOL_TYPES:
+        inp1 = torch.randint(0, 2, shape, dtype=dtype, device="cpu").to(
+            flag_gems.device
+        )
+        inp2 = torch.randint(0, 2, shape, dtype=dtype, device="cpu").to(
+            flag_gems.device
+        )
     ref_inp1 = utils.to_reference(inp1)
     ref_inp2 = utils.to_reference(inp2)
 
@@ -22,11 +41,22 @@ def test_ne(shape, dtype):
     utils.gems_assert_equal(res_out, ref_out)
 
 
-@pytest.mark.ne_scalar
+@pytest.mark.ne
 @pytest.mark.parametrize("shape", utils.POINTWISE_SHAPES)
-@pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
+@pytest.mark.parametrize(
+    "dtype", utils.ALL_FLOAT_DTYPES + utils.ALL_INT_DTYPES + utils.BOOL_TYPES
+)
 def test_ne_scalar(shape, dtype):
-    inp1 = torch.randint(0, 10, shape, dtype=dtype, device=flag_gems.device)
+    if dtype in utils.ALL_FLOAT_DTYPES:
+        inp1 = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    elif dtype in utils.ALL_INT_DTYPES:
+        inp1 = torch.randint(-1000, 1000, shape, dtype=dtype, device="cpu").to(
+            flag_gems.device
+        )
+    elif dtype in utils.BOOL_TYPES:
+        inp1 = torch.randint(0, 2, shape, dtype=dtype, device="cpu").to(
+            flag_gems.device
+        )
     inp2 = 0
     ref_inp1 = utils.to_reference(inp1)
 
