@@ -9,7 +9,7 @@ on:
   pull_request:
     types: [closed]
     branches:
-      - master
+      - infra-ci
     paths-ignore:
       # keep same with push
       - docs/**

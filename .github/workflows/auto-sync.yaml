@@ -7,7 +7,7 @@ on:
   # and PR merge events.
   push:
     branches:
-      - master
+      - infra-ci
 
 permissions:
   contents: read
