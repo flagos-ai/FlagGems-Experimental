@@ -5550,15 +5550,19 @@ ops:
     stages:
       - alpha: '5.3'
   - id: normal_
-    description: Random sampling operator (normal_).
+    description: |
+      Fills the tensor with random numbers drawn from the normal distribution
+      parameterized by the given float mean and float standard deviation.
     for:
       - normal_
     labels:
+      - aten
+      - pointwise
       - skip_precision_check
     kind:
-      - Tensor
+      - Distribution
     stages:
-      - alpha: '5.3'
+      - stable: '5.0'
   - id: normal_float_float_
     description: |
       Returns a tensor of random numbers drawn from separate normal distributions

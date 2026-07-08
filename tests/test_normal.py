@@ -23,8 +23,11 @@ def test_normal_(shape, dtype):
     loc = 3.0
     scale = 10.0
     res_out = torch.randn(size=shape, dtype=dtype, device=flag_gems.device)
+    original_ptr = res_out.data_ptr()
     with flag_gems.use_gems():
-        res_out.normal_(loc, scale)
+        returned = res_out.normal_(loc, scale)
+
+    assert returned.data_ptr() == original_ptr
 
     ref_out = utils.to_reference(res_out)
     mean = torch.mean(ref_out)
