@@ -1,4 +1,15 @@
 ops:
+  - id: ReduceArgMax
+    description: |
+      Returns the indices of the maximum value of all elements in the `input` tensor.
+    for:
+      - ReduceArgMax
+    labels:
+      - Reduction
+    kind:
+      - LinearAlg
+    stages:
+      - beta: '5.0'
   - id: abs
     description: |
       Computes the absolute value of each element in `input`.
