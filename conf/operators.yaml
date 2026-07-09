@@ -1,4 +1,16 @@
 ops:
+  - id: ReduceArgMin
+    description: |
+      Returns the indices of the minimum value(s) of the flattened tensor or along a dimension.
+    for:
+      - ReduceArgMin
+    labels:
+      - custom
+      - Reduction
+    kind:
+      - LinearAlg
+    stages:
+      - stable: '2.2'
   - id: abs
     description: |
       Computes the absolute value of each element in `input`.
