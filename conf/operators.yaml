@@ -5956,6 +5956,21 @@ ops:
       - Tensor
     stages:
       - stable: '2.2'
+  - id: quantize
+    description: |
+      Converts a floating point tensor to per-tensor affine uint8 code values
+      stored in a floating point tensor. This custom API is used by model
+      quantization workflows that need numeric code values before packing or
+      handoff to model-specific kernels.
+    for:
+      - quantize
+    labels:
+      - custom
+      - pointwise
+    kind:
+      - Quantization
+    stages:
+      - alpha: '5.0'
   - id: rad2deg
     description: |
       Converts each element from angles in radians to degrees.
