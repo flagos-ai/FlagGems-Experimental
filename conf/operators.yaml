@@ -7511,6 +7511,18 @@ ops:
       - BLAS
     stages:
       - alpha: '5.4'
+  - id: special_chebyshev_polynomial_u
+    description: Computes the Chebyshev polynomial of the second kind.
+    for:
+      - special_chebyshev_polynomial_u
+    labels:
+      - aten
+      - pointwise
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - beta: '5.0'
   - id: special_chebyshev_polynomial_v
     description: |
       Triton kernel implementation for special_chebyshev_polynomial_v.
