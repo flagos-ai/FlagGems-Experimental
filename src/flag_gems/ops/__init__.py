@@ -479,6 +479,13 @@ from flag_gems.ops.special_shifted_chebyshev_polynomial_u import (
     special_shifted_chebyshev_polynomial_u,
     special_shifted_chebyshev_polynomial_u_,
 )
+from flag_gems.ops.special_xlogy import (
+    xlogy,
+    xlogy_,
+    xlogy_scalar_tensor,
+    xlogy_tensor_scalar,
+    xlogy_tensor_scalar_,
+)
 from flag_gems.ops.split_with_sizes_copy import split_with_sizes_copy
 from flag_gems.ops.sqrt import sqrt, sqrt_
 from flag_gems.ops.square import square, square_, square_out
@@ -1186,6 +1193,11 @@ __all__ = [
     "where_scalar_self",
     "where_self",
     "where_self_out",
+    "xlogy",
+    "xlogy_",
+    "xlogy_scalar_tensor",
+    "xlogy_tensor_scalar",
+    "xlogy_tensor_scalar_",
     "zero",
     "zero_",
     "zero_out",

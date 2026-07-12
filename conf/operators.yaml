@@ -7668,6 +7668,24 @@ ops:
       - Math
     stages:
       - alpha: '5.4'
+  - id: special_xlogy
+    description: |
+      Computes `self * log(other)` with the special-case behavior that zero self values produce zero unless `other` is NaN.
+    for:
+      - special_xlogy
+      - special_xlogy.other_scalar
+      - special_xlogy.self_scalar
+      - special_xlogy.out
+      - special_xlogy.self_scalar_out
+      - special_xlogy.other_scalar_out
+    labels:
+      - aten
+      - pointwise
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - beta: '5.0'
   - id: split_with_sizes_copy
     description: |
       Splits a tensor into sub-tensors along a given dimension,
