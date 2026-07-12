@@ -707,6 +707,7 @@ _FULL_CONFIG = (
     ("tile", tile),
     ("topk", topk),
     ("trace", trace),
+    ("transpose_", transpose_),
     ("tril", tril),
     ("tril.out", tril_out),
     ("tril_", tril_),

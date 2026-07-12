@@ -8142,6 +8142,18 @@ ops:
       - Reduction
     stages:
       - stable: '4.0'
+  - id: transpose_
+    description: |
+      In-place version of `transpose()` that swaps two dimensions of a tensor.
+    for:
+      - transpose_
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Tensor
+    stages:
+      - beta: '5.0'
   - id: tril
     description: |
       Returns the lower triangular part of an input matrix (or a batch of matrices) and
