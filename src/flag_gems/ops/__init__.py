@@ -651,6 +651,14 @@ from flag_gems.ops.special_scaled_modified_bessel_k1 import (
     special_scaled_modified_bessel_k1,
     special_scaled_modified_bessel_k1_out,
 )
+from flag_gems.ops.special_shifted_chebyshev_polynomial_t import (
+    special_shifted_chebyshev_polynomial_t,
+    special_shifted_chebyshev_polynomial_t_n_scalar,
+    special_shifted_chebyshev_polynomial_t_n_scalar_out,
+    special_shifted_chebyshev_polynomial_t_out,
+    special_shifted_chebyshev_polynomial_t_x_scalar,
+    special_shifted_chebyshev_polynomial_t_x_scalar_out,
+)
 from flag_gems.ops.special_shifted_chebyshev_polynomial_u import (
     special_shifted_chebyshev_polynomial_u,
     special_shifted_chebyshev_polynomial_u_,
@@ -662,12 +670,12 @@ from flag_gems.ops.special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
 from flag_gems.ops.special_sinc import special_sinc
+from flag_gems.ops.special_softmax import special_softmax
 from flag_gems.ops.special_spherical_bessel_j0 import (
     special_spherical_bessel_j0,
     special_spherical_bessel_j0_,
 )
 from flag_gems.ops.special_xlog1py import special_xlog1py
-from flag_gems.ops.special_softmax import special_softmax
 from flag_gems.ops.split_with_sizes_copy import split_with_sizes_copy
 from flag_gems.ops.sqrt import sqrt, sqrt_
 from flag_gems.ops.square import square, square_, square_out
@@ -1498,6 +1506,12 @@ __all__ = [
     "special_round_out",
     "special_scaled_modified_bessel_k1",
     "special_scaled_modified_bessel_k1_out",
+    "special_shifted_chebyshev_polynomial_t",
+    "special_shifted_chebyshev_polynomial_t_n_scalar",
+    "special_shifted_chebyshev_polynomial_t_n_scalar_out",
+    "special_shifted_chebyshev_polynomial_t_out",
+    "special_shifted_chebyshev_polynomial_t_x_scalar",
+    "special_shifted_chebyshev_polynomial_t_x_scalar_out",
     "special_shifted_chebyshev_polynomial_u",
     "special_shifted_chebyshev_polynomial_u_",
     "special_shifted_chebyshev_polynomial_v",

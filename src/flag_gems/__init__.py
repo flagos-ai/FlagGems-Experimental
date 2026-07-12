@@ -871,6 +871,27 @@ _FULL_CONFIG = (
     ("special_round.out", special_round_out),
     ("special_scaled_modified_bessel_k1", special_scaled_modified_bessel_k1),
     ("special_scaled_modified_bessel_k1.out", special_scaled_modified_bessel_k1_out),
+    ("special_shifted_chebyshev_polynomial_t", special_shifted_chebyshev_polynomial_t),
+    (
+        "special_shifted_chebyshev_polynomial_t.out",
+        special_shifted_chebyshev_polynomial_t_out,
+    ),
+    (
+        "special_shifted_chebyshev_polynomial_t.x_scalar",
+        special_shifted_chebyshev_polynomial_t_x_scalar,
+    ),
+    (
+        "special_shifted_chebyshev_polynomial_t.x_scalar_out",
+        special_shifted_chebyshev_polynomial_t_x_scalar_out,
+    ),
+    (
+        "special_shifted_chebyshev_polynomial_t.n_scalar",
+        special_shifted_chebyshev_polynomial_t_n_scalar,
+    ),
+    (
+        "special_shifted_chebyshev_polynomial_t.n_scalar_out",
+        special_shifted_chebyshev_polynomial_t_n_scalar_out,
+    ),
     ("special_shifted_chebyshev_polynomial_u", special_shifted_chebyshev_polynomial_u),
     (
         "special_shifted_chebyshev_polynomial_u_",

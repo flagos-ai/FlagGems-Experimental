@@ -9577,6 +9577,10 @@ ops:
     description: Triton kernel implementation for special_modified_bessel_k0.
     for:
       - special_modified_bessel_k0
+  - id: special_shifted_chebyshev_polynomial_t
+    description: Computes the shifted Chebyshev polynomial of the first kind.
+    for:
+      - special_shifted_chebyshev_polynomial_t
     labels:
       - aten
       - KernelGen
