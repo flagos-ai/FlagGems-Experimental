@@ -13,6 +13,13 @@ from flag_gems.utils import triton_lang_extension as tle
 logger = logging.getLogger(__name__)
 
 
+def _get_block_size(numel, dtype):
+    block_size = triton.next_power_of_2(math.ceil(math.sqrt(numel)))
+    if dtype is torch.float32 and numel >= 2**28:
+        block_size = min(block_size, 4096)
+    return block_size
+
+
 @libentry()
 @triton.jit
 def reduce_l2_kernel_1(X, Mid, M, BLOCK_SIZE: tl.constexpr):
@@ -49,7 +56,7 @@ def reduce_l2(x):
     if M == 0:
         return torch.zeros([], dtype=dtype, device=x.device)
 
-    BLOCK_SIZE = triton.next_power_of_2(math.ceil(math.sqrt(M)))
+    BLOCK_SIZE = _get_block_size(M, dtype)
     MID_SIZE = triton.cdiv(M, BLOCK_SIZE)
     BLOCK_MID = triton.next_power_of_2(MID_SIZE)
 
