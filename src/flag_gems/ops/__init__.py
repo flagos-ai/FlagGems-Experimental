@@ -471,6 +471,7 @@ from flag_gems.ops.special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w_out,
 )
 from flag_gems.ops.special_gammainc import special_gammainc
+from flag_gems.ops.special_gammaincc import special_gammaincc
 from flag_gems.ops.special_hermite_polynomial_h import special_hermite_polynomial_h
 from flag_gems.ops.special_i0e import special_i0e, special_i0e_out
 from flag_gems.ops.special_i1 import special_i1, special_i1_out
@@ -796,6 +797,7 @@ __all__ = [
     "frac_",
     "full",
     "full_like",
+    "special_gammaincc",
     "gather",
     "gather_backward",
     "gcd",
