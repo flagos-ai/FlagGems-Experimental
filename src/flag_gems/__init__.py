@@ -671,6 +671,27 @@ _FULL_CONFIG = (
     ("special_i1", special_i1),
     ("special_i1_out", special_i1_out),
     ("special_log_softmax", special_log_softmax),
+    ("special_shifted_chebyshev_polynomial_t", special_shifted_chebyshev_polynomial_t),
+    (
+        "special_shifted_chebyshev_polynomial_t.out",
+        special_shifted_chebyshev_polynomial_t_out,
+    ),
+    (
+        "special_shifted_chebyshev_polynomial_t.x_scalar",
+        special_shifted_chebyshev_polynomial_t_x_scalar,
+    ),
+    (
+        "special_shifted_chebyshev_polynomial_t.x_scalar_out",
+        special_shifted_chebyshev_polynomial_t_x_scalar_out,
+    ),
+    (
+        "special_shifted_chebyshev_polynomial_t.n_scalar",
+        special_shifted_chebyshev_polynomial_t_n_scalar,
+    ),
+    (
+        "special_shifted_chebyshev_polynomial_t.n_scalar_out",
+        special_shifted_chebyshev_polynomial_t_n_scalar_out,
+    ),
     ("special_shifted_chebyshev_polynomial_u", special_shifted_chebyshev_polynomial_u),
     (
         "special_shifted_chebyshev_polynomial_u_",

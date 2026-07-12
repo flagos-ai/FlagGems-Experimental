@@ -475,6 +475,14 @@ from flag_gems.ops.special_hermite_polynomial_h import special_hermite_polynomia
 from flag_gems.ops.special_i0e import special_i0e, special_i0e_out
 from flag_gems.ops.special_i1 import special_i1, special_i1_out
 from flag_gems.ops.special_log_softmax import special_log_softmax
+from flag_gems.ops.special_shifted_chebyshev_polynomial_t import (
+    special_shifted_chebyshev_polynomial_t,
+    special_shifted_chebyshev_polynomial_t_n_scalar,
+    special_shifted_chebyshev_polynomial_t_n_scalar_out,
+    special_shifted_chebyshev_polynomial_t_out,
+    special_shifted_chebyshev_polynomial_t_x_scalar,
+    special_shifted_chebyshev_polynomial_t_x_scalar_out,
+)
 from flag_gems.ops.special_shifted_chebyshev_polynomial_u import (
     special_shifted_chebyshev_polynomial_u,
     special_shifted_chebyshev_polynomial_u_,
@@ -1114,6 +1122,12 @@ __all__ = [
     "special_i1",
     "special_i1_out",
     "special_log_softmax",
+    "special_shifted_chebyshev_polynomial_t",
+    "special_shifted_chebyshev_polynomial_t_n_scalar",
+    "special_shifted_chebyshev_polynomial_t_n_scalar_out",
+    "special_shifted_chebyshev_polynomial_t_out",
+    "special_shifted_chebyshev_polynomial_t_x_scalar",
+    "special_shifted_chebyshev_polynomial_t_x_scalar_out",
     "special_shifted_chebyshev_polynomial_u",
     "special_shifted_chebyshev_polynomial_u_",
     "split_with_sizes_copy",
