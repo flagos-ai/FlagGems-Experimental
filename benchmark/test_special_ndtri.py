@@ -9,6 +9,6 @@ def test_special_ndtri():
     bench = base.UnaryPointwiseBenchmark(
         op_name="special_ndtri",
         torch_op=torch.special.ndtri,
-        dtypes=[torch.float32],
+        dtypes=[torch.float32, torch.float64],
     )
     bench.run()
