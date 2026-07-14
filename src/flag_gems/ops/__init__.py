@@ -261,6 +261,7 @@ from flag_gems.ops.isneginf import isneginf, isneginf_out
 from flag_gems.ops.kron import kron
 from flag_gems.ops.kthvalue import kthvalue
 from flag_gems.ops.layernorm import layer_norm, layer_norm_backward
+from flag_gems.ops.lcm import lcm, lcm_
 from flag_gems.ops.le import le, le_scalar
 from flag_gems.ops.leaky_relu import leaky_relu, leaky_relu_, leaky_relu_out
 from flag_gems.ops.lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
@@ -268,6 +269,7 @@ from flag_gems.ops.less_equal import less_equal, less_equal_scalar
 from flag_gems.ops.lgamma_ import lgamma, lgamma_
 from flag_gems.ops.lift_fresh_copy import lift_fresh_copy, lift_fresh_copy_out
 from flag_gems.ops.linalg_cholesky import linalg_cholesky
+from flag_gems.ops.linalg_eigvalsh import linalg_eigvalsh, linalg_eigvalsh_
 from flag_gems.ops.linear import linear
 from flag_gems.ops.linspace import linspace
 from flag_gems.ops.log import log
@@ -859,6 +861,8 @@ __all__ = [
     "kthvalue",
     "layer_norm",
     "layer_norm_backward",
+    "lcm",
+    "lcm_",
     "le",
     "le_scalar",
     "leaky_relu",
@@ -875,6 +879,8 @@ __all__ = [
     "lift_fresh_copy",
     "lift_fresh_copy_out",
     "linalg_cholesky",
+    "linalg_eigvalsh",
+    "linalg_eigvalsh_",
     "linear",
     "linspace",
     "log",
