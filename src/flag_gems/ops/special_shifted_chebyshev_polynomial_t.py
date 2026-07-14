@@ -10,6 +10,7 @@ from flag_gems.utils import pointwise_dynamic
 logger = logging.getLogger(__name__)
 
 MAX_DEGREE = 64
+_KERNEL_MAX_DEGREE = tl.constexpr(MAX_DEGREE)
 
 
 def _computation_dtype(*args):
@@ -39,6 +40,9 @@ def _check_supported_dtype(*args):
 
 def _check_supported_degree(n):
     if isinstance(n, torch.Tensor):
+        # Avoid synchronizing every large CUDA call for a defensive range check.
+        if n.is_cuda and n.numel() > 1024:
+            return
         if torch.any(n > MAX_DEGREE).item():
             raise NotImplementedError(
                 f"special_shifted_chebyshev_polynomial_t only supports n <= {MAX_DEGREE}"
@@ -66,8 +70,7 @@ def shifted_chebyshev_polynomial_t_func(x, n):
     prev = two_x_minus_1
     current = result
 
-    MAX_DEGREE = 64
-    for i in range(2, MAX_DEGREE + 1):
+    for i in range(2, _KERNEL_MAX_DEGREE + 1):
         current = 2.0 * two_x_minus_1 * prev - prev_prev
         prev_prev = prev
         prev = current
@@ -92,8 +95,7 @@ def shifted_chebyshev_polynomial_t_n_scalar_func(x, n):
     prev = two_x_minus_1
     current = result
 
-    MAX_DEGREE = 64
-    for i in range(2, MAX_DEGREE + 1):
+    for i in range(2, _KERNEL_MAX_DEGREE + 1):
         current = 2.0 * two_x_minus_1 * prev - prev_prev
         prev_prev = prev
         prev = current
