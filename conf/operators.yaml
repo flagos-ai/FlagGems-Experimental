@@ -4367,6 +4367,17 @@ ops:
       - Math
     stages:
       - alpha: '5.4'
+  - id: linalg_eigvalsh
+    description: Computes the eigenvalues of a real symmetric matrix (or batch of matrices).
+    for:
+      - linalg_eigvalsh
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: linear
     description: |
       Applies a linear transformation to the incoming data: y = x @ W^T + b.
