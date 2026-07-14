@@ -159,6 +159,9 @@ def replication_pad3d_backward(grad_output, self, padding):
     else:
         pad_l, pad_r, pad_t, pad_b, pad_f, pad_ba = padding
 
+    if pad_l == pad_r == pad_t == pad_b == pad_f == pad_ba == 0:
+        return grad_output.clone()
+
     if self.dim() == 4:
         N = 1
         C, D_in, H_in, W_in = self.shape
