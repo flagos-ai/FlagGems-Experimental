@@ -8,7 +8,9 @@ from . import accuracy_utils as utils
 
 @pytest.mark.quantize
 @pytest.mark.parametrize("shape", utils.POINTWISE_SHAPES)
-@pytest.mark.parametrize("dtype", [torch.float32])
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+)
 def test_quantize(shape, dtype):
     scale = 0.1
     zero_point = 10
