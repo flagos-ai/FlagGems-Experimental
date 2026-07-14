@@ -384,7 +384,7 @@ from flag_gems.ops.randn_like import randn_like
 from flag_gems.ops.randperm import randperm
 from flag_gems.ops.range import range
 from flag_gems.ops.reciprocal import reciprocal, reciprocal_
-from flag_gems.ops.ReduceArgMin import ReduceArgMin
+from flag_gems.ops.reduce_arg_min import ReduceArgMin
 from flag_gems.ops.reflection_pad1d import reflection_pad1d, reflection_pad1d_out
 from flag_gems.ops.reflection_pad1d_backward import reflection_pad1d_backward
 from flag_gems.ops.reflection_pad2d import reflection_pad2d, reflection_pad2d_out
@@ -541,7 +541,6 @@ from flag_gems.ops.zeros import zero_, zeros
 from flag_gems.ops.zeros_like import zeros_like
 
 __all__ = [
-    "ReduceArgMin",
     "SUPPORTED_FP8_DTYPE",
     "ScaleDotProductAttention",
     "__ilshift__",
@@ -1006,6 +1005,7 @@ __all__ = [
     "range",
     "reciprocal",
     "reciprocal_",
+    "ReduceArgMin",
     "reflection_pad1d",
     "reflection_pad1d_backward",
     "reflection_pad1d_out",
