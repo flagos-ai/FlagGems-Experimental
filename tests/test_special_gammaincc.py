@@ -24,7 +24,7 @@ def test_gammaincc(shape, dtype):
         res_out = torch.special.gammaincc(inp1, inp2)
 
     # Use a more lenient tolerance (atol=1e-2) for this complex mathematical function
-    flag_gems.testing.assert_close(res_out, ref_out, dtype, atol=1e-2)
+    utils.gems_assert_close(res_out, ref_out, dtype, atol=1e-2)
 
 
 @pytest.mark.special_gammaincc
@@ -47,4 +47,4 @@ def test_gammaincc_boundary_values():
     with flag_gems.use_gems():
         res_out = torch.special.gammaincc(inp1, inp2)
 
-    flag_gems.testing.assert_close(res_out, ref_out, dtype, equal_nan=True, atol=1e-2)
+    utils.gems_assert_close(res_out, ref_out, dtype, equal_nan=True, atol=1e-2)
