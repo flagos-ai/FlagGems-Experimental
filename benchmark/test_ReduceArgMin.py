@@ -7,7 +7,7 @@ from . import base, consts
 
 
 @pytest.mark.ReduceArgMin
-def test_ReduceArgMin():
+def test_reduce_arg_min():
     bench = base.UnaryReductionBenchmark(
         op_name="ReduceArgMin",
         torch_op=torch.argmin,

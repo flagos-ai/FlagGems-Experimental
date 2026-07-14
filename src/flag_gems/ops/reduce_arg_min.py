@@ -7,6 +7,6 @@ logger = logging.getLogger(__name__)
 
 
 def ReduceArgMin(inp, dim=None, keepdim=False, *, dtype=None):
-    """Return indices of minimum values for the ReduceArgMin public wrapper."""
+    """KernelGen-facing public wrapper for the existing argmin implementation."""
     logger.debug("GEMS REDUCE_ARG_MIN")
     return argmin(inp, dim=dim, keepdim=keepdim, dtype=dtype)
