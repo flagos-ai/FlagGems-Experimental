@@ -46,7 +46,6 @@ def torch_ge(v):
 
 
 _FULL_CONFIG = (
-    ("ReduceArgMax", ReduceArgMax),
     ("__and__.Scalar", bitwise_and_scalar),
     ("__and__.Tensor", bitwise_and_tensor),
     ("__ilshift__.Tensor", __ilshift__),
@@ -573,6 +572,7 @@ _FULL_CONFIG = (
     ("range", range_op),
     ("reciprocal", reciprocal),
     ("reciprocal_", reciprocal_),
+    ("ReduceArgMax", ReduceArgMax),
     ("reflection_pad1d", reflection_pad1d),
     ("reflection_pad1d.out", reflection_pad1d_out),
     ("reflection_pad1d_backward", reflection_pad1d_backward),
