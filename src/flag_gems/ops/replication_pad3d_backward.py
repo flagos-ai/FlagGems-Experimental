@@ -27,26 +27,26 @@ REPLICATION_PAD3D_BACKWARD_CONFIGS = [
 def replication_pad3d_backward_kernel(
     grad_output_ptr,
     grad_input_ptr,
-    D_in,
-    H_in,
-    W_in,
-    D_out,
-    H_out,
-    W_out,
-    pad_f,
-    pad_t,
-    pad_l,
-    stride_go_n,
-    stride_go_c,
-    stride_go_d,
-    stride_go_h,
-    stride_go_w,
-    stride_gi_n,
-    stride_gi_c,
-    stride_gi_d,
-    stride_gi_h,
-    stride_gi_w,
-    C,
+    D_in: tl.constexpr,
+    H_in: tl.constexpr,
+    W_in: tl.constexpr,
+    D_out: tl.constexpr,
+    H_out: tl.constexpr,
+    W_out: tl.constexpr,
+    pad_f: tl.constexpr,
+    pad_t: tl.constexpr,
+    pad_l: tl.constexpr,
+    stride_go_n: tl.constexpr,
+    stride_go_c: tl.constexpr,
+    stride_go_d: tl.constexpr,
+    stride_go_h: tl.constexpr,
+    stride_go_w: tl.constexpr,
+    stride_gi_n: tl.constexpr,
+    stride_gi_c: tl.constexpr,
+    stride_gi_d: tl.constexpr,
+    stride_gi_h: tl.constexpr,
+    stride_gi_w: tl.constexpr,
+    C: tl.constexpr,
     BLOCK_H: tl.constexpr,
     BLOCK_W: tl.constexpr,
 ):
@@ -102,6 +102,11 @@ def replication_pad3d_backward_kernel(
     w_start = tl.where(W_in == 1, 0, w_start)
     w_end = tl.where(W_in == 1, W_out, w_end)
 
+    pad_r = W_out - W_in - pad_l
+    max_w_repeats = tl.maximum(tl.maximum(pad_l + 1, pad_r + 1), 1)
+    max_w_repeats = tl.minimum(max_w_repeats, W_out)
+    max_w_repeats = tl.where(W_in == 1, W_out, max_w_repeats)
+
     acc = tl.zeros((BLOCK_W,), dtype=tl.float32)
 
     d_out_idx = d_start
@@ -109,7 +114,7 @@ def replication_pad3d_backward_kernel(
         h_out_idx = h_start
         while h_out_idx < h_end:
             w_iter = 0
-            while w_iter < W_out:
+            while w_iter < max_w_repeats:
                 w_out_idx = w_start + w_iter
                 load_mask = w_mask & (w_out_idx < w_end)
                 go_offsets = (
@@ -171,7 +176,9 @@ def replication_pad3d_backward(grad_output, self, padding):
             stride_go_w,
         ) = grad_output.stride()
 
-    grad_input = torch.zeros(self.shape, device=grad_output.device, dtype=torch.float32)
+    grad_input = torch.empty(
+        self.shape, device=grad_output.device, dtype=grad_output.dtype
+    )
     if self.dim() == 4:
         stride_gi_n = 0
         stride_gi_c, stride_gi_d, stride_gi_h, stride_gi_w = grad_input.stride()
@@ -215,4 +222,4 @@ def replication_pad3d_backward(grad_output, self, padding):
         C,
     )
 
-    return grad_input.to(grad_output.dtype)
+    return grad_input
