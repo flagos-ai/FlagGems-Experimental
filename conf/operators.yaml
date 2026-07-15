@@ -6114,7 +6114,7 @@ ops:
     for:
       - ReduceArgMin
     labels:
-      - custom
+      - fused
       - Reduction
     kind:
       - LinearAlg
