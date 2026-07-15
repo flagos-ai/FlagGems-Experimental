@@ -7630,6 +7630,17 @@ ops:
     stages:
       - beta: '5.0'
       - stable: '5.3'
+  - id: special_log_ndtr
+    description: Compute log(cdf(x)) where cdf is the standard normal cumulative distribution function. Supports inplace variant.
+    for:
+      - special_log_ndtr
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: special_log_softmax
     description: |
       Applies the log of the softmax function along a given dimension.
