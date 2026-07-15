@@ -465,7 +465,7 @@ from flag_gems.ops.softmax import (
 from flag_gems.ops.softplus import softplus
 from flag_gems.ops.softshrink import softshrink, softshrink_out
 from flag_gems.ops.sort import sort, sort_stable
-from flag_gems.ops.special_chebyshev_polynomial_t import chebyshev_polynomial_t
+from flag_gems.ops.special_chebyshev_polynomial_t import special_chebyshev_polynomial_t
 from flag_gems.ops.special_chebyshev_polynomial_v import special_chebyshev_polynomial_v
 from flag_gems.ops.special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w,
@@ -683,7 +683,7 @@ __all__ = [
     "celu",
     "celu_",
     "channel_shuffle",
-    "chebyshev_polynomial_t",
+    "special_chebyshev_polynomial_t",
     "clamp",
     "clamp_",
     "clamp_max",

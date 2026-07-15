@@ -8,7 +8,7 @@ from . import accuracy_utils as utils
 
 @pytest.mark.special_chebyshev_polynomial_t
 @pytest.mark.parametrize("shape", utils.POINTWISE_SHAPES)
-@pytest.mark.parametrize("dtype", [torch.float32])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_special_chebyshev_polynomial_t(shape, dtype):
     x = torch.empty(shape, dtype=dtype, device=flag_gems.device).uniform_(-1.25, 1.25)
     n = torch.randint(-2, 21, shape, dtype=torch.int32, device=flag_gems.device)
@@ -24,7 +24,7 @@ def test_special_chebyshev_polynomial_t(shape, dtype):
 
 
 @pytest.mark.special_chebyshev_polynomial_t
-@pytest.mark.parametrize("dtype", [torch.float32])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_special_chebyshev_polynomial_t_out(dtype):
     x = torch.tensor(
         [-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0],
