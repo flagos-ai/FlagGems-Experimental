@@ -4188,6 +4188,28 @@ ops:
       - Reduction
     stages:
       - stable: '3.0'
+  - id: lcm
+    description: Triton kernel implementation for lcm.
+    for:
+      - lcm
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
+  - id: lcm_
+    description: The in-place version of `lcm()`.
+    for:
+      - lcm_
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: le
     description: Computes that `input` is less than or equal to `other` element-wise.
     for:
