@@ -417,7 +417,7 @@ _FULL_CONFIG = (
     ("isneginf.out", isneginf_out),
     ("kron", kron),
     ("kthvalue", kthvalue),
-    ("lcm.Tensor", lcm),
+    ("lcm", lcm),
     ("lcm_", lcm_),
     ("le.Scalar", le_scalar),
     ("le.Tensor", le),
