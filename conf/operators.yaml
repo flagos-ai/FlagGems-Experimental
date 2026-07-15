@@ -5562,7 +5562,7 @@ ops:
     kind:
       - Distribution
     stages:
-      - stable: '5.0'
+      - stable: '5.4'
   - id: normal_float_float_
     description: |
       Returns a tensor of random numbers drawn from separate normal distributions
