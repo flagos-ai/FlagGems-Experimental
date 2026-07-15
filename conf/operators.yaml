@@ -7299,7 +7299,7 @@ ops:
     kind:
       - Tensor
     stages:
-      - stable: '2.0'
+      - stable: '5.4'
   - id: slice_backward
     description: |
       An automatic differentiation (autograd) function that computes the gradient of a tensor slicing operation
