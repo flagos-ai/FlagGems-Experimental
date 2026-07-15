@@ -11,17 +11,28 @@ from flag_gems.utils import pointwise_dynamic, tl_extra_shim
 logger = logging.getLogger(__name__)
 
 
-@pointwise_dynamic(is_tensor=[True, False, False], promotion_methods=[(0, "DEFAULT")])
+@pointwise_dynamic(
+    is_tensor=[True, False, False, False, False], promotion_methods=[(0, "DEFAULT")]
+)
 @triton.jit
-def quantize_func(x, scale, zero_point):
-    # Return uint8 affine quantization code values stored in the input dtype.
+def quantize_func(x, scale, zero_point, quant_min, quant_max):
+    # Return affine quantization code values stored in the input dtype.
     scaled = x / scale + zero_point
     rounded = tl_extra_shim.rint(scaled.to(tl.float32))
-    clipped = tl.minimum(255.0, tl.maximum(0.0, rounded))
+    clipped = tl.minimum(quant_max, tl.maximum(quant_min, rounded))
     return clipped.to(x.dtype)
 
 
-def _check_quantize_args(A, scale, zero_point):
+def _check_integer_arg(name, value):
+    if not isinstance(value, numbers.Real):
+        raise TypeError(f"{name} must be a real number")
+    value_float = float(value)
+    if not value_float.is_integer():
+        raise ValueError(f"{name} must be an integer value")
+    return int(value_float)
+
+
+def _check_quantize_args(A, scale, zero_point, quant_min, quant_max):
     if not isinstance(A, torch.Tensor):
         raise TypeError("A must be a torch.Tensor")
     if not A.is_floating_point():
@@ -31,28 +42,31 @@ def _check_quantize_args(A, scale, zero_point):
     scale = float(scale)
     if scale <= 0:
         raise ValueError("scale must be greater than 0")
-    if not isinstance(zero_point, numbers.Real):
-        raise TypeError("zero_point must be a real number")
-    zero_point_float = float(zero_point)
-    if not zero_point_float.is_integer():
-        raise ValueError("zero_point must be an integer value")
-    zero_point = int(zero_point_float)
-    if zero_point < 0 or zero_point > 255:
-        raise ValueError("zero_point must be in the uint8 range [0, 255]")
-    return scale, zero_point
+    zero_point = _check_integer_arg("zero_point", zero_point)
+    quant_min = _check_integer_arg("quant_min", quant_min)
+    quant_max = _check_integer_arg("quant_max", quant_max)
+    if quant_min > quant_max:
+        raise ValueError("quant_min must be less than or equal to quant_max")
+    if zero_point < quant_min or zero_point > quant_max:
+        raise ValueError("zero_point must be in the quantization range")
+    return scale, zero_point, quant_min, quant_max
 
 
-def quantize(A, scale, zero_point):
-    """Return per-tensor affine uint8 code values in a float tensor.
+def quantize(A, scale, zero_point, quant_min=0, quant_max=255):
+    """Return per-tensor affine code values in a float tensor.
 
     Args:
         A: Input floating point tensor to quantize.
         scale: Positive scale factor.
-        zero_point: Integer zero point in the uint8 range.
+        zero_point: Integer zero point in the quantization range.
+        quant_min: Minimum quantized code value.
+        quant_max: Maximum quantized code value.
 
     Returns:
         Quantized code values as a tensor with the same dtype as ``A``.
     """
     logger.debug("GEMS QUANTIZE")
-    scale, zero_point = _check_quantize_args(A, scale, zero_point)
-    return quantize_func(A, scale, zero_point)
+    scale, zero_point, quant_min, quant_max = _check_quantize_args(
+        A, scale, zero_point, quant_min, quant_max
+    )
+    return quantize_func(A, scale, zero_point, quant_min, quant_max)

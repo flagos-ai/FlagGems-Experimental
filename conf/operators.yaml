@@ -5970,7 +5970,7 @@ ops:
     kind:
       - Quantization
     stages:
-      - alpha: '5.0'
+      - alpha: '5.4'
   - id: rad2deg
     description: |
       Converts each element from angles in radians to degrees.
