@@ -880,6 +880,7 @@ _FULL_CONFIG = (
     ("special_xlog1py", special_xlog1py),
     ("special_spherical_bessel_j0", special_spherical_bessel_j0),
     ("special_spherical_bessel_j0_", special_spherical_bessel_j0_),
+    ("special_softmax", special_softmax),
     ("split_with_sizes_copy", split_with_sizes_copy),
     ("sqrt", sqrt),
     ("sqrt_", sqrt_),
