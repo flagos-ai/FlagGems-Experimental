@@ -7643,6 +7643,30 @@ ops:
       - Math
     stages:
       - alpha: '5.4'
+  - id: special_multigammaln
+    description: |
+      Computes the multivariate log-gamma function for each input element.
+    for:
+      - special_multigammaln
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
+  - id: special_multigammaln_out
+    description: |
+      A variant of `special_multigammaln` that saves the output to the specified `out`.
+    for:
+      - special_multigammaln.out
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: special_shifted_chebyshev_polynomial_u
     description: |
       Computes the shifted Chebyshev polynomial of the second kind U_n^*(x)
