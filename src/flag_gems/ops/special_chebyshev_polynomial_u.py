@@ -5,12 +5,17 @@ import torch
 import triton
 import triton.language as tl
 
-from flag_gems.utils import tl_extra_shim
-
 logger = logging.getLogger(__name__)
-_acos = tl_extra_shim.acos
 
 
+@triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_SIZE": 256}, num_warps=4),
+        triton.Config({"BLOCK_SIZE": 512}, num_warps=4),
+        triton.Config({"BLOCK_SIZE": 1024}, num_warps=8),
+    ],
+    key=["n_elements"],
+)
 @triton.jit
 def _chebyshev_u_kernel(x_ptr, n_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(axis=0)
@@ -23,24 +28,26 @@ def _chebyshev_u_kernel(x_ptr, n_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.conste
 
     xf = x.to(tl.float32)
     degree = tl.maximum(n, 0)
+    max_degree = tl.max(tl.where(mask, degree, 0))
 
     prev = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
     curr = tl.full((BLOCK_SIZE,), 1.0, dtype=tl.float32)
     result = curr
-    active = degree > 0
 
-    while tl.max(tl.where(mask, degree, 0)) > 0:
+    for k in tl.static_range(1, 10):
         nxt = 2.0 * xf * curr - prev
-        result = tl.where(active, nxt, result)
+        result = tl.where(degree == k, nxt, result)
         prev = curr
         curr = nxt
-        degree -= 1
-        active = degree > 0
 
-    theta = _acos(xf)
-    trig_result = tl.sin((n.to(tl.float32) + 1.0) * theta) / tl.sin(theta)
-    use_trig = (xf > -1.0) & (xf < 1.0) & (n >= 0)
-    result = tl.where(use_trig, trig_result, result)
+    k = 10
+    while k <= max_degree:
+        nxt = 2.0 * xf * curr - prev
+        result = tl.where(degree == k, nxt, result)
+        prev = curr
+        curr = nxt
+        k += 1
+
     result = tl.where(n < 0, 0.0, result)
     out_ty = out_ptr.dtype.element_ty
 
@@ -96,7 +103,7 @@ def _run_chebyshev_u_kernel(x: torch.Tensor, n: torch.Tensor, out: torch.Tensor)
         return out
 
     grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
-    _chebyshev_u_kernel[grid](x_c, n_c, out_c, n_elements, BLOCK_SIZE=1024)
+    _chebyshev_u_kernel[grid](x_c, n_c, out_c, n_elements)
 
     if out_c.data_ptr() != out.data_ptr():
         out.copy_(out_contig)
