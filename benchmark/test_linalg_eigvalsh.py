@@ -5,11 +5,8 @@ from . import base
 
 
 def eigvalsh_input_fn(shape, dtype, device):
-    if len(shape) >= 2:
-        n = min(shape[-2], shape[-1])
-        A = torch.randn(n, n, dtype=dtype, device=device)
-    else:
-        A = torch.randn(2, 2, dtype=dtype, device=device)
+    n = min(shape[-1], 4096)
+    A = torch.randn(n, n, dtype=dtype, device=device)
     A = (A + A.mT) / 2
     yield A,
 
