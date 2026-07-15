@@ -724,6 +724,7 @@ _FULL_CONFIG = (
     ("uniform_", uniform_),
     ("unique_consecutive", unique_consecutive),
     ("unique_dim", unique_dim),
+    ("unsafe_split_with_sizes", unsafe_split_with_sizes),
     ("upsample_bicubic2d", upsample_bicubic2d),
     ("upsample_linear1d", upsample_linear1d),
     ("upsample_linear1d_backward", upsample_linear1d_backward),
