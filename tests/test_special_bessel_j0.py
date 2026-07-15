@@ -37,6 +37,20 @@ def test_special_bessel_j0_special_values(dtype):
 
 
 @pytest.mark.special_bessel_j0
+def test_special_bessel_j0_float64_precision_regression():
+    values = torch.tensor(
+        [1.0e8 + 1.0, 1.0e8 + 3.0, 1.0e8 + 5.0],
+        dtype=torch.float64,
+        device=flag_gems.device,
+    )
+    ref_values = utils.to_reference(values)
+    ref_out = torch.special.bessel_j0(ref_values)
+    with flag_gems.use_gems():
+        res_out = torch.special.bessel_j0(values)
+    utils.gems_assert_close(res_out, ref_out, torch.float64, atol=1e-6)
+
+
+@pytest.mark.special_bessel_j0
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 def test_special_bessel_j0_unsupported_cuda_dtypes(dtype):
     inp = torch.randn((8,), dtype=dtype, device=flag_gems.device)

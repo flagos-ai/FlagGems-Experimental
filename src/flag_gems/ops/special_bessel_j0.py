@@ -15,8 +15,10 @@ _j0 = tl_extra_shim.j0
 @pointwise_dynamic(promotion_methods=[(0, "INT_TO_FLOAT")])
 @triton.jit
 def special_bessel_j0_func(x):
-    x_f32 = x.to(tl.float32)
-    return tl.where(tl.abs(x_f32) == float("inf"), float("nan"), _j0(x_f32))
+    compute_dtype = tl.float64 if x.dtype is tl.float64 else tl.float32
+    x_compute = x.to(compute_dtype)
+    result = tl.where(tl.abs(x_compute) == float("inf"), float("nan"), _j0(x_compute))
+    return result.to(compute_dtype)
 
 
 def special_bessel_j0(A):
