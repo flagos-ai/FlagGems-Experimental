@@ -30,7 +30,7 @@ def test_special_multigammaln(shape, dtype, p):
     utils.gems_assert_close(act_out, ref_out, dtype)
 
 
-@pytest.mark.special_multigammaln
+@pytest.mark.special_multigammaln_out
 @pytest.mark.parametrize("shape", [(2, 3), (128, 256), (512, 512)])
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 @pytest.mark.parametrize("p", MULTIGAMMALN_P_VALUES)
@@ -78,7 +78,7 @@ def test_special_multigammaln_invalid_p_raises():
         torch.ops.aten.special_multigammaln(x, 0)
 
 
-@pytest.mark.special_multigammaln
+@pytest.mark.special_multigammaln_out
 def test_special_multigammaln_out_casts_and_resizes():
     x = torch.full((2, 3), 2.0, dtype=torch.float32, device=flag_gems.device)
     ref_x = utils.to_reference(x)
