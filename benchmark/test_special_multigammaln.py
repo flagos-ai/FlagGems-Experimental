@@ -13,13 +13,12 @@ def test_special_multigammaln():
     )
     bench.run()
 
+
 @pytest.mark.special_multigammaln_out
 def test_special_multigammaln_out():
     bench = base.UnaryPointwiseOutBenchmark(
         op_name="special_multigammaln_out",
-        torch_op=lambda a, out: torch.ops.aten.special_multigammaln.out(
-            a, 2, out=out
-        ),
+        torch_op=lambda a, out: torch.ops.aten.special_multigammaln.out(a, 2, out=out),
         dtypes=consts.FLOAT_DTYPES,
     )
     bench.run()
