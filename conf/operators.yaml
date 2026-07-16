@@ -7691,6 +7691,17 @@ ops:
       - Math
     stages:
       - alpha: '5.4'
+  - id: special_softmax
+    description: Computes the softmax function for each row of the input tensor with optional dtype casting, wrapping the existing softmax Triton kernel for the torch.special.softmax API.
+    for:
+      - special_softmax
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: split_with_sizes_copy
     description: |
       Splits a tensor into sub-tensors along a given dimension,
