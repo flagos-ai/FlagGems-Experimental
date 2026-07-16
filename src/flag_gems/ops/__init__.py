@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from flag_gems.ops.__ilshift__ import __ilshift__
+from flag_gems.ops.__lshift__ import __lshift__
 from flag_gems.ops._amp_foreach_non_finite_check_and_unscale_ import (
     _amp_foreach_non_finite_check_and_unscale_,
 )
@@ -600,6 +601,7 @@ __all__ = [
     "SUPPORTED_FP8_DTYPE",
     "ScaleDotProductAttention",
     "__ilshift__",
+    "__lshift__",
     "_amp_foreach_non_finite_check_and_unscale_",
     "_assert_async",
     "_batch_norm_no_update",
