@@ -659,7 +659,6 @@ from flag_gems.ops.special_shifted_chebyshev_polynomial_t import (
     special_shifted_chebyshev_polynomial_t_x_scalar,
     special_shifted_chebyshev_polynomial_t_x_scalar_out,
 )
-from flag_gems.ops.special_logsumexp import special_logsumexp
 from flag_gems.ops.special_shifted_chebyshev_polynomial_u import (
     special_shifted_chebyshev_polynomial_u,
     special_shifted_chebyshev_polynomial_u_,
