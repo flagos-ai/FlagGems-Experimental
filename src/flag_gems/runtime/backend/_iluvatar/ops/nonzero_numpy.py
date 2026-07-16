@@ -30,7 +30,7 @@ THRESHOLD = 8 * 1024 * 1024  # 8M elements
 
 @libentry()
 @triton.jit
-def nonzero_single_kernel(
+def nonzero_2d_kernel(
     inp_ptr,
     out0_ptr,
     out1_ptr,
@@ -38,7 +38,7 @@ def nonzero_single_kernel(
     dim0: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
-    """Single-pass: per-block cumsum scatter into pre-allocated output."""
+    """Single-pass 2D: per-block cumsum scatter into pre-allocated output."""
     pid = tl.program_id(0)
     offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offset < n_elements
@@ -107,22 +107,15 @@ def nonzero_numpy(inp):
     inp = inp.contiguous()
     n_elements = inp.numel()
     if n_elements == 0:
-        return [
-            torch.empty(0, dtype=torch.int64, device=inp.device)
-            for _ in range(inp.ndim)
-        ]
-    if inp.ndim != 2:
-        from flag_gems.ops.nonzero import nonzero as _nonzero
+        return [inp.new_empty(0, dtype=torch.int64) for _ in range(inp.ndim)]
 
-        out = _nonzero(inp, as_tuple=False)
-        return list(out.unbind(dim=1))
-    if n_elements < THRESHOLD:
+    if inp.ndim == 2 and n_elements < THRESHOLD:
         return _nonzero_small(inp, n_elements)
     return _nonzero_large(inp, n_elements)
 
 
 def _nonzero_small(inp, n_elements):
-    """Single-pass kernel for inputs < 8M elements."""
+    """Optimized single-pass 2D kernel for inputs < 8M elements."""
     device = inp.device
     flat = inp.view(n_elements)
     dim0 = inp.shape[1]
@@ -131,7 +124,7 @@ def _nonzero_small(inp, n_elements):
     BLOCK_SIZE = 1024
     grid = (triton.cdiv(n_elements, BLOCK_SIZE),)
     with torch_device_fn.device(device):
-        nonzero_single_kernel[grid](
+        nonzero_2d_kernel[grid](
             flat,
             out0,
             out1,
@@ -144,12 +137,12 @@ def _nonzero_small(inp, n_elements):
 
 
 def _nonzero_large(inp, n_elements):
-    """Two-pass count+fill for inputs >= 8M elements."""
+    """Two-pass count+fill for large or non-2D inputs (any ndim)."""
     flat = inp.view(n_elements)
+    inp_ndim = inp.ndim
     shape = torch.tensor(inp.shape, dtype=torch.int32, device=inp.device)
     BLOCK_SIZE = 1024
     device = inp.device
-    inp_ndim = inp.ndim
     grid_size = triton.cdiv(n_elements, BLOCK_SIZE)
     block_counts = torch.empty(grid_size, dtype=torch.int32, device=device)
     count_kernel[(grid_size,)](
@@ -157,9 +150,7 @@ def _nonzero_large(inp, n_elements):
     )
     nnz = int(block_counts.sum().item())
     if nnz == 0:
-        return [
-            torch.empty(0, dtype=torch.int64, device=device) for _ in range(inp_ndim)
-        ]
+        return [inp.new_empty(0, dtype=torch.int64) for _ in range(inp_ndim)]
     if grid_size > 1:
         offsets = torch.empty(grid_size, dtype=torch.int32, device=device)
         offsets[0] = 0
