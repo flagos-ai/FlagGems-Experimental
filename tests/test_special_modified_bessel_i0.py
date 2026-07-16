@@ -10,15 +10,25 @@ from . import accuracy_utils as utils
 @pytest.mark.parametrize("shape", utils.SPECIAL_SHAPES)
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 def test_special_modified_bessel_i0(shape, dtype):
-    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    inp = torch.randn(
+        shape,
+        dtype=dtype,
+        device=flag_gems.device,
+    )
     ref_inp = utils.to_reference(inp)
 
-    # PyTorch's special.modified_bessel_i0 only supports float32 on CUDA,
-    # so compute reference on CPU in float32 to avoid dtype limitations
+    # Compute the reference result on CPU in float32.
     ref_inp_cpu = ref_inp.to("cpu").float()
-    ref_out = torch.special.modified_bessel_i0(ref_inp_cpu)
-    # Move back to original device for comparison
-    ref_out = ref_out.to(flag_gems.device)
+    ref_out_cpu = torch.special.modified_bessel_i0(ref_inp_cpu)
+
+    # In quick-CPU mode, the comparison utility moves the actual result
+    # to CPU and expects the reference result to already be on CPU.
+    reference_device = (
+        torch.device("cpu")
+        if utils.TO_CPU
+        else flag_gems.device
+    )
+    ref_out = ref_out_cpu.to(reference_device)
 
     with flag_gems.use_gems():
         res_out = torch.special.modified_bessel_i0(inp)
@@ -30,17 +40,29 @@ def test_special_modified_bessel_i0(shape, dtype):
 @pytest.mark.parametrize("shape", utils.SPECIAL_SHAPES)
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 def test_special_modified_bessel_i0_out(shape, dtype):
-    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    inp = torch.randn(
+        shape,
+        dtype=dtype,
+        device=flag_gems.device,
+    )
     out = torch.empty_like(inp)
     ref_inp = utils.to_reference(inp)
 
-    # PyTorch's special.modified_bessel_i0 only supports float32 on CUDA,
-    # so compute reference on CPU in float32 to avoid dtype limitations
+    # Compute the reference result on CPU in float32.
     ref_inp_cpu = ref_inp.to("cpu").float()
     ref_out_cpu = torch.empty_like(ref_inp_cpu)
-    torch.special.modified_bessel_i0(ref_inp_cpu, out=ref_out_cpu)
-    # Move back to original device for comparison
-    ref_out = ref_out_cpu.to(flag_gems.device)
+    torch.special.modified_bessel_i0(
+        ref_inp_cpu,
+        out=ref_out_cpu,
+    )
+
+    # Keep the reference result on CPU in quick-CPU mode.
+    reference_device = (
+        torch.device("cpu")
+        if utils.TO_CPU
+        else flag_gems.device
+    )
+    ref_out = ref_out_cpu.to(reference_device)
 
     with flag_gems.use_gems():
         torch.special.modified_bessel_i0(inp, out=out)
