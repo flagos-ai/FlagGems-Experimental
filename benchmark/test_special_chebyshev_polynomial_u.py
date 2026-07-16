@@ -3,7 +3,9 @@ from typing import Generator
 import pytest
 import torch
 
-from . import base, utils
+from . import base
+
+CHEBYSHEV_U_DTYPES = [torch.float32, torch.float64]
 
 
 class ChebyshevPolynomialUBenchmark(base.BinaryPointwiseBenchmark):
@@ -14,17 +16,14 @@ class ChebyshevPolynomialUBenchmark(base.BinaryPointwiseBenchmark):
 
     def get_input_iter(self, cur_dtype) -> Generator:
         for shape in self.shapes:
-            inp1 = utils.generate_tensor_input(shape, cur_dtype, self.device)
+            inp1 = torch.randn(shape, dtype=cur_dtype, device=self.device)
             # n should be a small integer tensor (0-10 for typical testing)
             inp2 = torch.randint(0, 10, shape, dtype=torch.long, device=self.device)
             yield inp1, inp2
 
 
 @pytest.mark.special_chebyshev_polynomial_u
-@pytest.mark.parametrize(
-    "dtype",
-    [torch.float32],  # Only float32 is supported by PyTorch's CUDA implementation
-)
+@pytest.mark.parametrize("dtype", CHEBYSHEV_U_DTYPES)
 def test_special_chebyshev_polynomial_u_perf(dtype):
     bench = ChebyshevPolynomialUBenchmark(
         op_name="special_chebyshev_polynomial_u",

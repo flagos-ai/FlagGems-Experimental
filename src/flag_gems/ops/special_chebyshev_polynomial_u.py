@@ -26,12 +26,19 @@ def _chebyshev_u_kernel(x_ptr, n_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.conste
     x = tl.load(x_ptr + offsets, mask=mask, other=0.0)
     n = tl.load(n_ptr + offsets, mask=mask, other=-1).to(tl.int64)
 
-    xf = x.to(tl.float32)
+    if tl.constexpr(x_ptr.dtype.element_ty == tl.float16) or tl.constexpr(
+        x_ptr.dtype.element_ty == tl.bfloat16
+    ):
+        cdtype = tl.float32
+    else:
+        cdtype = x_ptr.dtype.element_ty
+
+    xf = x.to(cdtype)
     degree = tl.maximum(n, 0)
     max_degree = tl.max(tl.where(mask, degree, 0))
 
-    prev = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
-    curr = tl.full((BLOCK_SIZE,), 1.0, dtype=tl.float32)
+    prev = tl.zeros((BLOCK_SIZE,), dtype=cdtype)
+    curr = tl.full((BLOCK_SIZE,), 1.0, dtype=cdtype)
     result = curr
 
     for k in tl.static_range(1, 10):
