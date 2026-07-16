@@ -106,8 +106,6 @@ def nonzero_numpy(inp):
     logger.debug("GEMS NONZERO_NUMPY")
     inp = inp.contiguous()
     n_elements = inp.numel()
-    if n_elements == 0:
-        return [inp.new_empty(0, dtype=torch.int64) for _ in range(inp.ndim)]
 
     if inp.ndim == 2 and n_elements < THRESHOLD:
         return _nonzero_small(inp, n_elements)
