@@ -7301,6 +7301,17 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '2.0'
+  - id: slice
+    description: |
+      Returns a view of the input tensor sliced along the given dimension.
+    for:
+      - slice
+    labels:
+      - aten
+    kind:
+      - Tensor
+    stages:
+      - stable: '5.4'
   - id: slice_backward
     description: |
       An automatic differentiation (autograd) function that computes the gradient of a tensor slicing operation
