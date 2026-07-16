@@ -23,11 +23,7 @@ def test_special_modified_bessel_i0(shape, dtype):
 
     # In quick-CPU mode, the comparison utility moves the actual result
     # to CPU and expects the reference result to already be on CPU.
-    reference_device = (
-        torch.device("cpu")
-        if utils.TO_CPU
-        else flag_gems.device
-    )
+    reference_device = torch.device("cpu") if utils.TO_CPU else flag_gems.device
     ref_out = ref_out_cpu.to(reference_device)
 
     with flag_gems.use_gems():
@@ -57,11 +53,7 @@ def test_special_modified_bessel_i0_out(shape, dtype):
     )
 
     # Keep the reference result on CPU in quick-CPU mode.
-    reference_device = (
-        torch.device("cpu")
-        if utils.TO_CPU
-        else flag_gems.device
-    )
+    reference_device = torch.device("cpu") if utils.TO_CPU else flag_gems.device
     ref_out = ref_out_cpu.to(reference_device)
 
     with flag_gems.use_gems():
