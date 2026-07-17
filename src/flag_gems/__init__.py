@@ -704,6 +704,8 @@ _FULL_CONFIG = (
         special_shifted_chebyshev_polynomial_u_,
     ),
     ("special_softmax", special_softmax),
+    ("special_spherical_bessel_j0", special_spherical_bessel_j0),
+    ("special_spherical_bessel_j0_", special_spherical_bessel_j0_),
     ("split_with_sizes", split_with_sizes),
     ("split_with_sizes_copy", split_with_sizes_copy),
     ("sqrt", sqrt),
