@@ -87,3 +87,46 @@ def test_unsafe_split_with_sizes_edge_cases(shape, dtype):
     assert len(res_out) == len(ref_out), "Number of splits mismatch"
     for i, (res, ref) in enumerate(zip(res_out, ref_out)):
         utils.gems_assert_equal(res, ref)
+
+
+@pytest.mark.unsafe_split_with_sizes
+@pytest.mark.parametrize("shape", [(0, 4), (4, 0)])
+@pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
+def test_unsafe_split_with_sizes_all_zero_splits(shape, dtype):
+    # split_sizes containing only zeros, valid only when the split dim
+    # itself has size 0.
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = utils.to_reference(inp)
+
+    dim = 0 if shape[0] == 0 else 1
+    split_sizes = [0, 0]
+
+    ref_out = torch.unsafe_split_with_sizes(ref_inp, split_sizes, dim=dim)
+    with flag_gems.use_gems():
+        res_out = torch.unsafe_split_with_sizes(inp, split_sizes, dim=dim)
+
+    assert len(res_out) == len(ref_out), "Number of splits mismatch"
+    for i, (res, ref) in enumerate(zip(res_out, ref_out)):
+        utils.gems_assert_equal(res, ref)
+
+
+@pytest.mark.unsafe_split_with_sizes
+@pytest.mark.parametrize("shape", [(8,), (10, 4)])
+@pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
+def test_unsafe_split_with_sizes_single_element_splits(shape, dtype):
+    # Single-element splits interleaved with leading/trailing zero-size
+    # splits, including the degenerate 1-element tail.
+    inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
+    ref_inp = utils.to_reference(inp)
+
+    dim_size = shape[0]
+    split_sizes = [0, 1, 1, dim_size - 2, 0]
+    dim = 0
+
+    ref_out = torch.unsafe_split_with_sizes(ref_inp, split_sizes, dim=dim)
+    with flag_gems.use_gems():
+        res_out = torch.unsafe_split_with_sizes(inp, split_sizes, dim=dim)
+
+    assert len(res_out) == len(ref_out), "Number of splits mismatch"
+    for i, (res, ref) in enumerate(zip(res_out, ref_out)):
+        utils.gems_assert_equal(res, ref)
