@@ -53,6 +53,20 @@ def normal_inplace_input_fn(shape, dtype, device):
     yield self, loc, scale
 
 
+@pytest.mark.normal_
+@pytest.mark.skipif(
+    flag_gems.vendor_name == "tsingmicro", reason="Issue #4131: not working"
+)
+def test_normal_():
+    bench = base.GenericBenchmark(
+        input_fn=normal_inplace_input_fn,
+        op_name="normal_",
+        torch_op=torch.Tensor.normal_,
+        dtypes=consts.FLOAT_DTYPES,
+    )
+    bench.run()
+
+
 @pytest.mark.normal_float_float_
 @pytest.mark.skipif(
     flag_gems.vendor_name == "tsingmicro", reason="Issue #4131: not working"
