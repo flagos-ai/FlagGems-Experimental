@@ -14,9 +14,12 @@
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .broadcast_to import broadcast_to
 from .log_normal_ import log_normal_
+from .index_copy_ import index_copy, index_copy_
 
 __all__ = [
     "adaptive_max_pool3d_backward",
     "broadcast_to",
+    "index_copy",
+    "index_copy_",
     "log_normal_",
 ]
