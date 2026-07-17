@@ -6429,6 +6429,18 @@ ops:
     stages:
       - alpha: '5.0'
       - beta: '5.3'
+  - id: replication_pad3d_backward
+    description: |
+      Computes the gradient of replication_pad3d with respect to the input tensor.
+    for:
+      - replication_pad3d_backward
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - NeuralNetwork
+    stages:
+      - alpha: '5.4'
   - id: reshape_and_cache
     description: Store the key/value token states into the pre-allcated kv_cache buffers of paged attention.
     for:
@@ -7289,6 +7301,17 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '2.0'
+  - id: slice
+    description: |
+      Returns a view of the input tensor sliced along the given dimension.
+    for:
+      - slice
+    labels:
+      - aten
+    kind:
+      - Tensor
+    stages:
+      - stable: '5.4'
   - id: slice_backward
     description: |
       An automatic differentiation (autograd) function that computes the gradient of a tensor slicing operation
@@ -7573,6 +7596,33 @@ ops:
       - KernelGen
     stages:
       - alpha: '5.1'
+  - id: special_i0
+    description: |
+      Computes the zeroth order modified Bessel function of the first kind
+      for each element of `input`.
+    for:
+      - special_i0
+    labels:
+      - aten
+      - pointwise
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
+  - id: special_i0_out
+    description: |
+      A variant of `special_i0()` with output saved to provided `out`.
+    for:
+      - special_i0.out
+    labels:
+      - aten
+      - pointwise
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: special_i0e
     description: |
       Computes the exponentially scaled zeroth order modified Bessel function
@@ -7630,6 +7680,18 @@ ops:
     stages:
       - beta: '5.0'
       - stable: '5.3'
+  - id: special_legendre_polynomial_p
+    description: |
+      Computes the Legendre polynomial of the first kind for each input element.
+    for:
+      - special_legendre_polynomial_p
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: special_log_softmax
     description: |
       Applies the log of the softmax function along a given dimension.
@@ -7638,6 +7700,17 @@ ops:
     labels:
       - aten
       - nn.functional
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
+  - id: special_shifted_chebyshev_polynomial_t
+    description: Computes the shifted Chebyshev polynomial of the first kind.
+    for:
+      - special_shifted_chebyshev_polynomial_t
+    labels:
+      - aten
       - KernelGen
     kind:
       - Math
@@ -7668,6 +7741,17 @@ ops:
       - Math
     stages:
       - alpha: '5.4'
+  - id: special_softmax
+    description: Computes the softmax function for each row of the input tensor with optional dtype casting, wrapping the existing softmax Triton kernel for the torch.special.softmax API.
+    for:
+      - special_softmax
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: special_spherical_bessel_j0
     description: |
       Triton implementation of the spherical Bessel function of the first kind (order 0), pointwise operator equivalent to torch.special.spherical_bessel_j0.
@@ -7689,6 +7773,19 @@ ops:
       - KernelGen
     kind:
       - Math
+    stages:
+      - alpha: '5.4'
+  - id: split_with_sizes
+    description: |
+      Splits a tensor into sub-tensors along a given dimension,
+      where each split has a specified size. Returns views into the input.
+    for:
+      - split_with_sizes
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Tensor
     stages:
       - alpha: '5.4'
   - id: split_with_sizes_copy

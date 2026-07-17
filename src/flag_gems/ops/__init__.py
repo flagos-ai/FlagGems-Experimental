@@ -402,6 +402,7 @@ from flag_gems.ops.repeat_interleave import (
 )
 from flag_gems.ops.replication_pad1d import replication_pad1d, replication_pad1d_out
 from flag_gems.ops.replication_pad3d import replication_pad3d
+from flag_gems.ops.replication_pad3d_backward import replication_pad3d_backward
 from flag_gems.ops.resize import resize, resize_
 from flag_gems.ops.resolve_conj import resolve_conj
 from flag_gems.ops.resolve_neg import resolve_neg
@@ -447,6 +448,7 @@ from flag_gems.ops.silu import silu, silu_, silu_backward
 from flag_gems.ops.sin import sin, sin_
 from flag_gems.ops.sinc import sinc, sinc_
 from flag_gems.ops.sinh_ import sinh_
+from flag_gems.ops.slice import slice
 from flag_gems.ops.slice_backward import slice_backward
 from flag_gems.ops.slice_scatter import slice_scatter
 from flag_gems.ops.smooth_l1_loss import (
@@ -472,17 +474,32 @@ from flag_gems.ops.special_chebyshev_polynomial_w import (
 )
 from flag_gems.ops.special_gammainc import special_gammainc
 from flag_gems.ops.special_hermite_polynomial_h import special_hermite_polynomial_h
+from flag_gems.ops.special_i0 import special_i0, special_i0_out
 from flag_gems.ops.special_i0e import special_i0e, special_i0e_out
 from flag_gems.ops.special_i1 import special_i1, special_i1_out
+from flag_gems.ops.special_legendre_polynomial_p import (
+    legendre_polynomial_p,
+    legendre_polynomial_p_out,
+)
 from flag_gems.ops.special_log_softmax import special_log_softmax
+from flag_gems.ops.special_shifted_chebyshev_polynomial_t import (
+    special_shifted_chebyshev_polynomial_t,
+    special_shifted_chebyshev_polynomial_t_n_scalar,
+    special_shifted_chebyshev_polynomial_t_n_scalar_out,
+    special_shifted_chebyshev_polynomial_t_out,
+    special_shifted_chebyshev_polynomial_t_x_scalar,
+    special_shifted_chebyshev_polynomial_t_x_scalar_out,
+)
 from flag_gems.ops.special_shifted_chebyshev_polynomial_u import (
     special_shifted_chebyshev_polynomial_u,
     special_shifted_chebyshev_polynomial_u_,
 )
+from flag_gems.ops.special_softmax import special_softmax
 from flag_gems.ops.special_spherical_bessel_j0 import (
     special_spherical_bessel_j0,
     special_spherical_bessel_j0_,
 )
+from flag_gems.ops.split_with_sizes import split_with_sizes
 from flag_gems.ops.split_with_sizes_copy import split_with_sizes_copy
 from flag_gems.ops.sqrt import sqrt, sqrt_
 from flag_gems.ops.square import square, square_, square_out
@@ -868,6 +885,8 @@ __all__ = [
     "leaky_relu",
     "leaky_relu_",
     "leaky_relu_out",
+    "legendre_polynomial_p",
+    "legendre_polynomial_p_out",
     "lerp_scalar",
     "lerp_scalar_",
     "lerp_tensor",
@@ -1030,6 +1049,7 @@ __all__ = [
     "replication_pad1d",
     "replication_pad1d_out",
     "replication_pad3d",
+    "replication_pad3d_backward",
     "resize",
     "resize_",
     "resolve_conj",
@@ -1091,6 +1111,7 @@ __all__ = [
     "sinc",
     "sinc_",
     "sinh_",
+    "slice",
     "slice_backward",
     "slice_scatter",
     "smooth_l1_loss",
@@ -1113,15 +1134,25 @@ __all__ = [
     "special_chebyshev_polynomial_w_out",
     "special_gammainc",
     "special_hermite_polynomial_h",
+    "special_i0",
+    "special_i0_out",
     "special_i0e",
     "special_i0e_out",
     "special_i1",
     "special_i1_out",
     "special_log_softmax",
+    "special_shifted_chebyshev_polynomial_t",
+    "special_shifted_chebyshev_polynomial_t_n_scalar",
+    "special_shifted_chebyshev_polynomial_t_n_scalar_out",
+    "special_shifted_chebyshev_polynomial_t_out",
+    "special_shifted_chebyshev_polynomial_t_x_scalar",
+    "special_shifted_chebyshev_polynomial_t_x_scalar_out",
     "special_shifted_chebyshev_polynomial_u",
     "special_shifted_chebyshev_polynomial_u_",
+    "special_softmax",
     "special_spherical_bessel_j0",
     "special_spherical_bessel_j0_",
+    "split_with_sizes",
     "split_with_sizes_copy",
     "sqrt",
     "sqrt_",
