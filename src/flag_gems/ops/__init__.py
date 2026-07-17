@@ -1436,12 +1436,9 @@ __all__ = [
     "uniform_",
     "unique_consecutive",
     "unique_dim",
-<<<<<<< HEAD
+    "unsafe_split_with_sizes",
     "unsqueeze",
     "unsqueeze_",
-=======
-    "unsafe_split_with_sizes",
->>>>>>> c859f1e6 ([KernelGen][Nvidia] Add unsafe_split_with_sizes operator)
     "upsample_bicubic2d",
     "upsample_linear1d",
     "upsample_linear1d_backward",
