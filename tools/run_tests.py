@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # -*- coding: utf-8 -*-
 """
 run_tests.py — Run accuracy and performance tests for FlagGems operators.
@@ -7,6 +22,7 @@ When stdout is a TTY, shows a live display: completed results scroll upward
 while a pinned footer shows one status line per GPU. When output is piped or
 redirected, falls back to plain line-by-line output with no ANSI codes.
 """
+
 import argparse
 import datetime
 import json
