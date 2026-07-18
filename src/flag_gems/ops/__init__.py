@@ -495,6 +495,7 @@ from flag_gems.ops.special_legendre_polynomial_p import (
     legendre_polynomial_p,
     legendre_polynomial_p_out,
 )
+from flag_gems.ops.special_log_ndtr import special_log_ndtr, special_log_ndtr_
 from flag_gems.ops.special_log_softmax import special_log_softmax
 from flag_gems.ops.special_shifted_chebyshev_polynomial_t import (
     special_shifted_chebyshev_polynomial_t,
@@ -1154,6 +1155,8 @@ __all__ = [
     "special_i0e_out",
     "special_i1",
     "special_i1_out",
+    "special_log_ndtr",
+    "special_log_ndtr_",
     "special_log_softmax",
     "special_shifted_chebyshev_polynomial_t",
     "special_shifted_chebyshev_polynomial_t_n_scalar",
