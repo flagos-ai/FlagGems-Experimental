@@ -7586,6 +7586,19 @@ ops:
       - Math
     stages:
       - alpha: '5.4'
+  - id: special_expm1
+    description: |
+      Computes the exponential of each element in the input tensor minus 1.
+    for:
+      - special_expm1
+    labels:
+      - aten
+      - pointwise
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - beta: '5.0'
   - id: special_gammainc
     description: |
       Computes the regularized lower incomplete gamma function P(a, x) element-wise.
