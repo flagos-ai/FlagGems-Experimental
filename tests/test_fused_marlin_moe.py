@@ -24,6 +24,7 @@ The wrapper sees packed uint8 weights; the reference sees the matching
 fp16/bf16 w_ref returned by quantize_weights so quantization round-off is
 shared by both sides.
 """
+
 import pytest
 import torch
 
@@ -502,7 +503,7 @@ def test_fused_marlin_moe_vs_ref(config, dtype):
     num_tokens, num_experts, hidden_size, intermediate_size, topk = config
     device = flag_gems.device
 
-    (hs, w1_q, w2_q, w1_ref, w2_ref, tw, ti, w1s, w2s) = _make_inputs(
+    hs, w1_q, w2_q, w1_ref, w2_ref, tw, ti, w1s, w2s = _make_inputs(
         num_tokens,
         num_experts,
         hidden_size,
@@ -538,7 +539,7 @@ def test_fused_marlin_moe_vs_ref_int8(config, dtype):
     num_tokens, num_experts, hidden_size, intermediate_size, topk = config
     device = flag_gems.device
 
-    (hs, w1_q, w2_q, w1_ref, w2_ref, tw, ti, w1s, w2s) = _make_inputs_int8(
+    hs, w1_q, w2_q, w1_ref, w2_ref, tw, ti, w1s, w2s = _make_inputs_int8(
         num_tokens,
         num_experts,
         hidden_size,
@@ -577,7 +578,7 @@ def test_fused_marlin_moe_mxfp4_vs_ref(config, dtype):
     num_tokens, num_experts, hidden_size, intermediate_size, topk = config
     device = flag_gems.device
 
-    (hs, w1_q, w2_q, w1_ref, w2_ref, tw, ti, w1s, w2s) = _make_inputs_mxfp4(
+    hs, w1_q, w2_q, w1_ref, w2_ref, tw, ti, w1s, w2s = _make_inputs_mxfp4(
         num_tokens,
         num_experts,
         hidden_size,
