@@ -4370,6 +4370,17 @@ ops:
       - BLAS
     stages:
       - alpha: '5.4'
+  - id: linalg_cholesky_ex
+    description: Cholesky decomposition using Triton kernel (Crout algorithm), computes lower triangular L matrix such that A = L @ L^T.
+    for:
+      - linalg_cholesky_ex
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: linalg_eigvals
     description: Computes the eigenvalues of a square matrix.
     for:
