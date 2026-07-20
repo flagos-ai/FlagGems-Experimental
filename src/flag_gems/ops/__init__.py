@@ -1515,6 +1515,8 @@ __all__ = [
     "special_shifted_chebyshev_polynomial_t_out",
     "special_shifted_chebyshev_polynomial_t_x_scalar",
     "special_shifted_chebyshev_polynomial_t_x_scalar_out",
+    "special_log1p",
+    "special_log1p_out",
     "special_logsumexp",
     "special_shifted_chebyshev_polynomial_u",
     "special_shifted_chebyshev_polynomial_u_",
