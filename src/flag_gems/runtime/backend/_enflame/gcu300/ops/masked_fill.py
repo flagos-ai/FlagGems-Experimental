@@ -33,11 +33,7 @@ def masked_fill_kernel(inp, expand_mask, value):
 
 
 def masked_fill(inp, mask, value):
-<<<<<<< HEAD
     logger.debug("GEMS_ENFLAME MASKED_FILL")
-=======
-    logger.debug("GEMS_ENFLAME MASKED_FILL_")
->>>>>>> c0411a719 ([ENFLAME]update 20260709 (#4646))
     assert (
         (torch.is_tensor(value) and value.ndim == 0)
         or isinstance(value, int)
