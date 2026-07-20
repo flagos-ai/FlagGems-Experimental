@@ -16,6 +16,7 @@ from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .broadcast_to import broadcast_to
 from .index_copy_ import index_copy, index_copy_
 from .log_normal_ import log_normal_
+from .special_hermite_polynomial_h import special_hermite_polynomial_h
 
 __all__ = [
     "adaptive_max_pool3d_backward",
@@ -23,4 +24,5 @@ __all__ = [
     "index_copy",
     "index_copy_",
     "log_normal_",
+    "special_hermite_polynomial_h",
 ]
