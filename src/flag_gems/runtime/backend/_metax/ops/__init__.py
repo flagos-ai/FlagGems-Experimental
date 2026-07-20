@@ -14,6 +14,7 @@ from .index_select import index_select
 from .isin import isin
 from .layernorm import layer_norm, layer_norm_backward
 from .log_softmax import log_softmax, log_softmax_backward
+from .lt_ import lt_, lt_scalar_
 from .masked_fill import masked_fill, masked_fill_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
@@ -57,6 +58,8 @@ __all__ = [
     "layer_norm_backward",
     "log_softmax",
     "log_softmax_backward",
+    "lt_",
+    "lt_scalar_",
     "matmul_bf16",
     "matmul_int8",
     "masked_fill",
