@@ -8468,6 +8468,11 @@ ops:
     description: Computes the softmax function for each row of the input tensor with optional dtype casting, wrapping the existing softmax Triton kernel for the torch.special.softmax API.
     for:
       - special_softmax
+  - id: special_xlog1py
+    description: |
+      Computes `x * log1p(y)` for each element pair in the input tensors `x` and `y`.
+    for:
+      - special.xlog1py
     labels:
       - aten
       - KernelGen
