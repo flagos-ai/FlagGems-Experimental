@@ -484,6 +484,7 @@ class Benchmark:
             print(result)
             update_result(self.op_name, asdict(result))
             emit_record_logger(result.to_json())
+            torch.cuda.empty_cache()
 
 
 class GenericBenchmark(Benchmark):
