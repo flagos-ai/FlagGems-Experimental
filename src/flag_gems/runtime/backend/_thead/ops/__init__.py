@@ -24,6 +24,7 @@ from .nonzero_numpy import nonzero_numpy
 from .reflection_pad3d_backward import reflection_pad3d_backward
 from .renorm_ import renorm_
 from .special_hermite_polynomial_h import special_hermite_polynomial_h
+from .tile import tile
 
 __all__ = [
     "adaptive_max_pool3d_backward",
@@ -39,4 +40,5 @@ __all__ = [
     "reflection_pad3d_backward",
     "renorm_",
     "special_hermite_polynomial_h",
+    "tile",
 ]
