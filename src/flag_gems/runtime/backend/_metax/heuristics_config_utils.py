@@ -61,7 +61,7 @@ def dropout_heur_num_warps(args):
     elif args["N"] <= 1024:
         return 8
     else:
-        return 16
+        return 8
 
 
 def exponential_heur_block(args):
@@ -77,7 +77,7 @@ def exponential_heur_num_warps(args):
     elif args["N"] <= 1024:
         return 8
     else:
-        return 16
+        return 8
 
 
 def gather_heur_block_m(args):
@@ -238,7 +238,7 @@ def uniform_heur_num_warps(args):
     elif args["N"] <= 1024:
         return 8
     else:
-        return 16
+        return 8
 
 
 def var_mean_heur_block_n(args):
