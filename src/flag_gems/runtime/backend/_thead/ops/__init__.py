@@ -13,12 +13,14 @@
 # limitations under the License.
 
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
+from .addmm_ import addmm_
 from .broadcast_to import broadcast_to
 from .index_copy_ import index_copy, index_copy_
 from .log_normal_ import log_normal_
 
 __all__ = [
     "adaptive_max_pool3d_backward",
+    "addmm_",
     "broadcast_to",
     "index_copy",
     "index_copy_",
