@@ -61,7 +61,7 @@ def scatter_input_fn_factory(reduce=None):
         if reduce is None:
             yield inp, dim, index, src
         else:
-            yield inp, dim, index, src, reduce
+            yield inp, dim, index, src, {"reduce": reduce}
 
     return inner
 
@@ -89,7 +89,7 @@ def scatter_inplace_input_fn_factory(reduce=None):
         if reduce is None:
             yield inp, dim, index, src
         else:
-            yield inp, dim, index, src, reduce
+            yield inp, dim, index, src, {"reduce": reduce}
 
     return inner
 
@@ -113,7 +113,7 @@ def test_scatter_reduce_add():
         torch_op=torch.scatter,
         input_fn=scatter_input_fn_factory("add"),
         get_gbps=gather_scatter_gbps,
-        dtypes=consts.FLOAT_DTYPES,
+        dtypes=[torch.float16, torch.float32],
     )
     bench.run()
 
@@ -128,7 +128,7 @@ def test_scatter_reduce_multiply():
         torch_op=torch.scatter,
         input_fn=scatter_input_fn_factory("multiply"),
         get_gbps=gather_scatter_gbps,
-        dtypes=consts.FLOAT_DTYPES,
+        dtypes=[torch.float16, torch.float32],
     )
     bench.run()
 
@@ -143,7 +143,7 @@ def test_scatter_reduce_add_inplace():
         torch_op=torch.Tensor.scatter_,
         input_fn=scatter_inplace_input_fn_factory("add"),
         get_gbps=gather_scatter_gbps,
-        dtypes=consts.FLOAT_DTYPES,
+        dtypes=[torch.float16, torch.float32],
         is_inplace=True,
     )
     bench.run()
@@ -159,7 +159,7 @@ def test_scatter_reduce_multiply_inplace():
         torch_op=torch.Tensor.scatter_,
         input_fn=scatter_inplace_input_fn_factory("multiply"),
         get_gbps=gather_scatter_gbps,
-        dtypes=consts.FLOAT_DTYPES,
+        dtypes=[torch.float16, torch.float32],
         is_inplace=True,
     )
     bench.run()
