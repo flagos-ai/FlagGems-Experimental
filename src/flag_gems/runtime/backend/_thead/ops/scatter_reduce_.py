@@ -411,12 +411,10 @@ def scatter_reduce_(inp, dim, index, src, reduce, *, include_self=True):
     return inp
 
 
-def scatter_reduce_out(inp, dim, index, src, reduce, *, include_self=True, out=None):
-    """Out-variant of scatter_reduce. Writes result to out tensor if provided."""
+def scatter_reduce_out(inp, dim, index, src, reduce, *, include_self=True, out):
+    """Out-variant of scatter_reduce. Writes result to the out tensor."""
     logger.debug("GEMS_THEAD SCATTER_REDUCE_TWO_OUT")
 
     result = scatter_reduce(inp, dim, index, src, reduce, include_self=include_self)
-    if out is not None:
-        out.copy_(result)
-        return out
-    return result
+    out.copy_(result)
+    return out
