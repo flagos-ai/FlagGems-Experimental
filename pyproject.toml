@@ -137,13 +137,13 @@ metax = [
 mthreads-musa436 = [
     "torch==2.9.0+musa.4.3.6",
     "torch_musa==2.9.0",
-    "mkl==2024.0.0",
+    "mkl==2024.2.0",
 ]
 
 mthreads-musa520 = [
     "torch==2.9.1+musa5.2.0",
     "torch_musa==2.9.1",
-    "mkl==2024.0.0",
+    "mkl==2024.2.0",
 ]
 
 nvidia-cuda128 = [
