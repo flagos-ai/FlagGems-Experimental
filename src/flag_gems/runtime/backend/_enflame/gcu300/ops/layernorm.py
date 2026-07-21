@@ -53,7 +53,9 @@ def layer_norm_persistent_kernel(
 ):
     # using 1d tile makes code clean
     # Map the program id to the row of X and Y it should compute.
-    pid = tl.program_id(0)
+    pid = tl.program_id(0) + tl.program_id(1) * tl.num_programs(0)
+    if pid >= M:
+        return
 
     n_offsets = tl.arange(0, TILE_N)
     mask = n_offsets < N
@@ -155,7 +157,9 @@ def layer_norm_loop_kernel(
     TILE_N: tl.constexpr,
 ):
     # Map the program id to the row of X and Y it should compute.
-    pid = tl.program_id(0)
+    pid = tl.program_id(0) + tl.program_id(1) * tl.num_programs(0)
+    if pid >= M:
+        return
 
     # Compute mean
     m = tl.zeros((TILE_N,), dtype=tl.float32)  # mean
@@ -347,6 +351,8 @@ def weight_bias_backward_kernel(
 def layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5):
     logger.debug("GEMS_ENFLAME LAYER_NORM")
 
+    MAX_GRID_X = 65535
+
     N = math.prod(normalized_shape)
     M = input.numel() // N
 
@@ -380,8 +386,9 @@ def layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5):
             )
         elif N <= 4096:
             TILE_N = triton.next_power_of_2(N)
-            grid = (M, 1, 1)
-            layer_norm_persistent_kernel[grid](
+            grid_x = min(M, MAX_GRID_X)
+            grid_y = triton.cdiv(M, MAX_GRID_X)
+            layer_norm_persistent_kernel[(grid_x, grid_y, 1)](
                 input,
                 y,
                 weight,
@@ -394,8 +401,9 @@ def layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5):
                 TILE_N,
             )
         else:
-            grid = (M, 1, 1)
-            layer_norm_loop_kernel[grid](
+            grid_x = min(M, MAX_GRID_X)
+            grid_y = triton.cdiv(M, MAX_GRID_X)
+            layer_norm_loop_kernel[(grid_x, grid_y, 1)](
                 input,
                 y,
                 weight,
