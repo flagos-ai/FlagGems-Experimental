@@ -141,7 +141,7 @@ def rand_heur_num_warps(args):
     elif args["N"] <= 1024:
         return 8
     else:
-        return 16
+        return 8
 
 
 def randn_heur_block(args):
@@ -157,7 +157,7 @@ def randn_heur_num_warps(args):
     elif args["N"] <= 1024:
         return 8
     else:
-        return 16
+        return 8
 
 
 def softmax_heur_tile_k(args):
