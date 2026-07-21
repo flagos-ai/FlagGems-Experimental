@@ -22,6 +22,7 @@ from .log_normal_ import log_normal_
 from .nll_loss_backward import nll_loss_backward
 from .nonzero_numpy import nonzero_numpy
 from .reflection_pad3d_backward import reflection_pad3d_backward
+from .renorm_ import renorm_
 from .special_hermite_polynomial_h import special_hermite_polynomial_h
 
 __all__ = [
@@ -36,5 +37,6 @@ __all__ = [
     "nll_loss_backward",
     "nonzero_numpy",
     "reflection_pad3d_backward",
+    "renorm_",
     "special_hermite_polynomial_h",
 ]
