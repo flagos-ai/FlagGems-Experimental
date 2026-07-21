@@ -30,6 +30,7 @@ from .layernorm import layer_norm, layer_norm_backward
 from .log_softmax import log_softmax, log_softmax_backward
 from .lt_ import lt_, lt_scalar_
 from .masked_fill import masked_fill, masked_fill_
+from .masked_scatter import masked_scatter, masked_scatter_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .min import min, min_dim
@@ -78,6 +79,8 @@ __all__ = [
     "matmul_int8",
     "masked_fill",
     "masked_fill_",
+    "masked_scatter",
+    "masked_scatter_",
     "min_dim",
     "min",
     "mm",
