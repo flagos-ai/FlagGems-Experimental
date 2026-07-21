@@ -100,14 +100,13 @@ jobs:
       - uses: ./.github/actions/checkout-retry
       - uses: ./.github/actions/setup-flaggems
         with:
-          vendor: ${{ steps.resolve.outputs.BACKEND }}
+          backend: ${{ steps.resolve.outputs.BACKEND }}
           gpu_check_script: tools/gpu_check_${{ steps.resolve.outputs.VENDOR }}.sh
 
       - name: Run tests
         shell: bash
         run: |
           source .venv/bin/activate
-          source tools/env.sh ${BACKEND}
           tools/run_tests.py --ops ${{ inputs.operators }} --gpus ${{ inputs.gpus }}
 
       - name: Upload results
