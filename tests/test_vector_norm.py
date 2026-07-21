@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 import pytest
 import torch
 
@@ -26,10 +28,21 @@ if cfg.QUICK_MODE:
     KEEP_DIM = [True]
     ORD_LIST = [2]
 else:
-    FLOAT_DTYPES = utils.FLOAT_DTYPES
+    FLOAT_DTYPES = utils.ALL_FLOAT_DTYPES
     DIM_LIST = [0, 1, [0, 1], [1, 0]]
     KEEP_DIM = [True, False]
     ORD_LIST = [2, float("inf"), -float("inf"), 0, 1]
+
+
+def _get_reduce_dim(shape, dim):
+    if dim is None:
+        return math.prod(shape)
+
+    dims = dim if isinstance(dim, (list, tuple)) else [dim]
+    reduce_dim = 1
+    for d in dims:
+        reduce_dim *= shape[d % len(shape)]
+    return reduce_dim
 
 
 @pytest.mark.vector_norm
@@ -56,4 +69,6 @@ def test_accuracy_vectornorm(shape, ord, dim, keepdim, dtype):
     with flag_gems.use_gems():
         res_out = torch.linalg.vector_norm(inp, ord, dim, keepdim)
 
-    utils.gems_assert_close(res_out, ref_out, dtype)
+    utils.gems_assert_close(
+        res_out, ref_out, dtype, reduce_dim=_get_reduce_dim(shape, dim)
+    )
