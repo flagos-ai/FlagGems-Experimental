@@ -15,6 +15,7 @@
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .addmm_ import addmm_
 from .broadcast_to import broadcast_to
+from .conv_transpose1d import conv_transpose1d
 from .embedding_dense_backward import embedding_dense_backward
 from .index_copy_ import index_copy, index_copy_
 from .linalg_cholesky import linalg_cholesky
@@ -30,6 +31,7 @@ __all__ = [
     "adaptive_max_pool3d_backward",
     "addmm_",
     "broadcast_to",
+    "conv_transpose1d",
     "embedding_dense_backward",
     "index_copy",
     "index_copy_",
