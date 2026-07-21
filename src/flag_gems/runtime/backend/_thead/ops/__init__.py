@@ -23,6 +23,7 @@ from .nll_loss_backward import nll_loss_backward
 from .nonzero_numpy import nonzero_numpy
 from .reflection_pad3d_backward import reflection_pad3d_backward
 from .renorm import renorm, renorm_
+from .repeat import repeat
 from .special_hermite_polynomial_h import special_hermite_polynomial_h
 from .tile import tile
 
@@ -40,6 +41,7 @@ __all__ = [
     "reflection_pad3d_backward",
     "renorm",
     "renorm_",
+    "repeat",
     "special_hermite_polynomial_h",
     "tile",
 ]
