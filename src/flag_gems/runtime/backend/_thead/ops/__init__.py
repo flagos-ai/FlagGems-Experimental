@@ -19,6 +19,7 @@ from .embedding_dense_backward import embedding_dense_backward
 from .index_copy_ import index_copy, index_copy_
 from .linalg_cholesky import linalg_cholesky
 from .log_normal_ import log_normal_
+from .median import median, median_dim, median_dim_values, median_out
 from .nll_loss_backward import nll_loss_backward
 from .nonzero_numpy import nonzero_numpy
 from .reflection_pad3d_backward import reflection_pad3d_backward
@@ -35,6 +36,10 @@ __all__ = [
     "index_copy_",
     "linalg_cholesky",
     "log_normal_",
+    "median",
+    "median_dim",
+    "median_dim_values",
+    "median_out",
     "nll_loss_backward",
     "nonzero_numpy",
     "reflection_pad3d_backward",
