@@ -17,6 +17,7 @@ from .addmm_ import addmm_
 from .broadcast_to import broadcast_to
 from .index_copy_ import index_copy, index_copy_
 from .log_normal_ import log_normal_
+from .nonzero_numpy import nonzero_numpy
 
 __all__ = [
     "adaptive_max_pool3d_backward",
@@ -25,4 +26,5 @@ __all__ = [
     "index_copy",
     "index_copy_",
     "log_normal_",
+    "nonzero_numpy",
 ]
