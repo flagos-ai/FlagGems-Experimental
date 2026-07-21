@@ -13,16 +13,26 @@
 # limitations under the License.
 
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
+from .addmm_ import addmm_
 from .broadcast_to import broadcast_to
+from .embedding_dense_backward import embedding_dense_backward
 from .index_copy_ import index_copy, index_copy_
+from .linalg_cholesky import linalg_cholesky
 from .log_normal_ import log_normal_
+from .nll_loss_backward import nll_loss_backward
+from .nonzero_numpy import nonzero_numpy
 from .special_hermite_polynomial_h import special_hermite_polynomial_h
 
 __all__ = [
     "adaptive_max_pool3d_backward",
+    "addmm_",
     "broadcast_to",
+    "embedding_dense_backward",
     "index_copy",
     "index_copy_",
+    "linalg_cholesky",
     "log_normal_",
+    "nll_loss_backward",
+    "nonzero_numpy",
     "special_hermite_polynomial_h",
 ]
