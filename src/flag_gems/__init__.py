@@ -431,6 +431,7 @@ _FULL_CONFIG = (
     ("hardsigmoid", hardsigmoid),
     ("hardsigmoid.out", hardsigmoid_out),
     ("hardswish_", hardswish_),
+    ("hardswish_backward", hardswish_backward),
     ("histc", histc),
     ("hstack", hstack),
     ("hypot", hypot),

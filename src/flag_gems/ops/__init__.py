@@ -274,6 +274,7 @@ from flag_gems.ops.hadamard_transform import (
 )
 from flag_gems.ops.hardsigmoid import hardsigmoid, hardsigmoid_out
 from flag_gems.ops.hardswish_ import hardswish_
+from flag_gems.ops.hardswish_backward import hardswish_backward
 from flag_gems.ops.histc import histc
 from flag_gems.ops.hstack import hstack
 from flag_gems.ops.hypot import hypot, hypot_out
@@ -945,6 +946,7 @@ __all__ = [
     "hardsigmoid",
     "hardsigmoid_out",
     "hardswish_",
+    "hardswish_backward",
     "histc",
     "hstack",
     "hypot",
