@@ -25,6 +25,7 @@ torch.cumsum call on a small auxiliary array (~np elements), eliminating
 inter-block synchronization.  num_warps is also made device-aware to
 respect Metax's 512-thread-per-block limit (warp_size=64 -> max 8 warps).
 """
+
 import logging
 
 import torch
