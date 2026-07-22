@@ -6703,6 +6703,17 @@ ops:
       - Math
     stages:
       - stable: '2.2'
+  - id: ReduceArgMax
+    description: |
+      Returns the indices of the maximum value of all elements in the `input` tensor.
+    for:
+      - ReduceArgMax
+    labels:
+      - Reduction
+    kind:
+      - LinearAlg
+    stages:
+      - beta: '5.0'
   - id: reflection_pad1d
     description: |
       Pads the input 3D or 2D tensor (typically representing signals or sequences)
