@@ -738,6 +738,7 @@ _FULL_CONFIG = (
     ("special_erfinv.out", special_erfinv_out),
     ("special_erfinv_", special_erfinv_),
     ("special_gammainc", special_gammainc),
+    ("special_gammaincc", special_gammaincc),
     ("special_hermite_polynomial_h", special_hermite_polynomial_h),
     ("special_i0", special_i0),
     ("special_i0.out", special_i0_out),
