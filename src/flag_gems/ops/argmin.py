@@ -269,7 +269,7 @@ def argmin(inp, dim=None, keepdim=False, *, dtype=None):
             triton.cdiv(M, meta["BLOCK_M"]),
             K,
         )
-        if K == 1 and inp.dtype != torch.int32 and inp.dtype != torch.int16:
+        if K == 1:
             with torch_device_fn.device(inp.device):
                 argmin_kernel_opt_k1[grid](
                     inp,
@@ -283,15 +283,11 @@ def argmin(inp, dim=None, keepdim=False, *, dtype=None):
                 torch.float16: tl.float16,
                 torch.bfloat16: tl.bfloat16,
                 torch.float32: tl.float32,
+                torch.int16: tl.int16,
+                torch.int32: tl.int32,
             }
             # general support for other (N, K)
-            if (
-                (N % 64 == 0 or N == 512)
-                and (K % 32 == 0)
-                and M % 8 == 0
-                and inp.dtype != torch.int32
-                and inp.dtype != torch.int16
-            ):
+            if (N % 64 == 0 or N == 512) and (K % 32 == 0) and M % 8 == 0:
                 triton_dtype = torch2triton_dtype[inp.dtype]
                 # use default paramerter to calcualte grid
                 grid_for_split_K = (triton.cdiv(M, 8), triton.cdiv(K, 32))

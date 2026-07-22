@@ -6703,6 +6703,18 @@ ops:
       - Math
     stages:
       - stable: '2.2'
+  - id: ReduceArgMin
+    description: |
+      Returns the indices of the minimum value(s) of the flattened tensor or along a dimension.
+    for:
+      - ReduceArgMin
+    labels:
+      - fused
+      - Reduction
+    kind:
+      - LinearAlg
+    stages:
+      - stable: '2.2'
   - id: reflection_pad1d
     description: |
       Pads the input 3D or 2D tensor (typically representing signals or sequences)

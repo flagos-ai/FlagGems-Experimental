@@ -89,6 +89,7 @@ from flag_gems.fused.moe_sum import moe_sum
 from flag_gems.fused.mrope import mrope
 from flag_gems.fused.outer import outer
 from flag_gems.fused.pack_seq import pack_seq_triton
+from flag_gems.fused.reduce_arg_min import ReduceArgMin
 from flag_gems.fused.reglu import dreglu, reglu
 from flag_gems.fused.reshape_and_cache import reshape_and_cache
 from flag_gems.fused.reshape_and_cache_flash import reshape_and_cache_flash
@@ -174,6 +175,7 @@ __all__ = [
     "outplace_fused_experts",
     "pack_seq_triton",
     "reglu",
+    "ReduceArgMin",
     "reshape_and_cache",
     "reshape_and_cache_flash",
     "rwkv_ka_fusion",
