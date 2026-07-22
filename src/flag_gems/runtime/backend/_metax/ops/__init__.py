@@ -48,6 +48,7 @@ from .special_gammainc import special_gammainc
 from .tanh import tanh
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
+from .zero import zero, zero_, zero_out
 from .zeros import zeros
 from .zeros_like import zeros_like
 
@@ -99,6 +100,9 @@ __all__ = [
     "special_gammainc",
     "tanh",
     "upsample_nearest2d",
+    "zero",
+    "zero_",
+    "zero_out",
     "zeros",
     "zeros_like",
 ]
