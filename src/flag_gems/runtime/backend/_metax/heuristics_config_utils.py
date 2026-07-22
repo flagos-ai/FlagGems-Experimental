@@ -16,6 +16,19 @@ import torch
 import triton
 
 
+def _metax_max_num_warps():
+    """Return the maximum num_warps that fits within the device's thread limit.
+
+    Computed as max_threads_per_block // warp_size, capped at 16.
+    On C550 (warp_size=64, max_threads_per_block=512) this returns 8.
+    On devices with warp_size=32 this returns 16.
+    """
+    props = torch.cuda.get_device_properties(torch.cuda.current_device())
+    max_threads = getattr(props, "max_threads_per_block", 512)
+    warp_size = getattr(props, "warp_size", 64)
+    return min(max_threads // warp_size, 16)
+
+
 def simple_elementwise_blocksize_heur(args):
     return 512
 
@@ -58,10 +71,8 @@ def dropout_heur_block(args):
 def dropout_heur_num_warps(args):
     if args["N"] <= 512:
         return 4
-    elif args["N"] <= 1024:
-        return 8
     else:
-        return 16
+        return _metax_max_num_warps()
 
 
 def exponential_heur_block(args):
@@ -74,10 +85,8 @@ def exponential_heur_block(args):
 def exponential_heur_num_warps(args):
     if args["N"] <= 512:
         return 4
-    elif args["N"] <= 1024:
-        return 8
     else:
-        return 16
+        return _metax_max_num_warps()
 
 
 def gather_heur_block_m(args):
@@ -235,10 +244,8 @@ def uniform_heur_block(args):
 def uniform_heur_num_warps(args):
     if args["N"] <= 512:
         return 4
-    elif args["N"] <= 1024:
-        return 8
     else:
-        return 16
+        return _metax_max_num_warps()
 
 
 def var_mean_heur_block_n(args):
