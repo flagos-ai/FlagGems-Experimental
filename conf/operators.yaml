@@ -8738,6 +8738,18 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '5.0'
+  - id: sym_constrain_range
+    description: |
+      Restrict the possible numerical range (min/max) of an unbacked symbolic integer.
+    for:
+      - sym_constrain_range
+      - sym_constrain_range_for_size
+    labels:
+      - aten
+    kind:
+      - Special
+    stages:
+      - beta: '5.0'
   - id: sym_stride
     description: Returns the stride of the input tensor as a tuple of integers. Used for torch.compile symbolic tracing.
     for:
