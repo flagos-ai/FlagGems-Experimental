@@ -6703,6 +6703,17 @@ ops:
       - Math
     stages:
       - stable: '2.2'
+  - id: reduce_l2
+    description: Computes the L2 norm of all elements in the input tensor.
+    for:
+      - reduce_l2
+    labels:
+      - reduction
+      - KernelGen
+    kind:
+      - Reduction
+    stages:
+      - alpha: '5.0'
   - id: reflection_pad1d
     description: |
       Pads the input 3D or 2D tensor (typically representing signals or sequences)
