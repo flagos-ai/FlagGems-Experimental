@@ -8738,6 +8738,17 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '5.0'
+  - id: sym_constrain_range_for_size
+    description: |
+      Restrict the possible numerical range of a size-like scalar used in symbolic shape analysis.
+    for:
+      - sym_constrain_range_for_size
+    labels:
+      - aten
+    kind:
+      - Tensor
+    stages:
+      - beta: '5.0'
   - id: sym_stride
     description: Returns the stride of the input tensor as a tuple of integers. Used for torch.compile symbolic tracing.
     for:
