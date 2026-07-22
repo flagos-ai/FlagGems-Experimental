@@ -44,6 +44,7 @@ from .resolve_conj import resolve_conj
 from .sigmoid import sigmoid
 from .tanh import tanh
 from .unique import _unique2
+from .upsample_linear1d import upsample_linear1d
 from .upsample_nearest2d import upsample_nearest2d
 from .zeros import zeros
 from .zeros_like import zeros_like
@@ -90,6 +91,7 @@ __all__ = [
     "resolve_conj",
     "sigmoid",
     "tanh",
+    "upsample_linear1d",
     "upsample_nearest2d",
     "zeros",
     "zeros_like",
