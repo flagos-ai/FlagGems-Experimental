@@ -120,7 +120,7 @@ def special_i0(x: torch.Tensor):
     if not x.is_cuda:
         raise ValueError("special_i0: input tensor must be on CUDA device")
     out_dtype = x.dtype if x.is_floating_point() else torch.get_default_dtype()
-    out = torch.empty_like(x.to(dtype=out_dtype), dtype=out_dtype, device=x.device)
+    out = torch.empty_like(x, dtype=out_dtype)
     _launch_special_i0(out, x)
     return out
 
