@@ -23,6 +23,10 @@ from .matmul_int8 import matmul_int8
 from .mm import mm, mm_out
 from .repeat import repeat
 from .scatter_add import scatter_add_
+from .special_chebyshev_polynomial_w import (
+    special_chebyshev_polynomial_w,
+    special_chebyshev_polynomial_w_out,
+)
 from .tile import tile
 from .var import var, var_correction, var_dim
 
@@ -39,6 +43,8 @@ __all__ = [
     "matmul_int8",
     "repeat",
     "scatter_add_",
+    "special_chebyshev_polynomial_w",
+    "special_chebyshev_polynomial_w_out",
     "tile",
     "var",
     "var_correction",
