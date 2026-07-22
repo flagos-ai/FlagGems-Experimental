@@ -3956,6 +3956,19 @@ ops:
       - NeuralNetwork
     stages:
       - beta: '5.0'
+  - id: hardtanh_backward
+    description: |
+      The backward pass for `hardtanh`. Computes the gradient: ``grad_output`` when
+      ``min_val < x < max_val``, ``0`` otherwise.
+    for:
+      - hardtanh_backward
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: hc_head_fused_kernel
     description: |
       The head fusion kernel for MHC (Manifold-Constrained Hyper-Connections).
