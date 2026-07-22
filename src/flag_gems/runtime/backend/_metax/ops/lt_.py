@@ -16,6 +16,7 @@
 """Metax-specific inplace wrapper for lt_ and lt_scalar_ with fused kernels
 that avoid uitofp i1->bf16 by using tl.where to produce 1.0/0.0 float
 values."""
+
 import logging
 
 import triton
