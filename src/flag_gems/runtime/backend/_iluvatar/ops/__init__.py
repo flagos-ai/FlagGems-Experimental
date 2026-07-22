@@ -22,6 +22,7 @@ from .linalg_cholesky import linalg_cholesky
 from .linear import linear
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
+from .median import median, median_dim, median_dim_values, median_out
 from .mm import mm, mm_out
 from .nonzero_numpy import nonzero_numpy
 from .repeat import repeat
@@ -42,6 +43,10 @@ __all__ = [
     "linear",
     "matmul_bf16",
     "matmul_int8",
+    "median",
+    "median_dim",
+    "median_dim_values",
+    "median_out",
     "repeat",
     "scatter_add_",
     "tile",
