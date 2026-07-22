@@ -429,6 +429,7 @@ _FULL_CONFIG = (
     ("gt_.Scalar", gt_scalar_),
     ("gt_.Tensor", gt_tensor_),
     ("hardsigmoid", hardsigmoid),
+    ("hardsigmoid_backward", hardsigmoid_backward),
     ("hardsigmoid.out", hardsigmoid_out),
     ("hardswish_", hardswish_),
     ("histc", histc),
