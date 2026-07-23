@@ -27,6 +27,7 @@ from .nonzero_numpy import nonzero_numpy
 from .repeat import repeat
 from .scatter_add import scatter_add_
 from .tile import tile
+from .unique_consecutive import unique_consecutive
 from .var import var, var_correction, var_dim
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
     "repeat",
     "scatter_add_",
     "tile",
+    "unique_consecutive",
     "var",
     "var_correction",
     "var_dim",
