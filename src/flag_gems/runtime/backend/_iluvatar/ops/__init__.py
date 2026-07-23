@@ -24,6 +24,7 @@ from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .mm import mm, mm_out
 from .nonzero_numpy import nonzero_numpy
+from .permute_copy import permute_copy
 from .repeat import repeat
 from .scatter_add import scatter_add_
 from .tile import tile
@@ -51,4 +52,5 @@ __all__ = [
     "mm",
     "mm_out",
     "nonzero_numpy",
+    "permute_copy",
 ]
