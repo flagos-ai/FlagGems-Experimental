@@ -15,6 +15,7 @@
 from .addmm import addmm
 from .amax import amax
 from .arange import arange, arange_start
+from .avg_pool3d import avg_pool3d_backward
 from .batch_norm import batch_norm, batch_norm_backward
 from .bmm import bmm
 from .exponential_ import exponential_
@@ -57,6 +58,7 @@ __all__ = [
     "amax",
     "arange",
     "arange_start",
+    "avg_pool3d_backward",
     "batch_norm",
     "batch_norm_backward",
     "bmm",
