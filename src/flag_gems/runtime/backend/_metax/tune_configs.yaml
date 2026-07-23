@@ -1153,6 +1153,27 @@ var_mean:
   - 8
   - 16
 
+conv_transpose1d:
+- gen: true
+  param_map:
+    META:
+      BLOCK_N_OW: block_n_ow
+      BLOCK_OC: block_oc
+      BLOCK_IC: block_ic
+    num_warps: warps
+  block_n_ow:
+    - 32
+    - 64
+    - 128
+  block_oc:
+    - 32
+    - 64
+  block_ic:
+    - 32
+  warps:
+    - 4
+    - 8
+
 conv2d_forward:
 - META:
     BLOCK_NI_HO_WO: 32
