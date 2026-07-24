@@ -22,6 +22,7 @@ from .full import full
 from .full_like import full_like
 from .groupnorm import group_norm
 from .hadamard_transform import hadamard_transform
+from .histc import histc
 from .index import index
 from .index_put import index_put, index_put_
 from .index_select import index_select
@@ -65,6 +66,7 @@ __all__ = [
     "full_like",
     "group_norm",
     "hadamard_transform",
+    "histc",
     "index",
     "index_put",
     "index_put_",
