@@ -26,6 +26,7 @@ from .mm import mm, mm_out
 from .nonzero_numpy import nonzero_numpy
 from .repeat import repeat
 from .scatter_add import scatter_add_
+from .special_hermite_polynomial_h import special_hermite_polynomial_h
 from .tile import tile
 from .var import var, var_correction, var_dim
 
@@ -44,6 +45,7 @@ __all__ = [
     "matmul_int8",
     "repeat",
     "scatter_add_",
+    "special_hermite_polynomial_h",
     "tile",
     "var",
     "var_correction",
