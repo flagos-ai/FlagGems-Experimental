@@ -24,8 +24,8 @@ from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .mm import mm, mm_out
 from .nonzero_numpy import nonzero_numpy
-from .repeat import repeat
 from .renorm_ import renorm_
+from .repeat import repeat
 from .scatter_add import scatter_add_
 from .tile import tile
 from .var import var, var_correction, var_dim
