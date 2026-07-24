@@ -145,10 +145,9 @@ def renorm(input, p, dim, maxnorm):
 
 def renorm_(input, p, dim, maxnorm):
     logger.debug("GEMS_METAX RENORM_")
-
-    if dim < 0:
-        dim = input.ndim + dim
-
+    # Delegate to renorm + copy_: cleaner than duplicating the permute/kernel
+    # logic, and the extra tensor allocation cost is negligible relative to
+    # the already-required permute+contiguous copy for dim != 0.
     result = renorm(input, p, dim, maxnorm)
     input.copy_(result)
     return input
