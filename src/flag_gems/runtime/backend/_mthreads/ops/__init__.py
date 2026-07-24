@@ -56,6 +56,7 @@ from .repeat_interleave import (
 )
 from .resolve_conj import resolve_conj
 from .sort import sort, sort_stable
+from .special_gammainc import special_gammainc
 from .tile import tile
 from .unique import _unique2
 from .w8a8_block_fp8_matmul import w8a8_block_fp8_matmul
@@ -119,6 +120,7 @@ __all__ = [
     "resolve_conj",
     "sort",
     "sort_stable",
+    "special_gammainc",
     "tile",
     "_unique2",
     "w8a8_block_fp8_matmul",
