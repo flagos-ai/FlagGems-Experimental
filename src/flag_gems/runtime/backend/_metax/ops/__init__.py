@@ -41,6 +41,7 @@ from .ones_like import ones_like
 from .outer import outer
 from .polar import polar
 from .prod import prod, prod_dim
+from .renorm import renorm, renorm_
 from .repeat_interleave import repeat_interleave_self_tensor
 from .resolve_conj import resolve_conj
 from .sigmoid import sigmoid
@@ -94,6 +95,8 @@ __all__ = [
     "prod",
     "prod_dim",
     "repeat_interleave_self_tensor",
+    "renorm",
+    "renorm_",
     "resolve_conj",
     "sigmoid",
     "special_gammainc",
