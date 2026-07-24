@@ -37,6 +37,7 @@ from .log_softmax import (
 )
 from .max import max, max_dim
 from .min import min, min_dim
+from .mish import mish, mish_
 from .mode import mode
 from .normal import normal_
 from .one_hot import one_hot
@@ -100,6 +101,8 @@ __all__ = [
     "max_dim",
     "min",
     "min_dim",
+    "mish",
+    "mish_",
     "mode",
     "normal_",
     "one_hot",
