@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 @libentry()
-@triton.jit(do_not_specialize=["M", "N", "p", "maxnorm"])
+@triton.jit(do_not_specialize=["M", "N", "maxnorm"])
 def renorm_kernel_fused(
     X,
     Y,
@@ -37,13 +37,9 @@ def renorm_kernel_fused(
     maxnorm,
     BLOCK_N: tl.constexpr,
 ):
-    """
-    Fused renorm kernel: compute p-norm and apply scaling in a single kernel.
+    """Fused renorm: compute p-norm and apply scaling in one kernel.
 
-    For dim!=0, the caller permutes the input so M = number of sub-tensors
-    and N = elements per sub-tensor.  This avoids the two-kernel overhead
-    of the generic implementation which launches separate compute-norms and
-    apply-scale kernels.
+    Caller ensures target dim is dim=0 (rows = sub-tensors, contiguous).
     """
     pid = tle.program_id(0)
     num_pids = tle.num_programs(0)
@@ -53,7 +49,6 @@ def renorm_kernel_fused(
         row_ptr = X + row_id * N
         y_row_ptr = Y + row_id * N
 
-        # Pass 1: accumulate p-norm squared (or powered) for this row
         _sum = tl.zeros([BLOCK_N], dtype=tl.float32)
         for off in range(0, N, BLOCK_N):
             cols = off + offsets
@@ -70,7 +65,6 @@ def renorm_kernel_fused(
         else:
             norm = tl_extra_shim.pow(sum_val, 1.0 / p)
 
-        # Pass 2: copy (no scaling needed) or scale + store
         if norm <= maxnorm:
             for off in range(0, N, BLOCK_N):
                 cols = off + offsets
@@ -86,45 +80,141 @@ def renorm_kernel_fused(
                 tl.store(y_row_ptr + cols, x * scale, mask=mask)
 
 
-def renorm(input, p, dim, maxnorm):
-    """
-    Compute renorm for Metax backend.
+@libentry()
+@triton.jit(do_not_specialize=["M", "N", "maxnorm"])
+def renorm_dim1_kernel(
+    X,
+    Y,
+    M,
+    N,
+    p,
+    maxnorm,
+    BLOCK_ROW: tl.constexpr,
+    BLOCK_COL: tl.constexpr,
+):
+    """In-place-friendly renorm for dim=1.  No permute needed — data is
+    processed in its native row-major layout.  Each program handles
+    BLOCK_COL columns, iterating over all M rows to compute column norms."""
 
-    Uses a fused single-kernel that computes p-norms and applies scaling
-    in one pass, eliminating the two-kernel launch overhead of the generic
-    implementation.  The tl.range() persistent loop provides good SM
-    utilization even for small row counts.
+    pid = tle.program_id(0)
+    num_pids = tle.num_programs(0)
+    row_offs = tl.arange(0, BLOCK_ROW)
+    col_offs = tl.arange(0, BLOCK_COL)
+
+    stride = num_pids * BLOCK_COL
+    for col_start in tl.range(pid * BLOCK_COL, N, stride):
+        col_mask = (col_start + col_offs) < N
+
+        # Phase 1 — accumulate column norms over all rows
+        _sum = tl.zeros([BLOCK_COL], dtype=tl.float32)
+        for r in range(0, M, BLOCK_ROW):
+            rows = r + row_offs
+            mask = (rows < M)[:, None] & col_mask[None, :]
+            tile = tl.load(
+                X + rows[:, None] * N + col_start + col_offs[None, :],
+                mask=mask,
+                other=0.0,
+            ).to(tl.float32)
+            if p == 2.0:
+                _sum += tl.sum(tile * tile, axis=0)
+            else:
+                _sum += tl.sum(tl_extra_shim.pow(tl.abs(tile), p), axis=0)
+
+        if p == 2.0:
+            norms = tl.sqrt(_sum)
+        else:
+            norms = tl_extra_shim.pow(_sum, 1.0 / p)
+
+        # Phase 2 — scale columns whose norm exceeds maxnorm
+        need_scale = tl.max(norms > maxnorm)
+        if need_scale:
+            scale = tl.where(
+                col_mask,
+                tl.where(norms > maxnorm, maxnorm / norms, 1.0),
+                1.0,
+            )
+            for r in range(0, M, BLOCK_ROW):
+                rows = r + row_offs
+                mask = (rows < M)[:, None] & col_mask[None, :]
+                tile = tl.load(
+                    X + rows[:, None] * N + col_start + col_offs[None, :],
+                    mask=mask,
+                    other=0.0,
+                ).to(tl.float32)
+                tl.store(
+                    Y + rows[:, None] * N + col_start + col_offs[None, :],
+                    tile * scale[None, :],
+                    mask=mask,
+                )
+
+
+def _get_num_sms():
+    return torch.cuda.get_device_properties(
+        torch.cuda.current_device()
+    ).multi_processor_count
+
+
+def _permute_to_leading(input, dim):
+    """Permute so target dim → dim=0. Returns (tensor, inv_perm_or_None)."""
+    if dim == 0:
+        return input.contiguous(), None
+    ndim = input.ndim
+    perm = [dim] + [i for i in range(ndim) if i != dim]
+    inv_perm = [0] * ndim
+    for i, pi in enumerate(perm):
+        inv_perm[pi] = i
+    return input.permute(perm).contiguous(), inv_perm
+
+
+def _dim1_params(x, shape):
+    """Return (M, N, BLOCK_ROW, BLOCK_COL, grid) for dim=1 processing."""
+    N = int(shape[1])
+    M = x.numel() // N
+    BLK_R = min(triton.next_power_of_2(min(M, 128)), 256)
+    BLK_C = min(max(8, triton.next_power_of_2(N) // 16), 32)
+    grid = (triton.cdiv(N, BLK_C * 4),)
+    return M, N, BLK_R, BLK_C, grid
+
+
+def renorm(input, p, dim, maxnorm):
+    """Compute renorm (out-of-place).  Metax-optimized with fused kernels.
+
+    dim=1 uses a column-native kernel that avoids the permute+copy overhead.
+    Other dims use permute-to-leading + contiguous-row fused kernel.
     """
     logger.debug("GEMS_METAX RENORM")
 
     if dim < 0:
         dim = input.ndim + dim
 
-    # Permute to make target dim the leading dimension
-    if dim != 0:
-        ndim = input.ndim
-        perm = [dim] + [i for i in range(ndim) if i != dim]
-        inv_perm = [0] * ndim
-        for i, pi in enumerate(perm):
-            inv_perm[pi] = i
-        x = input.permute(perm).contiguous()
-        need_permute = True
-    else:
-        x = input.contiguous()
-        inv_perm = None
-        need_permute = False
+    if dim == 1 and input.ndim == 2:
+        # For 2D tensors, sub-tensors along dim=1 are rows — rows are
+        # contiguous in memory, so we can process them directly without
+        # any permute or copy.
+        M, N = input.shape[0], input.shape[1]
+        y = torch.empty_like(input)
+        BLK_R = min(triton.next_power_of_2(min(M, 128)), 256)
+        BLK_C = min(max(8, triton.next_power_of_2(N) // 16), 32)
+        grid = (triton.cdiv(N, BLK_C * 4),)
+        with torch_device_fn.device(input.device):
+            renorm_dim1_kernel[grid](
+                input,
+                y,
+                M,
+                N,
+                p,
+                maxnorm,
+                BLOCK_ROW=BLK_R,
+                BLOCK_COL=BLK_C,
+                num_warps=4,
+            )
+        return y
 
-    M = x.shape[0]
-    N = x.numel() // M
-
+    x, inv_perm = _permute_to_leading(input, dim)
+    M, N = x.shape[0], x.numel() // x.shape[0]
     y = torch.empty_like(x)
     BLOCK_N = min(triton.next_power_of_2(N), 256)
-
-    # Cap grid at what Metax can effectively schedule
-    NUM_SMS = torch.cuda.get_device_properties(
-        torch.cuda.current_device()
-    ).multi_processor_count
-    grid = (min(M, NUM_SMS * 4),)
+    grid = (min(M, _get_num_sms() * 4),)
 
     with torch_device_fn.device(x.device):
         renorm_kernel_fused[grid](
@@ -138,16 +228,44 @@ def renorm(input, p, dim, maxnorm):
             num_warps=4,
         )
 
-    if need_permute:
+    if inv_perm is not None:
         return y.reshape(x.shape).permute(inv_perm)
     return y
 
 
 def renorm_(input, p, dim, maxnorm):
+    """Compute renorm_ (in-place).
+
+    dim=1 uses a column-native kernel that writes directly into the
+    input tensor, avoiding the permute+copy round-trip.
+    Other dims delegate to renorm() + copy_.
+    """
     logger.debug("GEMS_METAX RENORM_")
-    # Delegate to renorm + copy_: cleaner than duplicating the permute/kernel
-    # logic, and the extra tensor allocation cost is negligible relative to
-    # the already-required permute+contiguous copy for dim != 0.
+
+    if dim < 0:
+        dim = input.ndim + dim
+
+    if dim == 1 and input.ndim == 2:
+        # For 2D tensors, sub-tensors along dim=1 are columns.
+        # Process in-place without permute or copy.
+        M, N = input.shape[0], input.shape[1]
+        BLK_R = min(triton.next_power_of_2(min(M, 128)), 256)
+        BLK_C = min(max(8, triton.next_power_of_2(N) // 16), 32)
+        grid = (triton.cdiv(N, BLK_C * 4),)
+        with torch_device_fn.device(input.device):
+            renorm_dim1_kernel[grid](
+                input,
+                input,
+                M,
+                N,
+                p,
+                maxnorm,
+                BLOCK_ROW=BLK_R,
+                BLOCK_COL=BLK_C,
+                num_warps=4,
+            )
+        return input
+
     result = renorm(input, p, dim, maxnorm)
     input.copy_(result)
     return input
