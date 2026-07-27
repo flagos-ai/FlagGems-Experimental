@@ -21,6 +21,7 @@ from .attention import (
     scaled_dot_product_attention_backward,
     scaled_dot_product_attention_forward,
 )
+from .broadcast_to import broadcast_to
 from .exponential_ import exponential_
 from .fill import fill_scalar, fill_scalar_, fill_tensor, fill_tensor_
 from .gelu import gelu, gelu_
@@ -51,6 +52,7 @@ __all__ = [
     "any",
     "any_dim",
     "any_dims",
+    "broadcast_to",
     "exponential_",
     "fill_scalar",
     "fill_scalar_",
