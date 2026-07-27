@@ -44,6 +44,10 @@ from .prod import prod, prod_dim
 from .repeat_interleave import repeat_interleave_self_tensor
 from .resolve_conj import resolve_conj
 from .sigmoid import sigmoid
+from .special_chebyshev_polynomial_w import (
+    special_chebyshev_polynomial_w,
+    special_chebyshev_polynomial_w_out,
+)
 from .special_gammainc import special_gammainc
 from .tanh import tanh
 from .unique import _unique2
@@ -96,6 +100,8 @@ __all__ = [
     "repeat_interleave_self_tensor",
     "resolve_conj",
     "sigmoid",
+    "special_chebyshev_polynomial_w",
+    "special_chebyshev_polynomial_w_out",
     "special_gammainc",
     "tanh",
     "upsample_nearest2d",
