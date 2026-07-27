@@ -24,7 +24,9 @@ from .celu import celu
 from .conv2d import conv2d
 from .dropout import dropout, dropout_backward
 from .gather import gather, gather_backward
+from .histc import histc
 from .index_add import index_add, index_add_
+from .index_copy_ import index_copy, index_copy_
 from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
 from .log import log
@@ -42,12 +44,14 @@ from .normal import normal_
 from .one_hot import one_hot
 from .ones import ones
 from .ones_like import ones_like
+from .permute_copy import permute_copy
 from .prod import prod, prod_dim
 from .rand import rand
 from .rand_like import rand_like
 from .randn import randn
 from .randn_like import randn_like
 from .randperm import randperm
+from .renorm_ import renorm_
 from .repeat import repeat
 from .repeat_interleave import (
     repeat_interleave_self_int,
@@ -56,6 +60,7 @@ from .repeat_interleave import (
 )
 from .resolve_conj import resolve_conj
 from .sort import sort, sort_stable
+from .special_gammainc import special_gammainc
 from .tile import tile
 from .unique import _unique2
 from .w8a8_block_fp8_matmul import w8a8_block_fp8_matmul
@@ -82,8 +87,11 @@ __all__ = [
     "dropout_backward",
     "gather",
     "gather_backward",
+    "histc",
     "index_add",
     "index_add_",
+    "index_copy",
+    "index_copy_",
     "index_put",
     "index_put_",
     "_index_put_impl_",
@@ -105,6 +113,7 @@ __all__ = [
     "one_hot",
     "ones",
     "ones_like",
+    "permute_copy",
     "prod",
     "prod_dim",
     "rand",
@@ -112,6 +121,7 @@ __all__ = [
     "randn",
     "randn_like",
     "randperm",
+    "renorm_",
     "repeat",
     "repeat_interleave_self_int",
     "repeat_interleave_self_tensor",
@@ -119,6 +129,7 @@ __all__ = [
     "resolve_conj",
     "sort",
     "sort_stable",
+    "special_gammainc",
     "tile",
     "_unique2",
     "w8a8_block_fp8_matmul",

@@ -15,6 +15,7 @@
 from .addmm import addmm
 from .amax import amax
 from .arange import arange, arange_start
+from .avg_pool3d import avg_pool3d_backward
 from .batch_norm import batch_norm, batch_norm_backward
 from .bmm import bmm
 from .exponential_ import exponential_
@@ -22,6 +23,7 @@ from .full import full
 from .full_like import full_like
 from .groupnorm import group_norm
 from .hadamard_transform import hadamard_transform
+from .histc import histc
 from .index import index
 from .index_put import index_put, index_put_
 from .index_select import index_select
@@ -41,14 +43,20 @@ from .ones_like import ones_like
 from .outer import outer
 from .polar import polar
 from .prod import prod, prod_dim
+from .renorm import renorm, renorm_
 from .repeat import repeat
 from .repeat_interleave import repeat_interleave_self_tensor
 from .resolve_conj import resolve_conj
 from .sigmoid import sigmoid
+from .special_chebyshev_polynomial_w import (
+    special_chebyshev_polynomial_w,
+    special_chebyshev_polynomial_w_out,
+)
 from .special_gammainc import special_gammainc
 from .tanh import tanh
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
+from .zero import zero, zero_, zero_out
 from .zeros import zeros
 from .zeros_like import zeros_like
 
@@ -58,6 +66,7 @@ __all__ = [
     "amax",
     "arange",
     "arange_start",
+    "avg_pool3d_backward",
     "batch_norm",
     "batch_norm_backward",
     "bmm",
@@ -66,6 +75,7 @@ __all__ = [
     "full_like",
     "group_norm",
     "hadamard_transform",
+    "histc",
     "index",
     "index_put",
     "index_put_",
@@ -94,13 +104,20 @@ __all__ = [
     "polar",
     "prod",
     "prod_dim",
-    "repeat_interleave_self_tensor",
+    "renorm",
+    "renorm_",
     "repeat",
+    "repeat_interleave_self_tensor",
     "resolve_conj",
     "sigmoid",
+    "special_chebyshev_polynomial_w",
+    "special_chebyshev_polynomial_w_out",
     "special_gammainc",
     "tanh",
     "upsample_nearest2d",
+    "zero",
+    "zero_",
+    "zero_out",
     "zeros",
     "zeros_like",
 ]
