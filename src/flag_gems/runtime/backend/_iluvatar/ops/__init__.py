@@ -27,6 +27,7 @@ from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w,
     special_chebyshev_polynomial_w_out,
 )
+from .special_gammainc import special_gammainc
 from .tile import tile
 from .var import var, var_correction, var_dim
 
@@ -45,6 +46,7 @@ __all__ = [
     "scatter_add_",
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
+    "special_gammainc",
     "tile",
     "var",
     "var_correction",
