@@ -26,6 +26,7 @@ from .dropout import dropout, dropout_backward
 from .gather import gather, gather_backward
 from .histc import histc
 from .index_add import index_add, index_add_
+from .index_copy_ import index_copy, index_copy_
 from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
 from .log import log
@@ -89,6 +90,8 @@ __all__ = [
     "histc",
     "index_add",
     "index_add_",
+    "index_copy",
+    "index_copy_",
     "index_put",
     "index_put_",
     "_index_put_impl_",
