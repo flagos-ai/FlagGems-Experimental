@@ -43,6 +43,7 @@ from .normal import normal_
 from .one_hot import one_hot
 from .ones import ones
 from .ones_like import ones_like
+from .permute_copy import permute_copy
 from .prod import prod, prod_dim
 from .rand import rand
 from .rand_like import rand_like
@@ -107,6 +108,7 @@ __all__ = [
     "one_hot",
     "ones",
     "ones_like",
+    "permute_copy",
     "prod",
     "prod_dim",
     "rand",
