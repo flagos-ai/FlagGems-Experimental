@@ -15,6 +15,7 @@
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .addmm_ import addmm_
 from .broadcast_to import broadcast_to
+from .conv_transpose1d import conv_transpose1d
 from .embedding_dense_backward import embedding_dense_backward
 from .index_copy_ import index_copy, index_copy_
 from .linalg_cholesky import linalg_cholesky
@@ -23,6 +24,12 @@ from .nll_loss_backward import nll_loss_backward
 from .nonzero_numpy import nonzero_numpy
 from .reflection_pad3d_backward import reflection_pad3d_backward
 from .renorm import renorm, renorm_
+from .repeat import repeat
+from .scatter_reduce_ import scatter_reduce, scatter_reduce_, scatter_reduce_out
+from .special_chebyshev_polynomial_w import (
+    special_chebyshev_polynomial_w,
+    special_chebyshev_polynomial_w_out,
+)
 from .special_hermite_polynomial_h import special_hermite_polynomial_h
 from .tile import tile
 
@@ -30,6 +37,7 @@ __all__ = [
     "adaptive_max_pool3d_backward",
     "addmm_",
     "broadcast_to",
+    "conv_transpose1d",
     "embedding_dense_backward",
     "index_copy",
     "index_copy_",
@@ -40,6 +48,12 @@ __all__ = [
     "reflection_pad3d_backward",
     "renorm",
     "renorm_",
+    "repeat",
+    "scatter_reduce",
+    "scatter_reduce_",
+    "scatter_reduce_out",
+    "special_chebyshev_polynomial_w",
+    "special_chebyshev_polynomial_w_out",
     "special_hermite_polynomial_h",
     "tile",
 ]
