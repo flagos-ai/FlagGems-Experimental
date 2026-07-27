@@ -3984,6 +3984,17 @@ ops:
       - NeuralNetwork
     stages:
       - beta: '5.3'
+  - id: heaviside_
+    description: The in-place version of `heaviside()`.
+    for:
+      - heaviside_
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: histc
     description: |
       Computes the histogram of a tensor, binning each element into equal-width bins.
