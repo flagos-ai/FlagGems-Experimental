@@ -3984,6 +3984,17 @@ ops:
       - NeuralNetwork
     stages:
       - beta: '5.3'
+  - id: hinge_embedding_loss
+    description: Computes the hinge embedding loss between input and target tensors.
+    for:
+      - hinge_embedding_loss
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - NeuralNetwork
+    stages:
+      - alpha: '5.4'
   - id: histc
     description: |
       Computes the histogram of a tensor, binning each element into equal-width bins.
