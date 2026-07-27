@@ -24,6 +24,7 @@ from .celu import celu
 from .conv2d import conv2d
 from .dropout import dropout, dropout_backward
 from .gather import gather, gather_backward
+from .histc import histc
 from .index_add import index_add, index_add_
 from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
@@ -82,6 +83,7 @@ __all__ = [
     "dropout_backward",
     "gather",
     "gather_backward",
+    "histc",
     "index_add",
     "index_add_",
     "index_put",
