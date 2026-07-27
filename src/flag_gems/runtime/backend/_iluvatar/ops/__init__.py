@@ -31,6 +31,7 @@ from .repeat import repeat
 from .resolve_neg import resolve_neg
 from .scatter_add import scatter_add_
 from .tile import tile
+from .unique_consecutive import unique_consecutive
 from .var import var, var_correction, var_dim
 
 __all__ = [
@@ -54,6 +55,7 @@ __all__ = [
     "resolve_neg",
     "scatter_add_",
     "tile",
+    "unique_consecutive",
     "var",
     "var_correction",
     "var_dim",
