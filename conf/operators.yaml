@@ -3984,6 +3984,28 @@ ops:
       - NeuralNetwork
     stages:
       - beta: '5.3'
+  - id: heaviside
+    description: Computes the Heaviside step function for each element in `input`, using `values` where `input` is zero.
+    for:
+      - heaviside
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
+  - id: heaviside_out
+    description: A variant of `heaviside` that writes the result to an `out` tensor.
+    for:
+      - heaviside.out
+    labels:
+      - aten
+      - KernelGen
+    kind:
+      - Math
+    stages:
+      - alpha: '5.4'
   - id: histc
     description: |
       Computes the histogram of a tensor, binning each element into equal-width bins.
