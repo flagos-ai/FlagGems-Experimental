@@ -412,7 +412,10 @@ def test_median_empty_no_dim(dtype):
 
 
 @pytest.mark.median
-@pytest.mark.parametrize("dtype", [torch.float64, torch.int8, torch.uint8])
+@pytest.mark.parametrize(
+    "dtype",
+    ([torch.float64] if utils.fp64_is_supported else []) + [torch.int8, torch.uint8],
+)
 def test_median_extra_no_dim_dtypes(dtype):
     inp = _make_input((9,), dtype)
     ref_inp = utils.to_reference(inp)
@@ -663,6 +666,7 @@ def test_median_large_width(width):
 
 
 @pytest.mark.median
+@pytest.mark.skipif(not utils.fp64_is_supported, reason="device does not support fp64")
 @pytest.mark.parametrize("width", [257, 1024, 4096])
 @pytest.mark.parametrize("keepdim", KEEPDIM)
 def test_median_float64_key_select(width, keepdim):
@@ -689,6 +693,7 @@ def test_median_float64_key_select(width, keepdim):
 
 
 @pytest.mark.median
+@pytest.mark.skipif(not utils.fp64_is_supported, reason="device does not support fp64")
 @pytest.mark.parametrize("width", [640, 4096])
 def test_median_float64_key_select_nan_first_index(width):
     inp = torch.randn((3, width), dtype=torch.float64, device=flag_gems.device)

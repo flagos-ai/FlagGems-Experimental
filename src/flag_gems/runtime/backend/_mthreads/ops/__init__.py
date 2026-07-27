@@ -36,6 +36,7 @@ from .log_softmax import (
     log_softmax_out,
 )
 from .max import max, max_dim
+from .median import median, median_dim, median_dim_values, median_out
 from .min import min, min_dim
 from .mode import mode
 from .normal import normal_
@@ -98,6 +99,10 @@ __all__ = [
     "log_softmax_out",
     "max",
     "max_dim",
+    "median",
+    "median_dim",
+    "median_dim_values",
+    "median_out",
     "min",
     "min_dim",
     "mode",
