@@ -27,6 +27,7 @@ from .gather import gather, gather_backward
 from .index_add import index_add, index_add_
 from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
+from .linalg_cholesky import linalg_cholesky
 from .log import log
 from .log10 import log10, log10_, log10_out
 from .log_softmax import (
@@ -88,6 +89,7 @@ __all__ = [
     "index_put_",
     "_index_put_impl_",
     "index_select",
+    "linalg_cholesky",
     "log",
     "log10",
     "log10_",
