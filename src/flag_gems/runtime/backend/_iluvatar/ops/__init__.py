@@ -20,6 +20,7 @@ from .hadamard_transform import hadamard_transform
 from .histc import histc
 from .linalg_cholesky import linalg_cholesky
 from .linear import linear
+from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .median import median, median_dim, median_dim_values, median_out
@@ -44,6 +45,7 @@ __all__ = [
     "histc",
     "linalg_cholesky",
     "linear",
+    "log_normal_",
     "matmul_bf16",
     "matmul_int8",
     "median",
