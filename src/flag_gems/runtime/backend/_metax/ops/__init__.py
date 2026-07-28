@@ -16,7 +16,9 @@ from .isin import isin
 from .layernorm import layer_norm, layer_norm_backward
 from .linalg_svdvals import linalg_svdvals
 from .log_softmax import log_softmax, log_softmax_backward
+from .lt_ import lt_, lt_scalar_
 from .masked_fill import masked_fill, masked_fill_
+from .masked_scatter import masked_scatter, masked_scatter_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .min import min, min_dim
@@ -30,6 +32,7 @@ from .prod import prod, prod_dim
 from .repeat_interleave import repeat_interleave_self_tensor
 from .resolve_conj import resolve_conj
 from .sigmoid import sigmoid
+from .special_gammainc import special_gammainc
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
@@ -61,13 +64,17 @@ __all__ = [
     "isin",
     "layer_norm",
     "layer_norm_backward",
+    "linalg_svdvals",
     "log_softmax",
     "log_softmax_backward",
-    "linalg_svdvals",
+    "lt_",
+    "lt_scalar_",
     "matmul_bf16",
     "matmul_int8",
     "masked_fill",
     "masked_fill_",
+    "masked_scatter",
+    "masked_scatter_",
     "min_dim",
     "min",
     "mm",
@@ -82,6 +89,7 @@ __all__ = [
     "repeat_interleave_self_tensor",
     "resolve_conj",
     "sigmoid",
+    "special_gammainc",
     "special_shifted_chebyshev_polynomial_w",
     "tanh",
     "upsample_nearest2d",

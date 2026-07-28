@@ -48,6 +48,7 @@ from .rand_like import rand_like
 from .randn import randn
 from .randn_like import randn_like
 from .randperm import randperm
+from .reflection_pad3d_backward import reflection_pad3d_backward
 from .repeat import repeat
 from .repeat_interleave import (
     repeat_interleave_self_int,
@@ -56,6 +57,7 @@ from .repeat_interleave import (
 )
 from .resolve_conj import resolve_conj
 from .round_ import round_
+from .softplus_backward import softplus_backward
 from .sort import sort, sort_stable
 from .tile import tile
 from .unique import _unique2
@@ -113,12 +115,14 @@ __all__ = [
     "randn",
     "randn_like",
     "randperm",
+    "reflection_pad3d_backward",
     "repeat",
     "repeat_interleave_self_int",
     "repeat_interleave_self_tensor",
     "repeat_interleave_tensor",
     "resolve_conj",
     "round_",
+    "softplus_backward",
     "sort",
     "sort_stable",
     "tile",
