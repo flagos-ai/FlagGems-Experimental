@@ -35,6 +35,7 @@ from .div import (
     trunc_divide,
     trunc_divide_,
 )
+from .broadcast_to import broadcast_to
 from .cudnn_convolution import cudnn_convolution
 from .exponential_ import exponential_
 from .fill import (
@@ -79,6 +80,7 @@ __all__ = [
     "any_dims",
     "div_mode",
     "div_mode_",
+    "broadcast_to",
     "cudnn_convolution",
     "exponential_",
     "fill_scalar",
