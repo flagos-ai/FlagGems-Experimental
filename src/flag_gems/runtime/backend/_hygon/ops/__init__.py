@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .any import any, any_dim, any_dims
 from .attention import (
     ScaleDotProductAttention,
@@ -72,6 +73,7 @@ __all__ = [
     "_unique2",
     "ScaleDotProductAttention",
     "SUPPORTED_FP8_DTYPE",
+    "adaptive_max_pool3d_backward",
     "any",
     "any_dim",
     "any_dims",
