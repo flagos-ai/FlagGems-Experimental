@@ -90,6 +90,7 @@ from .sort import sort
 from .stack import stack
 from .threshold import threshold, threshold_backward
 from .triu import triu
+from .uniform_ import uniform_
 from .unique import _unique2
 from .upsample_bicubic2d_aa import _upsample_bicubic2d_aa
 from .upsample_linear1d_backward import upsample_linear1d_backward
@@ -204,6 +205,7 @@ __all__ = [
     "threshold",
     "threshold_backward",
     "triu",
+    "uniform_",
     "upsample_linear1d_backward",
     "upsample_nearest2d",
     "var_mean",
