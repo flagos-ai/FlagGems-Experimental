@@ -48,6 +48,10 @@ from .randperm import randperm
 from .renorm_ import renorm_
 from .silu import silu, silu_, silu_backward
 from .sort import sort, sort_stable
+from .special_chebyshev_polynomial_w import (
+    special_chebyshev_polynomial_w,
+    special_chebyshev_polynomial_w_out,
+)
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
 
@@ -99,5 +103,7 @@ __all__ = [
     "silu_backward",
     "sort",
     "sort_stable",
+    "special_chebyshev_polynomial_w",
+    "special_chebyshev_polynomial_w_out",
     "upsample_nearest2d",
 ]
