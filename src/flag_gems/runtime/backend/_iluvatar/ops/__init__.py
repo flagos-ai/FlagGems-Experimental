@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .addmm import addmm, addmm_out
+from .addmm import addmm, addmm_, addmm_out
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .div import div_mode, div_mode_
@@ -39,6 +39,7 @@ __all__ = [
     "_conv_depthwise2d",
     "conv_transpose1d",
     "addmm",
+    "addmm_",
     "addmm_out",
     "div_mode",
     "div_mode_",
