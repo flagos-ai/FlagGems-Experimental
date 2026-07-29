@@ -53,6 +53,7 @@ from .index import index
 from .index_add import index_add, index_add_
 from .index_select import index_select
 from .isin import isin
+from .linalg_cholesky import linalg_cholesky
 from .linspace import linspace
 from .log_softmax import log_softmax, log_softmax_backward, log_softmax_out
 from .masked_fill import masked_fill, masked_fill_
@@ -102,6 +103,7 @@ from .zeros import zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "ScaleDotProductAttention",
     "_unique2",
     "_upsample_bicubic2d_aa",
     "addmm",
@@ -151,6 +153,7 @@ __all__ = [
     "index_add_",
     "index_select",
     "isin",
+    "linalg_cholesky",
     "linspace",
     "log_softmax",
     "log_softmax_backward",
@@ -185,13 +188,12 @@ __all__ = [
     "repeat_interleave_self_int",
     "resolve_neg",
     "rms_norm",
-    "scatter",
-    "scatter_",
-    "scatter_add_",
-    "ScaleDotProductAttention",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
+    "scatter",
+    "scatter_",
+    "scatter_add_",
     "select_backward",
     "select_scatter",
     "slice_scatter",
