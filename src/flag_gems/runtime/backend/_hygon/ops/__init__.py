@@ -46,6 +46,7 @@ from .pow import (
 )
 from .randperm import randperm
 from .renorm_ import renorm_
+from .rnn_relu import rnn_relu
 from .silu import silu, silu_, silu_backward
 from .sort import sort, sort_stable
 from .unique import _unique2
@@ -91,6 +92,7 @@ __all__ = [
     "pow_tensor_tensor_",
     "randperm",
     "renorm_",
+    "rnn_relu",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
