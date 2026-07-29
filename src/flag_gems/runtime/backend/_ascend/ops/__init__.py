@@ -61,6 +61,7 @@ from .masked_select import masked_select
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .max import max, max_dim
+from .max_pool3d_with_indices import max_pool3d_with_indices
 from .mean import mean, mean_dim
 from .min import min, min_dim
 from .mm import mm, mm_out
@@ -164,6 +165,7 @@ __all__ = [
     "matmul_int8",
     "max",
     "max_dim",
+    "max_pool3d_with_indices",
     "mean",
     "mean_dim",
     "min",
