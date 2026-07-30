@@ -1,0 +1,2233 @@
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[claude] model=deepseek-v4-pro[1m]  session=new  attempt=1/6
+[claude] workspace=/share-evpfs/tj/workspace/code-integration/FlagGems-Experimental/.worktrees/kernelgen-ascend-max_pool3d_with_indices  agent=kernel-pr-submitter
+[claude] prompt (6492 chars):
+<task>
+Operator: max_pool3d_with_indices
+Vendor (target chip): ascend
+Op type: pooling
+Geo-mean speedup (from upstream eval): 0.0169
+PR target: flagos-ai/FlagGems-Experimental (base branch: master)
+Draft PR: True
+Vendor ops directory: src/flag_gems/runtime/backend/_ascend/ops
+Kernel destination: src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py
+Registration file: src/flag_gems/runtime/backend/_ascend/ops/__init__.py
+Branch: kernelgen/ascend/max_pool3d_with_indices
+</task>
+
+            <kernel_code>
+            This is the vendor-specialized kernel to integrate (already verified for
+            correctness upstream). Adapt it to FlagGems vendor conventions as needed:
+            ```python
+            import math
+import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def max_pool3d_kernel(
+    x_ptr,
+    out_ptr,
+    indices_ptr,
+    N,
+    C,
+    D,
+    H,
+    W,
+    D_out,
+    H_out,
+    W_out,
+    kernel_size: tl.constexpr,
+    stride: tl.constexpr,
+    padding: tl.constexpr,
+    dilation: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    block_start = pid * BLOCK_SIZE
+    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+
+    total = N * C * D_out * H_out * W_out
+    mask = offsets < total
+
+    w_out = offsets % W_out
+    tmp1 = offsets // W_out
+    h_out = tmp1 % H_out
+    tmp2 = tmp1 // H_out
+    d_out = tmp2 % D_out
+    tmp3 = tmp2 // D_out
+    c = tmp3 % C
+    n = tmp3 // C
+
+    d_in_start = d_out * stride - padding
+    h_in_start = h_out * stride - padding
+    w_in_start = w_out * stride - padding
+
+    NEG_INF: tl.constexpr = -1.0e30
+    max_val = tl.full((BLOCK_SIZE,), NEG_INF, dtype=tl.float32)
+    max_idx = tl.full((BLOCK_SIZE,), -1, dtype=tl.int32)
+
+    D_spatial = D * H * W
+    HW = H * W
+
+    for kd in tl.static_range(kernel_size):
+        d_in = d_in_start + kd * dilation
+        d_valid = (d_in >= 0) & (d_in < D)
+        for kh in tl.static_range(kernel_size):
+            h_in = h_in_start + kh * dilation
+            dh_valid = d_valid & (h_in >= 0) & (h_in < H)
+            for kw in tl.static_range(kernel_size):
+                w_in = w_in_start + kw * dilation
+                valid = dh_valid & (w_in >= 0) & (w_in < W)
+
+                flat_in = (
+                    n * C * D_spatial
+                    + c * D_spatial
+                    + d_in * HW
+                    + h_in * W
+                    + w_in
+                )
+                spatial_idx = d_in * HW + h_in * W + w_in
+
+                val = tl.load(
+                    x_ptr + flat_in,
+                    mask=mask & valid,
+                    other=NEG_INF,
+                )
+
+                is_better = val > max_val
+                max_val = tl.where(is_better & valid, val, max_val)
+                max_idx = tl.where(
+                    is_better & valid, spatial_idx, max_idx
+                )
+
+    flat_out = (
+        n * C * D_out * H_out * W_out
+        + c * D_out * H_out * W_out
+        + d_out * H_out * W_out
+        + h_out * W_out
+        + w_out
+    )
+    tl.store(out_ptr + flat_out, max_val, mask=mask)
+    tl.store(indices_ptr + flat_out, max_idx, mask=mask)
+
+
+def run(x, kernel_size, stride, padding, dilation, ceil_mode):
+    N, C, D, H, W = x.shape
+
+    numerator_d = D + 2 * padding - dilation * (kernel_size - 1) - 1
+    numerator_h = H + 2 * padding - dilation * (kernel_size - 1) - 1
+    numerator_w = W + 2 * padding - dilation * (kernel_size - 1) - 1
+
+    if ceil_mode:
+        D_out = (numerator_d + stride - 1) // stride + 1
+        H_out = (numerator_h + stride - 1) // stride + 1
+        W_out = (numerator_w + stride - 1) // stride + 1
+    else:
+        D_out = numerator_d // stride + 1
+        H_out = numerator_h // stride + 1
+        W_out = numerator_w // stride + 1
+
+    total_outputs = N * C * D_out * H_out * W_out
+
+    BLOCK_SIZE = 256
+    grid = (triton.cdiv(total_outputs, BLOCK_SIZE),)
+
+    out = torch.empty(
+        (N, C, D_out, H_out, W_out), dtype=x.dtype, device=x.device
+    )
+    indices = torch.empty(
+        (N, C, D_out, H_out, W_out), dtype=torch.int32, device=x.device
+    )
+
+    max_pool3d_kernel[grid](
+        x,
+        out,
+        indices,
+        N,
+        C,
+        D,
+        H,
+        W,
+        D_out,
+        H_out,
+        W_out,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        BLOCK_SIZE=BLOCK_SIZE,
+    )
+
+    return (out, indices)
+
+            ```
+            </kernel_code>
+
+            <definition>
+            Name: flaggems_max_pool3d_with_indices
+            Type: pooling
+            Reference (generic implementation):
+            import torch
+
+def run(x, kernel_size, stride, padding, dilation, ceil_mode):
+    out, indices = torch.nn.functional.max_pool3d(x, kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation, ceil_mode=ceil_mode, return_indices=True)
+    return (out, indices)
+
+def valid(ref_outputs, sol_outputs, inputs, ctx):
+    out_ref = ref_outputs[0]
+    out_sol = sol_outputs[0]
+    indices_sol = sol_outputs[1]
+    x = inputs[0]
+    if not torch.allclose(out_ref, out_sol):
+        return {'passed': False, 'message': 'Output values mismatch', 'metrics': {}}
+    N, C, D, H, W = x.shape
+    spatial_size = D * H * W
+    x_flat_spatial = x.reshape(N, C, spatial_size)
+    b_idx = torch.arange(N, device=x.device).view(N, 1, 1, 1, 1)
+    c_idx = torch.arange(C, device=x.device).view(1, C, 1, 1, 1)
+    gathered = x_flat_spatial[b_idx, c_idx, indices_sol]
+    if not torch.allclose(gathered, out_sol):
+        return {'passed': False, 'message': 'Indices do not gather to correct output values', 'metrics': {}}
+    return {'passed': True, 'message': 'OK', 'metrics': {}}
+
+            </definition>
+
+--- FINAL REPORT CONTRACT ---
+You MUST output a single JSON object with these fields:
+  status: str — SUBMITTED / CHECKS_FAILED / FAILED [required]
+  pr_url: Optional — URL of the created PR [optional]
+  branch: str — branch that was pushed [optional]
+  files_changed: List [optional]
+  checks_passed: bool [optional]
+  tested_locally: bool — Whether local correctness test was attempted [optional]
+  test_skip_reason: str — device_mismatch / test_not_found / empty if tested [optional]
+  test_passed: Optional — None=not tested, True=passed, False=failed [optional]
+  summary: str — 1-3 sentence summary of what happened [required]
+Output ONLY that JSON object (a ```json fenced block is fine); no prose after it.
+────────────────────────────────────────────────────────────
+[claude] session=47500ebd-efe5-4aa4-8e28-af92db931268 tools=6 skills=58
+[claude] 💭 thinking...
+[claude] turn 1  in=5207 out=0 cache=0
+[claude] 💭 thinking done (1s, 342 chars)
+[claude] 💭 content:
+Let me break down the task:
+
+1. I need to integrate a vendor-specialized kernel for `max_pool3d_with_indices` for the `ascend` vendor into a FlagGems checkout
+2. Follow the steps: understand conventions, write the kernel, register it, run static checks, optionally test, then create a PR
+
+Let me start by understanding the vendor conventions.
+[claude] 💭 end
+[claude] 🔧 Bash: $ List existing ascend vendor ops
+[claude] tool input id=call_00_S1a5blBiAdh87sYwmWH35963:
+{
+  "command": "ls src/flag_gems/runtime/backend/_ascend/ops/ | head -20",
+  "description": "List existing ascend vendor ops"
+}
+[claude] 🔧 Read: src/flag_gems/runtime/backend/_ascend/ops/__init__.py
+[claude] tool input id=call_01_bT7y7VWZX80YJJeHBQZk1808:
+{
+  "file_path": "src/flag_gems/runtime/backend/_ascend/ops/__init__.py"
+}
+[claude] 📎 1	# Copyright 2026 FlagOS Contributors
+2	#
+3	# Licensed under the Apache License, Version 2.0 (the "License");
+4	# you may not use this file except in compliance with the License.
+5	# You may obtain a copy of the License at
+6	#
+7	#     http://www.apache.org/licenses/LICENSE-2.0
+8	#
+9	# Unless required by applicable law or agreed to in writing, software
+10	# distributed under the License is distributed on an "AS IS" BASIS,
+11	# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+12	# See the License for the specific language governing permissions and
+13	# limitations under the License.
+14
+15	from .addmm import addmm
+16	from .all import all, all_dim, all_dims
+17	from .amax import amax
+18	from .angle import angle
+19	from .any import any, any_dim, any_dims
+20	from .arange import arange, arange_start
+21	from .argmax import argmax
+22	from .argmin import argmin
+23	from .attention import (
+24	    ScaleDotProductAttention,
+25	    flash_attention_forward,
+26	    flash_attn_varlen_func,
+27	    scaled_dot_product_attention,
+28	    scaled_dot_product_attention_backward,
+29	    scaled_dot_product_attention_forward,
+30	)
+31	from .baddbmm import baddbmm
+32	from .bmm import bmm
+33	from .cat import cat, cat_out
+34	from .count_nonzero import count_nonzero
+35	from .cummax import cummax
+36	from .cummin import cummin
+37	from .cumsum import cumsum, normed_cumsum
+38	from .diag import diag
+39	from .diag_embed import diag_embed
+40	from .diagonal import diagonal_backward
+41	from .dot import dot
+42	from .embedding import embedding
+43	from .exponential_ import exponential_
+44	from .fill import fill_scalar, fill_scalar_, fill_tensor, fill_tensor_
+45	from .flip import flip
+46	from .full import full
+47	from .full_like import full_like
+48	from .gather import gather, gather_backward
+49	from .groupnorm import group_norm, group_norm_backward
+50	from .hadamard_transform import hadamard_transform
+51	from .hstack import hstack
+52	from .index import index
+53	from .index_add import index_add, index_add_
+54	from .index_select import index_select
+55	from .isin import isin
+56	from .linspace import linspace
+57	from .log_softmax import log_softmax, log_softmax_backward, log_softmax_out
+58	from .masked_fill import masked_fill, masked_fill_
+59	from .masked_scatter import masked_scatter, masked_scatter_
+60	from .masked_select import masked_select
+61	from .matmul_bf16 import matmul_bf16
+62	from .matmul_int8 import matmul_int8
+63	from .max import max, max_dim
+64	from .mean import mean, mean_dim
+65	from .min import min, min_dim
+66	from .mm import mm, mm_out
+67	from .multinomial import multinomial
+68	from .ones import ones
+69	from .ones_like import ones_like
+70	from .outer import outer
+71	from .polar import polar
+72	from .pow import (
+73	    pow_scalar,
+74	    pow_tensor_scalar,
+75	    pow_tensor_scalar_,
+76	    pow_tensor_tensor,
+77	    pow_tensor_tensor_,
+78	)
+79	from .randperm import randperm
+80	from .repeat_interleave import repeat_interleave_self_int
+81	from .resolve_neg import resolve_neg
+82	from .rms_norm import rms_norm
+83	from .scatter import scatter, scatter_
+84	from .scatter_add_ import scatter_add_
+85	from .select_backward import select_backward
+86	from .select_scatter import select_scatter
+87	from .slice_scatter import slice_scatter
+88	from .softmax import softmax, softmax_backward, softmax_backward_out, softmax_out
+89	from .sort import sort
+90	from .stack import stack
+91	from .threshold import threshold, threshold_backward
+92	from .triu import triu
+93	from .unique import _unique2
+94	from .upsample_bicubic2d_aa import _upsample_bicubic2d_aa
+95	from .upsample_linear1d_backward import upsample_linear1d_backward
+96	from .upsample_nearest2d import upsample_nearest2d
+97	from .var_mean import var_mean
+98	from .vector_norm import vector_norm
+99	from .vstack import vstack
+100	from .where import where_scalar_other, where_scalar_self, where_self, where_self_out
+101	from .zeros import zeros
+102	from .zeros_like import zeros_like
+103
+104	__all__ = [
+105	    "_unique2",
+106	    "_upsample_bicubic2d_aa",
+107	    "addmm",
+108	    "all",
+109	    "all_dim",
+110	    "all_dims",
+111	    "amax",
+112	    "angle",
+113	    "any",
+114	    "any_dim",
+115	    "any_dims",
+116	    "arange",
+117	    "arange_start",
+118	    "argmax",
+119	    "argmin",
+120	    "baddbmm",
+121	    "bmm",
+122	    "cat",
+123	    "cat_out",
+124	    "count_nonzero",
+125	    "cummax",
+126	    "cummin",
+127	    "cumsum",
+128	    "diag",
+129	    "diag_embed",
+130	    "diagonal_backward",
+131	    "dot",
+132	    "embedding",
+133	    "exponential_",
+134	    "fill_scalar",
+135	    "fill_scalar_",
+136	    "fill_tensor",
+137	    "fill_tensor_",
+138	    "flash_attention_forward",
+139	    "flash_attn_varlen_func",
+140	    "flip",
+141	    "full",
+142	    "full_like",
+143	    "gather",
+144	    "gather_backward",
+145	    "group_norm",
+146	    "group_norm_backward",
+147	    "hadamard_transform",
+148	    "hstack",
+149	    "index",
+150	    "index_add",
+151	    "index_add_",
+152	    "index_select",
+153	    "isin",
+154	    "linspace",
+155	    "log_softmax",
+156	    "log_softmax_backward",
+157	    "log_softmax_out",
+158	    "masked_fill",
+159	    "masked_fill_",
+160	    "masked_scatter",
+161	    "masked_scatter_",
+162	    "masked_select",
+163	    "matmul_bf16",
+164	    "matmul_int8",
+165	    "max",
+166	    "max_dim",
+167	    "mean",
+168	    "mean_dim",
+169	    "min",
+170	    "min_dim",
+171	    "mm",
+172	    "mm_out",
+173	    "multinomial",
+174	    "normed_cumsum",
+175	    "ones",
+176	    "ones_like",
+177	    "outer",
+178	    "polar",
+179	    "pow_scalar",
+180	    "pow_tensor_scalar",
+181	    "pow_tensor_scalar_",
+182	    "pow_tensor_tensor",
+183	    "pow_tensor_tensor_",
+184	    "randperm",
+185	    "repeat_interleave_self_int",
+186	    "resolve_neg",
+187	    "rms_norm",
+188	    "scatter",
+189	    "scatter_",
+190	    "scatter_add_",
+191	    "ScaleDotProductAttention",
+192	    "scaled_dot_product_attention",
+193	    "scaled_dot_product_attention_backward",
+194	    "scaled_dot_product_attention_forward",
+195	    "select_backward",
+196	    "select_scatter",
+197	    "slice_scatter",
+198	    "softmax",
+199	    "softmax_backward",
+200	    "softmax_backward_out",
+201	    "softmax_out",
+202	    "sort",
+203	    "stack",
+204	    "threshold",
+205	    "threshold_backward",
+206	    "triu",
+207	    "upsample_linear1d_backward",
+208	    "upsample_nearest2d",
+209	    "var_mean",
+210	    "vector_norm",
+211	    "vstack",
+212	    "where_scalar_other",
+213	    "where_scalar_self",
+214	    "where_self",
+215	    "where_self_out",
+216	    "zeros",
+217	    "zeros_like",
+218	]
+219
+[claude] tool result metadata: id=call_01_bT7y7VWZX80YJJeHBQZk1808 is_error=False
+[claude] 📎 __init__.py
+addmm.py
+all.py
+amax.py
+angle.py
+any.py
+arange.py
+argmax.py
+argmin.py
+attention.py
+baddbmm.py
+batch_norm.py
+bmm.py
+cat.py
+count_nonzero.py
+cummax.py
+cummin.py
+cumsum.py
+diag.py
+diag_embed.py
+[claude] tool result metadata: id=call_00_S1a5blBiAdh87sYwmWH35963 is_error=False
+[claude] 💭 thinking...
+[claude] turn 2  in=7786 out=0 cache=0
+[claude] 💭 thinking done (0s, 93 chars)
+[claude] 💭 content:
+Now let me look at an existing similar op (like max or argmax) to understand the conventions:
+[claude] 💭 end
+[claude] text: Let me look at a similar existing op to understand the conventions:
+[claude] 🔧 Read: src/flag_gems/runtime/backend/_ascend/ops/max.py
+[claude] tool input id=call_00_nRISuHamOW8IIKjVwd0C0513:
+{
+  "file_path": "src/flag_gems/runtime/backend/_ascend/ops/max.py"
+}
+[claude] 🔧 Read: src/flag_gems/runtime/backend/_ascend/ops/argmax.py
+[claude] tool input id=call_01_GllD5j14wsjQUt88lxCl2407:
+{
+  "file_path": "src/flag_gems/runtime/backend/_ascend/ops/argmax.py"
+}
+[claude] 📎 1	# Copyright 2026 FlagOS Contributors
+2	#
+3	# Licensed under the Apache License, Version 2.0 (the "License");
+4	# you may not use this file except in compliance with the License.
+5	# You may obtain a copy of the License at
+6	#
+7	#     http://www.apache.org/licenses/LICENSE-2.0
+8	#
+9	# Unless required by applicable law or agreed to in writing, software
+10	# distributed under the License is distributed on an "AS IS" BASIS,
+11	# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+12	# See the License for the specific language governing permissions and
+13	# limitations under the License.
+14
+15	import logging
+16	import math
+17
+18	import torch
+19	import triton
+20	import triton.language as tl
+21
+22	from flag_gems import runtime
+23	from flag_gems.runtime import torch_device_fn
+24	from flag_gems.utils import libentry
+25	from flag_gems.utils import triton_lang_extension as ext
+26	from flag_gems.utils.limits import get_dtype_min
+27
+28	logger = logging.getLogger(__name__)
+29
+30
+31	@libentry()
+32	@triton.jit
+33	def argmax_kernel_1(
+34	    inp,
+35	    mid_value,
+36	    mid_index,
+37	    M,
+38	    BLOCK_SIZE: tl.constexpr,
+39	):
+40	    pid = ext.program_id(0)
+41	    offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+42	    inp_ptrs = inp + offset
+43	    mask = offset < M
+44	    min_value = get_dtype_min(inp.type.element_ty)
+45	    inp_val = tl.load(inp_ptrs, mask=mask, other=min_value)
+46	    max_val, max_index = tl.max(inp_val, axis=0, return_indices=True)
+47	    max_index = max_index + pid * BLOCK_SIZE
+48	    mid_value_ptr = mid_value + pid
+49	    max_index_ptr = mid_index + pid
+50	    tl.store(mid_value_ptr, max_val)
+51	    tl.store(max_index_ptr, max_index)
+52
+53
+54	@libentry()
+55	@triton.jit
+56	def argmax_kernel_2(mid_value, mid_index, out, mid_size, BLOCK_MID: tl.constexpr):
+57	    offset = tl.arange(0, BLOCK_MID)
+58	    mid_ptrs = mid_value + offset
+59	    mask = offset < mid_size
+60	    min_value = get_dtype_min(mid_value.type.element_ty)
+61	    mid_val = tl.load(mid_ptrs, mask=mask, other=min_value)
+62	    index_val = tl.argmax(mid_val, axis=0)
+63	    mid_index_ptrs = mid_index + index_val
+64	    out_val = tl.load(mid_index_ptrs)
+65	    tl.store(out, out_val)
+66
+67
+68	@libentry()
+69	@triton.heuristics(runtime.get_heuristic_config("argmax"))
+70	@triton.jit
+71	def argmax_kernel(
+72	    inp,
+73	    out_index,
+74	    M,
+75	    N,
+76	    K,
+77	    BLOCK_M: tl.constexpr,
+78	    BLOCK_N: tl.constexpr,
+79	):
+80	    pid_m = ext.program_id(0)
+81	    pid_k = ext.program_id(1)
+82
+83	    m_offset = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+84
+85	    dtype = inp.type.element_ty
+86	    acc_type = tl.float32 if dtype is tl.bfloat16 else dtype
+87	    min_value = get_dtype_min(dtype)
+88	    max_values = tl.full([BLOCK_M], dtype=acc_type, value=min_value)
+89	    argmax_values = tl.full([BLOCK_M], dtype=tl.int64, value=0)
+90	    for start_n in range(0, N, BLOCK_N):
+91	        n_offset = start_n + tl.arange(0, BLOCK_N)
+92	        offset = m_offset[:, None] * N * K + n_offset[None, :] * K + pid_k
+93	        mask = m_offset[:, None] < M and n_offset[None, :] < N
+94	        inp_ptrs = inp + offset
+95	        inp_vals = tl.load(inp_ptrs, mask=mask, other=min_value)
+96	        local_max, local_argmax = tl.max(
+97	            inp_vals, 1, return_indices=True, return_indices_tie_break_left=True
+98	        )
+99	        update = local_max > max_values
+100	        max_values = tl.where(update, local_max, max_values)
+101	        argmax_values = tl.where(update, start_n + local_argmax, argmax_values)
+102
+103	    offset_index = m_offset * K + pid_k
+104	    out_index_ptrs = out_index + offset_index
+105	    mask1 = m_offset < M
+106	    tl.store(out_index_ptrs, argmax_values, mask=mask1)
+107
+108
+109	def argmax(inp, dim=None, keepdim=False, *, dtype=None):
+110	    logger.debug("GEMS_ASCEND ARGMAX")
+111	    if dim is None:
+112	        M = inp.numel()
+113	        if dtype is None:
+114	            dtype = inp.dtype
+115	        block_size = triton.next_power_of_2(math.ceil(math.sqrt(M)))
+116	        mid_size = triton.cdiv(M, block_size)
+117	        block_mid = triton.next_power_of_2(mid_size)
+118
+119	        mid_value = torch.empty((mid_size,), dtype=dtype, device=inp.device)
+120	        mid_index = torch.empty((mid_size,), dtype=torch.int64, device=inp.device)
+121	        out = torch.empty([], dtype=torch.int64, device=inp.device)
+122
+123	        with torch_device_fn.device(inp.device):
+124	            argmax_kernel_1[(mid_size, 1, 1)](
+125	                inp,
+126	                mid_value,
+127	                mid_index,
+128	                M,
+129	                block_size,
+130	            )
+131	            argmax_kernel_2[(1, 1, 1)](mid_value, mid_index, out, mid_size, block_mid)
+132	        return out
+133	    else:
+134	        assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
+135	        shape = inp.shape
+136	        dim = dim % inp.ndim
+137	        if inp.numel() == 0:
+138	            out_shape = list(shape)
+139	            if keepdim:
+140	                out_shape[dim] = 1
+141	            else:
+142	                del out_shape[dim]
+143	            return torch.zeros(out_shape, dtype=torch.int64, device=inp.device)
+144	        N = shape[dim]
+145	        M = math.prod(shape[:dim])
+146	        K = inp.numel() // M // N
+147
+148	        inp = inp.contiguous()
+149
+150	        shape_list = list(shape)
+151	        shape_list[dim] = 1
+152	        out_index = torch.empty(shape_list, dtype=torch.int64, device=inp.device)
+153	        if not keepdim:
+154	            out_index = torch.squeeze(out_index, dim)
+155	        grid = lambda meta: (
+156	            triton.cdiv(M, meta["BLOCK_M"]),
+157	            K,
+158	        )
+159	        with torch_device_fn.device(inp.device):
+160	            argmax_kernel[grid](
+161	                inp,
+162	                out_index,
+163	                M,
+164	                N,
+165	                K,
+166	            )
+167
+168	        return out_index
+169
+[claude] tool result metadata: id=call_01_GllD5j14wsjQUt88lxCl2407 is_error=False
+[claude] 📎 1	# Copyright 2026 FlagOS Contributors
+2	#
+3	# Licensed under the Apache License, Version 2.0 (the "License");
+4	# you may not use this file except in compliance with the License.
+5	# You may obtain a copy of the License at
+6	#
+7	#     http://www.apache.org/licenses/LICENSE-2.0
+8	#
+9	# Unless required by applicable law or agreed to in writing, software
+10	# distributed under the License is distributed on an "AS IS" BASIS,
+11	# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+12	# See the License for the specific language governing permissions and
+13	# limitations under the License.
+14
+15	import logging
+16	import math
+17	from collections import namedtuple
+18
+19	import torch
+20	import triton
+21	import triton.language as tl
+22
+23	from flag_gems import runtime
+24	from flag_gems.runtime import torch_device_fn
+25	from flag_gems.utils import libentry
+26	from flag_gems.utils import triton_lang_extension as ext
+27	from flag_gems.utils.limits import get_dtype_min
+28
+29	logger = logging.getLogger(__name__)
+30
+31
+32	@libentry()
+33	@triton.jit
+34	def max_kernel_1(
+35	    inp,
+36	    mid,
+37	    M,
+38	    BLOCK_SIZE: tl.constexpr,
+39	):
+40	    pid = ext.program_id(0)
+41	    offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+42	    inp_ptrs = inp + offset
+43	    mask = offset < M
+44	    min_value = get_dtype_min(inp.type.element_ty)
+45	    inp_val = tl.load(inp_ptrs, mask=mask, other=min_value)
+46	    max_val = tl.max(inp_val)
+47	    mid_ptr = mid + pid
+48	    tl.store(mid_ptr, max_val)
+49
+50
+51	@libentry()
+52	@triton.jit
+53	def max_kernel_2(mid, out, mid_size, BLOCK_MID: tl.constexpr):
+54	    offset = tl.arange(0, BLOCK_MID)
+55	    mid_ptrs = mid + offset
+56	    mask = offset < mid_size
+57	    min_value = get_dtype_min(mid.type.element_ty)
+58	    mid_val = tl.load(mid_ptrs, mask=mask, other=min_value)
+59	    max_val = tl.max(mid_val)
+60	    tl.store(out, max_val)
+61
+62
+63	def heur_block_n(args):
+64	    return triton.next_power_of_2(args["N"])
+65
+66
+67	@libentry()
+68	@triton.autotune(
+69	    configs=runtime.get_tuned_config("max"),
+70	    key=[
+71	        "M",
+72	        "N",
+73	    ],
+74	)
+75	@triton.jit
+76	def max_kernel(
+77	    inp,
+78	    out_value,
+79	    out_index,
+80	    M,
+81	    N,
+82	    K,
+83	    BLOCK_M: tl.constexpr,
+84	    BLOCK_N: tl.constexpr,
+85	):
+86	    # set offset
+87	    pid_m = ext.program_id(0)
+88	    pid_k = ext.program_id(1)
+89	    m_offset = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+90
+91	    dtype = inp.type.element_ty
+92	    acc_type = tl.float32 if dtype is tl.bfloat16 else dtype
+93	    min_value = get_dtype_min(dtype)
+94	    result_value = tl.full([BLOCK_M], value=min_value, dtype=acc_type)
+95	    result_index = tl.zeros([BLOCK_M], dtype=tl.int64)
+96	    for i in range(0, N, BLOCK_N):
+97	        n_offset = i + tl.arange(0, BLOCK_N)
+98	        offset = m_offset[:, None] * N * K + n_offset[None, :] * K + pid_k
+99	        # set mask
+100	        mask = m_offset[:, None] < M and n_offset[None, :] < N
+101	        inp_ptrs = inp + offset
+102	        inp_vals = tl.load(inp_ptrs, mask=mask, other=min_value)
+103	        if dtype is tl.int64:
+104	            inp_vals = tl.where(mask, inp_vals, min_value)
+105	        max_value, max_index = tl.max(inp_vals, axis=1, return_indices=True)
+106	        update_mask = max_value > result_value
+107	        result_value = tl.where(update_mask, max_value, result_value)
+108	        result_index = tl.where(update_mask, i + max_index, result_index)
+109	    mask1 = m_offset < M
+110	    offset_index = m_offset * K + pid_k
+111	    out_value_ptrs = out_value + offset_index
+112	    out_index_ptrs = out_index + offset_index
+113
+114	    tl.store(out_value_ptrs, result_value, mask=mask1)
+115	    tl.store(out_index_ptrs, result_index, mask=mask1)
+116
+117
+118	def max(inp):
+119	    logger.debug("GEMS_ASCEND MAX")
+120	    inp = inp.contiguous()
+121	    M = inp.numel()
+122	    block_size = triton.next_power_of_2(math.ceil(math.sqrt(M)))
+123	    mid_size = triton.cdiv(M, block_size)
+124	    block_mid = triton.next_power_of_2(mid_size)
+125
+126	    dtype = inp.dtype
+127	    mid = torch.empty((mid_size,), dtype=dtype, device=inp.device)
+128	    out = torch.empty([], dtype=dtype, device=inp.device)
+129
+130	    with torch_device_fn.device(inp.device):
+131	        max_kernel_1[(mid_size, 1, 1)](inp, mid, M, block_size)
+132	        max_kernel_2[(1, 1, 1)](mid, out, mid_size, block_mid)
+133	    return out
+134
+135
+136	def max_dim(inp, dim=None, keepdim=False):
+137	    logger.debug("GEMS_ASCEND MAX")
+138	    assert dim >= -inp.ndim and dim < inp.ndim, "Invalid dim"
+139	    shape = inp.shape
+140	    dim = dim % inp.ndim
+141	    N = shape[dim]
+142	    M = math.prod(shape[:dim])
+143	    K = inp.numel() // M // N
+144
+145	    inp = inp.contiguous()
+146
+147	    shape_list = list(shape)
+148	    shape_list[dim] = 1
+149	    out_value = torch.empty(shape_list, dtype=inp.dtype, device=inp.device)
+150	    out_index = torch.empty(shape_list, dtype=torch.int64, device=inp.device)
+151
+152	    if not keepdim:
+153	        out_value = torch.squeeze(out_value, dim)
+154	        out_index = torch.squeeze(out_index, dim)
+155
+156	    def grid(meta):
+157	        axis0 = triton.cdiv(M, meta["BLOCK_M"])
+158	        axis1 = K
+159	        while axis0 * axis1 >= 65536:
+160	            axis0 = axis0 // 2
+161	        return (
+162	            axis0,
+163	            axis1,
+164	        )
+165
+166	    with torch_device_fn.device(inp.device):
+167	        max_kernel[grid](inp, out_value, out_index, M, N, K)
+168	    Max_out = namedtuple("max", ["values", "indices"])
+169	    out = Max_out(values=out_value, indices=out_index)
+170	    return out
+171
+[claude] tool result metadata: id=call_00_nRISuHamOW8IIKjVwd0C0513 is_error=False
+[claude] 💭 thinking...
+[claude] turn 3  in=12797 out=0 cache=0
+[claude] 💭 thinking done (0s, 152 chars)
+[claude] 💭 content:
+Now I understand the conventions. Let me also check how the generic `max_pool3d_with_indices` op is structured to understand the function name expected:
+[claude] 💭 end
+[claude] 🔧 Bash: $ Find the generic max_pool3d op
+[claude] tool input id=call_00_aRJwAFSh6crje16NNW5a5365:
+{
+  "command": "find src/flag_gems/ops -name \"*max_pool*\" -o -name \"*pool_3d*\" 2>/dev/null",
+  "description": "Find the generic max_pool3d op"
+}
+[claude] 📎 src/flag_gems/ops/fractional_max_pool2d.py
+src/flag_gems/ops/max_pool2d_with_indices.py
+src/flag_gems/ops/adaptive_max_pool3d_backward.py
+src/flag_gems/ops/max_pool3d_with_indices.py
+[claude] tool result metadata: id=call_00_aRJwAFSh6crje16NNW5a5365 is_error=False
+[claude] 💭 thinking...
+[claude] turn 4  in=12925 out=0 cache=0
+[claude] 💭 thinking done (0s, 91 chars)
+[claude] 💭 content:
+Let me look at the generic max_pool3d_with_indices op to understand its function signature:
+[claude] 💭 end
+[claude] 🔧 Read: src/flag_gems/ops/max_pool3d_with_indices.py
+[claude] tool input id=call_00_FTJWy7yopUuJ6YRZcQQn5979:
+{
+  "file_path": "src/flag_gems/ops/max_pool3d_with_indices.py"
+}
+[claude] 🔧 Read: src/flag_gems/ops/max_pool2d_with_indices.py
+[claude] tool input id=call_01_JYokR5rsrM5otvsYctsR3923:
+{
+  "file_path": "src/flag_gems/ops/max_pool2d_with_indices.py"
+}
+[claude] 📎 1	# Copyright 2026 FlagOS Contributors
+2	#
+3	# Licensed under the Apache License, Version 2.0 (the "License");
+4	# you may not use this file except in compliance with the License.
+5	# You may obtain a copy of the License at
+6	#
+7	#     http://www.apache.org/licenses/LICENSE-2.0
+8	#
+9	# Unless required by applicable law or agreed to in writing, software
+10	# distributed under the License is distributed on an "AS IS" BASIS,
+11	# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+12	# See the License for the specific language governing permissions and
+13	# limitations under the License.
+14
+15	import logging
+16
+17	import torch
+18	import triton
+19	import triton.language as tl
+20
+21	from flag_gems.utils import libentry
+22	from flag_gems.utils.limits import get_dtype_min
+23
+24	logger = logging.getLogger(__name__)
+25
+26
+27	def pool3d_output_size(
+28	    in_size: int,
+29	    kernel_size: int,
+30	    stride: int,
+31	    padding: int,
+32	    dilation: int,
+33	    ceil_mode: bool = False,
+34	) -> int:
+35	    """Compute one spatial dimension of the 3-D max-pool output."""
+36	    effective_kernel_size = (kernel_size - 1) * dilation + 1
+37	    numerator = in_size + 2 * padding - effective_kernel_size
+38	    if ceil_mode:
+39	        output_size = (numerator + stride - 1) // stride + 1
+40	        # PyTorch-compatible adjustment for ceil_mode
+41	        if (output_size - 1) * stride >= in_size + padding:
+42	            output_size -= 1
+43	    else:
+44	        output_size = numerator // stride + 1
+45	    return output_size
+46
+47
+48	@libentry()
+49	@triton.autotune(
+50	    configs=[
+51	        triton.Config({"BLOCK_H": 16, "BLOCK_W": 16}, num_stages=4, num_warps=4),
+52	        triton.Config({"BLOCK_H": 32, "BLOCK_W": 16}, num_stages=3, num_warps=4),
+53	        triton.Config({"BLOCK_H": 16, "BLOCK_W": 32}, num_stages=3, num_warps=4),
+54	        triton.Config({"BLOCK_H": 32, "BLOCK_W": 32}, num_stages=2, num_warps=8),
+55	        triton.Config({"BLOCK_H": 8, "BLOCK_W": 8}, num_stages=5, num_warps=2),
+56	        triton.Config({"BLOCK_H": 16, "BLOCK_W": 8}, num_stages=5, num_warps=2),
+57	        triton.Config({"BLOCK_H": 8, "BLOCK_W": 16}, num_stages=5, num_warps=2),
+58	        triton.Config({"BLOCK_H": 64, "BLOCK_W": 16}, num_stages=2, num_warps=8),
+59	        triton.Config({"BLOCK_H": 16, "BLOCK_W": 64}, num_stages=2, num_warps=8),
+60	        triton.Config({"BLOCK_H": 32, "BLOCK_W": 64}, num_stages=3, num_warps=8),
+61	        triton.Config({"BLOCK_H": 64, "BLOCK_W": 32}, num_stages=3, num_warps=8),
+62	        triton.Config({"BLOCK_H": 64, "BLOCK_W": 64}, num_stages=2, num_warps=8),
+63	    ],
+64	    key=[
+65	        "out_d",
+66	        "out_h",
+67	        "out_w",
+68	        "kernel_d",
+69	        "kernel_h",
+70	        "kernel_w",
+71	        "stride_d",
+72	        "stride_h",
+73	        "stride_w",
+74	    ],
+75	)
+76	@triton.jit
+77	def max_pool3d_forward_kernel(
+78	    input_ptr,
+79	    output_ptr,
+80	    indices_ptr,
+81	    # Input tensor strides
+82	    in_stride_n,
+83	    in_stride_c,
+84	    in_stride_d,
+85	    in_stride_h,
+86	    in_stride_w,
+87	    # Input/Output shapes
+88	    in_c,
+89	    in_d,
+90	    in_h,
+91	    in_w,
+92	    out_d,
+93	    out_h,
+94	    out_w,
+95	    # Pooling parameters
+96	    kernel_d: tl.constexpr,
+97	    kernel_h: tl.constexpr,
+98	    kernel_w: tl.constexpr,
+99	    stride_d: tl.constexpr,
+100	    stride_h: tl.constexpr,
+101	    stride_w: tl.constexpr,
+102	    padding_d: tl.constexpr,
+103	    padding_h: tl.constexpr,
+104	    padding_w: tl.constexpr,
+105	    dilation_d: tl.constexpr,
+106	    dilation_h: tl.constexpr,
+107	    dilation_w: tl.constexpr,
+108	    # Meta-parameters for tiling
+109	    BLOCK_H: tl.constexpr,
+110	    BLOCK_W: tl.constexpr,
+111	):
+112	    """Forward kernel for 3-D max pooling.
+113
+114	    Grid: (N * C, num_d_blocks * num_h_blocks * num_w_blocks)
+115	    where num_h_blocks = cdiv(out_h, BLOCK_H),
+116	          num_w_blocks = cdiv(out_w, BLOCK_W).
+117	    The depth dimension is iterated inside the kernel via a loop
+118	    over num_d_blocks output depth positions.
+119	    """
+120	    pid_nc = tl.program_id(0)
+121	    pid_dhw = tl.program_id(1)
+122
+123	    num_h_blocks = tl.cdiv(out_h, BLOCK_H)
+124	    num_w_blocks = tl.cdiv(out_w, BLOCK_W)
+125
+126	    d_block_idx = pid_dhw // (num_h_blocks * num_w_blocks)
+127	    hw_remainder = pid_dhw % (num_h_blocks * num_w_blocks)
+128	    h_block_idx = hw_remainder // num_w_blocks
+129	    w_block_idx = hw_remainder % num_w_blocks
+130
+131	    n_idx = pid_nc // in_c
+132	    c_idx = pid_nc % in_c
+133
+134	    d_out = d_block_idx
+135
+136	    h_out_offsets = h_block_idx * BLOCK_H + tl.arange(0, BLOCK_H)
+137	    w_out_offsets = w_block_idx * BLOCK_W + tl.arange(0, BLOCK_W)
+138
+139	    dtype = input_ptr.type.element_ty
+140	    min_val = get_dtype_min(dtype)
+141	    max_val_acc = tl.full((BLOCK_H, BLOCK_W), min_val, dtype=dtype)
+142	    max_idx_acc = tl.full((BLOCK_H, BLOCK_W), -1, dtype=tl.int64)
+143
+144	    input_base_ptr = input_ptr + n_idx * in_stride_n + c_idx * in_stride_c
+145
+146	    for kd in tl.static_range(0, kernel_d):
+147	        d_in = d_out * stride_d - padding_d + kd * dilation_d
+148	        d_valid = (d_in >= 0) & (d_in < in_d)
+149	        for kh in tl.static_range(0, kernel_h):
+150	            for kw in tl.static_range(0, kernel_w):
+151	                h_in = h_out_offsets[:, None] * stride_h - padding_h + kh * dilation_h
+152	                w_in = w_out_offsets[None, :] * stride_w - padding_w + kw * dilation_w
+153	                in_mask = (
+154	                    d_valid & (h_in >= 0) & (h_in < in_h) & (w_in >= 0) & (w_in < in_w)
+155	                )
+156	                input_offset = (
+157	                    d_in * in_stride_d + h_in * in_stride_h + w_in * in_stride_w
+158	                )
+159	                current_val = tl.load(
+160	                    input_base_ptr + input_offset, mask=in_mask, other=min_val
+161	                )
+162	                # Flat index in (D, H, W) space
+163	                current_idx = d_in * in_h * in_w + h_in * in_w + w_in
+164
+165	                is_new_max = current_val > max_val_acc
+166	                max_val_acc = tl.where(is_new_max, current_val, max_val_acc)
+167	                max_idx_acc = tl.where(is_new_max & in_mask, current_idx, max_idx_acc)
+168
+169	    out_spatial = out_h * out_w
+170	    out_base_offset = pid_nc * out_d * out_spatial + d_out * out_spatial
+171	    out_base_ptr = output_ptr + out_base_offset
+172	    indices_base_ptr = indices_ptr + out_base_offset
+173	    out_h_offsets = h_block_idx * BLOCK_H + tl.arange(0, BLOCK_H)
+174	    out_w_offsets = w_block_idx * BLOCK_W + tl.arange(0, BLOCK_W)
+175	    output_block_ptr = (
+176	        out_base_ptr + out_h_offsets[:, None] * out_w + out_w_offsets[None, :]
+177	    )
+178	    indices_block_ptr = (
+179	        indices_base_ptr + out_h_offsets[:, None] * out_w + out_w_offsets[None, :]
+180	    )
+181
+182	    out_mask = (out_h_offsets[:, None] < out_h) & (out_w_offsets[None, :] < out_w)
+183	    tl.store(output_block_ptr, max_val_acc, mask=out_mask)
+184	    tl.store(indices_block_ptr, max_idx_acc, mask=out_mask)
+185
+186
+187	@libentry()
+188	@triton.autotune(
+189	    configs=[
+190	        triton.Config({"BLOCK_IN_H": 16, "BLOCK_IN_W": 16}, num_warps=4),
+191	        triton.Config({"BLOCK_IN_H": 32, "BLOCK_IN_W": 8}, num_warps=4),
+192	        triton.Config({"BLOCK_IN_H": 8, "BLOCK_IN_W": 32}, num_warps=4),
+193	        triton.Config({"BLOCK_IN_H": 32, "BLOCK_IN_W": 32}, num_warps=8),
+194	        triton.Config({"BLOCK_IN_H": 16, "BLOCK_IN_W": 64}, num_warps=8),
+195	        triton.Config({"BLOCK_IN_H": 64, "BLOCK_IN_W": 16}, num_warps=8),
+196	    ],
+197	    key=[
+198	        "in_d",
+199	        "in_h",
+200	        "in_w",
+201	        "kernel_d",
+202	        "kernel_h",
+203	        "kernel_w",
+204	        "stride_d",
+205	        "stride_h",
+206	        "stride_w",
+207	    ],
+208	)
+209	@triton.jit
+210	def max_pool3d_backward_kernel(
+211	    grad_output_ptr,
+212	    indices_ptr,
+213	    grad_input_ptr,
+214	    # Shape info
+215	    in_d,
+216	    in_h,
+217	    in_w,
+218	    out_d,
+219	    out_h,
+220	    out_w,
+221	    # Strides for grad_output/indices (contiguous layout: NC, D, H, W)
+222	    out_stride_nc,
+223	    out_stride_d,
+224	    out_stride_h,
+225	    out_stride_w,
+226	    # Pooling parameters
+227	    kernel_d: tl.constexpr,
+228	    kernel_h: tl.constexpr,
+229	    kernel_w: tl.constexpr,
+230	    stride_d: tl.constexpr,
+231	    stride_h: tl.constexpr,
+232	    stride_w: tl.constexpr,
+233	    padding_d: tl.constexpr,
+234	    padding_h: tl.constexpr,
+235	    padding_w: tl.constexpr,
+236	    dilation_d: tl.constexpr,
+237	    dilation_h: tl.constexpr,
+238	    dilation_w: tl.constexpr,
+239	    # Tiling parameters
+240	    BLOCK_IN_H: tl.constexpr,
+241	    BLOCK_IN_W: tl.constexpr,
+242	):
+243	    """Backward kernel for 3-D max pooling.
+244
+245	    Grid: (N * C, num_d_in * num_h_blocks * num_w_blocks)
+246	    For each input (d, h, w) position, iterate over all kernel
+247	    offsets to find which output positions could have selected it,
+248	    then accumulate the gradient.
+249	    """
+250	    nc_idx = tl.program_id(0)
+251	    pid_dhw = tl.program_id(1)
+252
+253	    num_h_blocks = tl.cdiv(in_h, BLOCK_IN_H)
+254	    num_w_blocks = tl.cdiv(in_w, BLOCK_IN_W)
+255
+256	    d_in_idx = pid_dhw // (num_h_blocks * num_w_blocks)
+257	    hw_remainder = pid_dhw % (num_h_blocks * num_w_blocks)
+258	    h_block_idx = hw_remainder // num_w_blocks
+259	    w_block_idx = hw_remainder % num_w_blocks
+260
+261	    h_in_offsets = h_block_idx * BLOCK_IN_H + tl.arange(0, BLOCK_IN_H)
+262	    w_in_offsets = w_block_idx * BLOCK_IN_W + tl.arange(0, BLOCK_IN_W)
+263
+264	    # Flat index of current input position in (D, H, W) space
+265	    current_input_flat_idx = (
+266	        d_in_idx * in_h * in_w + h_in_offsets[:, None] * in_w + w_in_offsets[None, :]
+267	    )
+268	    grad_acc = tl.zeros((BLOCK_IN_H, BLOCK_IN_W), dtype=tl.float32)
+269
+270	    indices_base_ptr = indices_ptr + nc_idx * out_stride_nc
+271	    grad_output_base_ptr = grad_output_ptr + nc_idx * out_stride_nc
+272
+273	    for kd in tl.static_range(0, kernel_d):
+274	        numerator_d = d_in_idx + padding_d - kd * dilation_d
+275	        valid_d = numerator_d % stride_d == 0
+276	        d_out = numerator_d // stride_d
+277	        d_bounds = (d_out >= 0) & (d_out < out_d)
+278	        d_valid = valid_d & d_bounds
+279
+280	        for kh in tl.static_range(0, kernel_h):
+281	            for kw in tl.static_range(0, kernel_w):
+282	                numerator_h = h_in_offsets[:, None] + padding_h - kh * dilation_h
+283	                numerator_w = w_in_offsets[None, :] + padding_w - kw * dilation_w
+284
+285	                valid_map_mask = (
+286	                    d_valid
+287	                    & (numerator_h % stride_h == 0)
+288	                    & (numerator_w % stride_w == 0)
+289	                )
+290	                h_out = numerator_h // stride_h
+291	                w_out = numerator_w // stride_w
+292	                out_bounds_mask = (
+293	                    (h_out >= 0) & (h_out < out_h) & (w_out >= 0) & (w_out < out_w)
+294	                )
+295	                load_mask = valid_map_mask & out_bounds_mask
+296
+297	                safe_h_out = tl.where(load_mask, h_out, 0)
+298	                safe_w_out = tl.where(load_mask, w_out, 0)
+299	                safe_d_out = tl.where(load_mask, d_out, 0)
+300	                out_offsets = (
+301	                    safe_d_out * out_stride_d + safe_h_out * out_stride_h + safe_w_out
+302	                )
+303
+304	                indices_block = tl.load(
+305	                    indices_base_ptr + out_offsets, mask=load_mask, other=-1
+306	                )
+307	                match_mask = indices_block == current_input_flat_idx
+308
+309	                grad_block = tl.load(
+310	                    grad_output_base_ptr + out_offsets,
+311	                    mask=match_mask,
+312	                    other=0.0,
+313	                )
+314	                grad_acc += grad_block
+315
+316	    in_spatial = in_h * in_w
+317	    grad_input_base_ptr = grad_input_ptr + nc_idx * in_d * in_spatial
+318	    grad_input_offsets = (
+319	        d_in_idx * in_spatial + h_in_offsets[:, None] * in_w + w_in_offsets[None, :]
+320	    )
+321	    store_mask = (h_in_offsets[:, None] < in_h) & (w_in_offsets[None, :] < in_w)
+322	    tl.store(grad_input_base_ptr + grad_input_offsets, grad_acc, mask=store_mask)
+323
+324
+325	def _parse_pool3d_params(kernel_size, stride, padding, dilation):
+326	    """Parse and validate 3-D pooling parameters.
+327
+328	    Each parameter can be an int (applied to all 3 spatial dims) or a
+329	    3-element tuple/list (D, H, W).
+330	    """
+331
+332	    def _parse_param(param, name, default=None):
+333	        if param is None:
+334	            return default
+335	        if isinstance(param, int):
+336	            return param, param, param
+337	        if isinstance(param, (list, tuple)) and len(param) == 3:
+338	            return tuple(param)
+339	        raise ValueError(f"Invalid {name}: {param}")
+340
+341	    kd, kh, kw = _parse_param(kernel_size, "kernel_size")
+342	    sd, sh, sw = _parse_param(stride, "stride", default=(kd, kh, kw))
+343	    pd, ph, pw = _parse_param(padding, "padding", default=(0, 0, 0))
+344	    dd, dh, dw = _parse_param(dilation, "dilation", default=(1, 1, 1))
+345
+346	    if sd <= 0 or sh <= 0 or sw <= 0:
+347	        raise ValueError(f"stride must be positive, but got stride=({sd}, {sh}, {sw})")
+348	    if pd < 0 or ph < 0 or pw < 0:
+349	        raise ValueError(
+350	            f"padding must be non-negative, but got padding=({pd}, {ph}, {pw})"
+351	        )
+352	    if dd <= 0 or dh <= 0 or dw <= 0:
+353	        raise ValueError(
+354	            f"dilation must be positive, but got dilation=({dd}, {dh}, {dw})"
+355	        )
+356
+357	    return kd, kh, kw, sd, sh, sw, pd, ph, pw, dd, dh, dw
+358
+359
+360	def max_pool3d_with_indices(
+361	    input: torch.Tensor,
+362	    kernel_size,
+363	    stride=None,
+364	    padding=0,
+365	    dilation=1,
+366	    ceil_mode=False,
+367	):
+368	    """Compute 3-D max pooling, returning (output, indices).
+369
+370	    Indices are flat offsets into the (D, H, W) spatial volume of the input.
+371	    """
+372	    logger.debug("GEMS MAX_POOL3D_WITH_INDICES")
+373	    input = input.contiguous()
+374
+375	    params = _parse_pool3d_params(kernel_size, stride, padding, dilation)
+376	    kd, kh, kw, sd, sh, sw, pd, ph, pw, dd, dh, dw = params
+377
+378	    in_n, in_c, in_d, in_h, in_w = input.shape
+379	    out_d = pool3d_output_size(in_d, kd, sd, pd, dd, ceil_mode)
+380	    out_h = pool3d_output_size(in_h, kh, sh, ph, dh, ceil_mode)
+381	    out_w = pool3d_output_size(in_w, kw, sw, pw, dw, ceil_mode)
+382
+383	    output = torch.empty(
+384	        (in_n, in_c, out_d, out_h, out_w), device=input.device, dtype=input.dtype
+385	    )
+386	    indices = torch.empty(
+387	        (in_n, in_c, out_d, out_h, out_w), device=input.device, dtype=torch.int64
+388	    )
+389
+390	    if output.numel() == 0:
+391	        return output, indices
+392
+393	    grid = lambda meta: (
+394	        in_n * in_c,
+395	        out_d
+396	        * triton.cdiv(out_h, meta["BLOCK_H"])
+397	        * triton.cdiv(out_w, meta["BLOCK_W"]),
+398	    )
+399
+400	    max_pool3d_forward_kernel[grid](
+401	        input,
+402	        output,
+403	        indices,
+404	        input.stride(0),
+405	        input.stride(1),
+406	        input.stride(2),
+407	        input.stride(3),
+408	        input.stride(4),
+409	        in_c,
+410	        in_d,
+411	        in_h,
+412	        in_w,
+413	        out_d,
+414	        out_h,
+415	        out_w,
+416	        kd,
+417	        kh,
+418	        kw,
+419	        sd,
+420	        sh,
+421	        sw,
+422	        pd,
+423	        ph,
+424	        pw,
+425	        dd,
+426	        dh,
+427	        dw,
+428	    )
+429
+430	    return output, indices
+431
+432
+433	def max_pool3d_backward(
+434	    grad_output: torch.Tensor,
+435	    input: torch.Tensor,
+436	    indices: torch.Tensor,
+437	    kernel_size,
+438	    stride,
+439	    padding,
+440	    dilation,
+441	    ceil_mode,
+442	):
+443	    """Backward pass for 3-D max pooling."""
+444	    logger.debug("GEMS MAX_POOL3D BACKWARD")
+445	    grad_output = grad_output.contiguous()
+446	    indices = indices.contiguous()
+447
+448	    params = _parse_pool3d_params(kernel_size, stride, padding, dilation)
+449	    kd, kh, kw, sd, sh, sw, pd, ph, pw, dd, dh, dw = params
+450
+451	    in_n, in_c, in_d, in_h, in_w = input.shape
+452	    out_d, out_h, out_w = (
+453	        grad_output.shape[2],
+454	        grad_output.shape[3],
+455	        grad_output.shape[4],
+456	    )
+457
+458	    grad_input = torch.zeros_like(input, dtype=torch.float32)
+459
+460	    if grad_input.numel() == 0:
+461	        return grad_input.to(grad_output.dtype)
+462
+463	    out_spatial = out_h * out_w
+464	    out_stride_nc = out_d * out_spatial
+465	    out_stride_d = out_spatial
+466	    out_stride_h = out_w
+467	    out_stride_w = 1
+468
+469	    grid = lambda meta: (
+470	        in_n * in_c,
+471	        in_d
+472	        * triton.cdiv(in_h, meta["BLOCK_IN_H"])
+473	        * triton.cdiv(in_w, meta["BLOCK_IN_W"]),
+474	    )
+475
+476	    max_pool3d_backward_kernel[grid](
+477	        grad_output,
+478	        indices,
+479	        grad_input,
+480	        in_d,
+481	        in_h,
+482	        in_w,
+483	        out_d,
+484	        out_h,
+485	        out_w,
+486	        out_stride_nc,
+487	        out_stride_d,
+488	        out_stride_h,
+489	        out_stride_w,
+490	        kd,
+491	        kh,
+492	        kw,
+493	        sd,
+494	        sh,
+495	        sw,
+496	        pd,
+497	        ph,
+498	        pw,
+499	        dd,
+500	        dh,
+501	        dw,
+502	    )
+503
+504	    return grad_input.to(grad_output.dtype)
+505
+[claude] tool result metadata: id=call_00_FTJWy7yopUuJ6YRZcQQn5979 is_error=False
+[claude] 📎 1	# Copyright 2026 FlagOS Contributors
+2	#
+3	# Licensed under the Apache License, Version 2.0 (the "License");
+4	# you may not use this file except in compliance with the License.
+5	# You may obtain a copy of the License at
+6	#
+7	#     http://www.apache.org/licenses/LICENSE-2.0
+8	#
+9	# Unless required by applicable law or agreed to in writing, software
+10	# distributed under the License is distributed on an "AS IS" BASIS,
+11	# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+12	# See the License for the specific language governing permissions and
+13	# limitations under the License.
+14
+15	import logging
+16
+17	import torch
+18	import triton
+19	import triton.language as tl
+20
+21	from flag_gems.utils import libentry
+22	from flag_gems.utils.limits import get_dtype_min
+23
+24	logger = logging.getLogger(__name__)
+25
+26
+27	def max_pool2d_output_size(
+28	    in_size: int,
+29	    kernel_size: int,
+30	    stride: int,
+31	    padding: int,
+32	    dilation: int,
+33	    ceil_mode: bool = False,
+34	) -> int:
+35	    effective_kernel_size = (kernel_size - 1) * dilation + 1
+36	    numerator = in_size + 2 * padding - effective_kernel_size
+37	    if ceil_mode:
+38	        output_size = (numerator + stride - 1) // stride + 1
+39	        # PyTorch-compatible adjustment for ceil_mode
+40	        if (output_size - 1) * stride >= in_size + padding:
+41	            output_size -= 1
+42	    else:
+43	        output_size = numerator // stride + 1
+44
+45	    return output_size
+46
+47
+48	@libentry()
+49	@triton.autotune(
+50	    configs=[
+51	        triton.Config({"BLOCK_H": 16, "BLOCK_W": 16}, num_stages=4, num_warps=4),
+52	        triton.Config({"BLOCK_H": 32, "BLOCK_W": 16}, num_stages=3, num_warps=4),
+53	        triton.Config({"BLOCK_H": 16, "BLOCK_W": 32}, num_stages=3, num_warps=4),
+54	        triton.Config({"BLOCK_H": 32, "BLOCK_W": 32}, num_stages=2, num_warps=8),
+55	        triton.Config({"BLOCK_H": 8, "BLOCK_W": 8}, num_stages=5, num_warps=2),
+56	        triton.Config({"BLOCK_H": 16, "BLOCK_W": 8}, num_stages=5, num_warps=2),
+57	        triton.Config({"BLOCK_H": 8, "BLOCK_W": 16}, num_stages=5, num_warps=2),
+58	        triton.Config({"BLOCK_H": 64, "BLOCK_W": 16}, num_stages=2, num_warps=8),
+59	        triton.Config({"BLOCK_H": 16, "BLOCK_W": 64}, num_stages=2, num_warps=8),
+60	        triton.Config({"BLOCK_H": 32, "BLOCK_W": 64}, num_stages=3, num_warps=8),
+61	        triton.Config({"BLOCK_H": 64, "BLOCK_W": 32}, num_stages=3, num_warps=8),
+62	        triton.Config({"BLOCK_H": 64, "BLOCK_W": 64}, num_stages=2, num_warps=8),
+63	    ],
+64	    key=["out_h", "out_w", "kernel_h", "kernel_w", "stride_h", "stride_w"],
+65	)
+66	@triton.jit
+67	def max_pool2d_forward_kernel(
+68	    input_ptr,
+69	    output_ptr,
+70	    indices_ptr,
+71	    # Input tensor strides
+72	    in_stride_n,
+73	    in_stride_c,
+74	    in_stride_h,
+75	    in_stride_w,
+76	    # Input/Output shapes
+77	    in_c,
+78	    in_h,
+79	    in_w,
+80	    out_h,
+81	    out_w,
+82	    # Pooling parameters
+83	    kernel_h: tl.constexpr,
+84	    kernel_w: tl.constexpr,
+85	    stride_h: tl.constexpr,
+86	    stride_w: tl.constexpr,
+87	    padding_h: tl.constexpr,
+88	    padding_w: tl.constexpr,
+89	    dilation_h: tl.constexpr,
+90	    dilation_w: tl.constexpr,
+91	    # Meta-parameters for tiling
+92	    BLOCK_H: tl.constexpr,
+93	    BLOCK_W: tl.constexpr,
+94	):
+95	    pid_nc = tl.program_id(0)
+96	    pid_hw = tl.program_id(1)
+97	    num_w_blocks = tl.cdiv(out_w, BLOCK_W)
+98	    h_block_idx = pid_hw // num_w_blocks
+99	    w_block_idx = pid_hw % num_w_blocks
+100	    n_idx = pid_nc // in_c
+101	    c_idx = pid_nc % in_c
+102
+103	    h_out_offsets = h_block_idx * BLOCK_H + tl.arange(0, BLOCK_H)
+104	    w_out_offsets = w_block_idx * BLOCK_W + tl.arange(0, BLOCK_W)
+105
+106	    dtype = input_ptr.type.element_ty
+107	    min_val = get_dtype_min(dtype)
+108	    max_val_acc = tl.full((BLOCK_H, BLOCK_W), min_val, dtype=dtype)
+109	    max_idx_acc = tl.full((BLOCK_H, BLOCK_W), -1, dtype=tl.int64)
+110
+111	    input_base_ptr = input_ptr + n_idx * in_stride_n + c_idx * in_stride_c
+112
+113	    for kh in tl.static_range(0, kernel_h):
+114	        for kw in tl.static_range(0, kernel_w):
+115	            h_in = h_out_offsets[:, None] * stride_h - padding_h + kh * dilation_h
+116	            w_in = w_out_offsets[None, :] * stride_w - padding_w + kw * dilation_w
+117	            in_mask = (h_in >= 0) & (h_in < in_h) & (w_in >= 0) & (w_in < in_w)
+118	            input_offset = h_in * in_stride_h + w_in * in_stride_w
+119	            current_val = tl.load(
+120	                input_base_ptr + input_offset, mask=in_mask, other=min_val
+121	            )
+122	            current_idx = h_in * in_w + w_in
+123
+124	            is_new_max = current_val > max_val_acc
+125	            max_val_acc = tl.where(is_new_max, current_val, max_val_acc)
+126	            max_idx_acc = tl.where(is_new_max & in_mask, current_idx, max_idx_acc)
+127
+128	    out_base_ptr = output_ptr + pid_nc * out_h * out_w
+129	    indices_base_ptr = indices_ptr + pid_nc * out_h * out_w
+130	    out_h_offsets = h_block_idx * BLOCK_H + tl.arange(0, BLOCK_H)
+131	    out_w_offsets = w_block_idx * BLOCK_W + tl.arange(0, BLOCK_W)
+132	    output_block_ptr = (
+133	        out_base_ptr + out_h_offsets[:, None] * out_w + out_w_offsets[None, :]
+134	    )
+135	    indices_block_ptr = (
+136	        indices_base_ptr + out_h_offsets[:, None] * out_w + out_w_offsets[None, :]
+137	    )
+138
+139	    out_mask = (out_h_offsets[:, None] < out_h) & (out_w_offsets[None, :] < out_w)
+140	    tl.store(output_block_ptr, max_val_acc, mask=out_mask)
+141	    tl.store(indices_block_ptr, max_idx_acc, mask=out_mask)
+142
+143
+144	@libentry()
+145	@triton.autotune(
+146	    configs=[
+147	        triton.Config({"BLOCK_IN_H": 16, "BLOCK_IN_W": 16}, num_warps=4),
+148	        triton.Config({"BLOCK_IN_H": 32, "BLOCK_IN_W": 8}, num_warps=4),
+149	        triton.Config({"BLOCK_IN_H": 8, "BLOCK_IN_W": 32}, num_warps=4),
+150	        triton.Config({"BLOCK_IN_H": 32, "BLOCK_IN_W": 32}, num_warps=8),
+151	        triton.Config({"BLOCK_IN_H": 16, "BLOCK_IN_W": 64}, num_warps=8),
+152	        triton.Config({"BLOCK_IN_H": 64, "BLOCK_IN_W": 16}, num_warps=8),
+153	    ],
+154	    key=["in_h", "in_w", "kernel_h", "kernel_w", "stride_h", "stride_w"],
+155	)
+156	@triton.jit
+157	def max_pool2d_backward_kernel(
+158	    grad_output_ptr,
+159	    indices_ptr,
+160	    grad_input_ptr,
+161	    # Shape info
+162	    in_h,
+163	    in_w,
+164	    out_h,
+165	    out_w,
+166	    # Strides for grad_output/indices
+167	    out_stride_nc,
+168	    out_stride_h,
+169	    out_stride_w,
+170	    # Pooling parameters
+171	    kernel_h: tl.constexpr,
+172	    kernel_w: tl.constexpr,
+173	    stride_h: tl.constexpr,
+174	    stride_w: tl.constexpr,
+175	    padding_h: tl.constexpr,
+176	    padding_w: tl.constexpr,
+177	    dilation_h: tl.constexpr,
+178	    dilation_w: tl.constexpr,
+179	    # Tiling parameters
+180	    BLOCK_IN_H: tl.constexpr,
+181	    BLOCK_IN_W: tl.constexpr,
+182	):
+183	    nc_idx = tl.program_id(0)
+184	    pid_hw = tl.program_id(1)
+185
+186	    num_w_blocks = tl.cdiv(in_w, BLOCK_IN_W)
+187	    h_block_idx = pid_hw // num_w_blocks
+188	    w_block_idx = pid_hw % num_w_blocks
+189
+190	    h_in_offsets = h_block_idx * BLOCK_IN_H + tl.arange(0, BLOCK_IN_H)
+191	    w_in_offsets = w_block_idx * BLOCK_IN_W + tl.arange(0, BLOCK_IN_W)
+192
+193	    current_input_flat_idx = h_in_offsets[:, None] * in_w + w_in_offsets[None, :]
+194	    grad_acc = tl.zeros((BLOCK_IN_H, BLOCK_IN_W), dtype=tl.float32)
+195
+196	    indices_base_ptr = indices_ptr + nc_idx * out_stride_nc
+197	    grad_output_base_ptr = grad_output_ptr + nc_idx * out_stride_nc
+198
+199	    for kh in tl.static_range(0, kernel_h):
+200	        for kw in tl.static_range(0, kernel_w):
+201	            numerator_h = h_in_offsets[:, None] + padding_h - kh * dilation_h
+202	            numerator_w = w_in_offsets[None, :] + padding_w - kw * dilation_w
+203
+204	            valid_map_mask = (numerator_h % stride_h == 0) & (
+205	                numerator_w % stride_w == 0
+206	            )
+207	            h_out = numerator_h // stride_h
+208	            w_out = numerator_w // stride_w
+209	            out_bounds_mask = (
+210	                (h_out >= 0) & (h_out < out_h) & (w_out >= 0) & (w_out < out_w)
+211	            )
+212	            load_mask = valid_map_mask & out_bounds_mask
+213
+214	            safe_h_out = tl.where(load_mask, h_out, 0)
+215	            safe_w_out = tl.where(load_mask, w_out, 0)
+216	            out_offsets = safe_h_out * out_stride_h + safe_w_out
+217
+218	            indices_block = tl.load(
+219	                indices_base_ptr + out_offsets, mask=load_mask, other=-1
+220	            )
+221	            match_mask = indices_block == current_input_flat_idx
+222
+223	            grad_block = tl.load(
+224	                grad_output_base_ptr + out_offsets, mask=match_mask, other=0.0
+225	            )
+226	            grad_acc += grad_block
+227
+228	    grad_input_base_ptr = grad_input_ptr + nc_idx * in_h * in_w
+229	    grad_input_offsets = h_in_offsets[:, None] * in_w + w_in_offsets[None, :]
+230	    store_mask = (h_in_offsets[:, None] < in_h) & (w_in_offsets[None, :] < in_w)
+231	    tl.store(grad_input_base_ptr + grad_input_offsets, grad_acc, mask=store_mask)
+232
+233
+234	def _parse_pool_params(kernel_size, stride, padding, dilation):
+235	    def _parse_param(param, name, default=None):
+236	        if param is None:
+237	            return default
+238	        if isinstance(param, int):
+239	            return param, param
+240	        if isinstance(param, (list, tuple)) and len(param) == 2:
+241	            return param
+242	        raise ValueError(f"Invalid {name}: {param}")
+243
+244	    kernel_h, kernel_w = _parse_param(kernel_size, "kernel_size")
+245	    stride_h, stride_w = _parse_param(stride, "stride", default=(kernel_h, kernel_w))
+246	    padding_h, padding_w = _parse_param(padding, "padding", default=(0, 0))
+247	    dilation_h, dilation_w = _parse_param(dilation, "dilation", default=(1, 1))
+248
+249	    if stride_h <= 0 or stride_w <= 0:
+250	        raise ValueError(
+251	            f"stride must be positive, but got stride=({stride_h}, {stride_w})"
+252	        )
+253	    if padding_h < 0 or padding_w < 0:
+254	        raise ValueError(
+255	            f"padding must be non-negative, but got padding=({padding_h}, {padding_w})"
+256	        )
+257	    if dilation_h <= 0 or dilation_w <= 0:
+258	        raise ValueError(
+259	            f"dilation must be positive, but got dilation=({dilation_h}, {dilation_w})"
+260	        )
+261
+262	    return (
+263	        kernel_h,
+264	        kernel_w,
+265	        stride_h,
+266	        stride_w,
+267	        padding_h,
+268	        padding_w,
+269	        dilation_h,
+270	        dilation_w,
+271	    )
+272
+273
+274	def max_pool2d_with_indices(
+275	    input: torch.Tensor,
+276	    kernel_size,
+277	    stride=None,
+278	    padding=0,
+279	    dilation=1,
+280	    ceil_mode=False,
+281	):
+282	    logger.debug("GEMS MAX_POOL2D_WITH_INDICES FORWARD")
+283	    input = input.contiguous()
+284
+285	    params = _parse_pool_params(kernel_size, stride, padding, dilation)
+286	    (
+287	        kernel_h,
+288	        kernel_w,
+289	        stride_h,
+290	        stride_w,
+291	        padding_h,
+292	        padding_w,
+293	        dilation_h,
+294	        dilation_w,
+295	    ) = params
+296
+297	    in_n, in_c, in_h, in_w = input.shape
+298	    out_h = max_pool2d_output_size(
+299	        in_h, kernel_h, stride_h, padding_h, dilation_h, ceil_mode
+300	    )
+301	    out_w = max_pool2d_output_size(
+302	        in_w, kernel_w, stride_w, padding_w, dilation_w, ceil_mode
+303	    )
+304
+305	    output = torch.empty(
+306	        (in_n, in_c, out_h, out_w), device=input.device, dtype=input.dtype
+307	    )
+308	    indices = torch.empty(
+309	        (in_n, in_c, out_h, out_w), device=input.device, dtype=torch.int64
+310	    )
+311
+312	    if output.numel() == 0:
+313	        return output, indices
+314
+315	    grid = lambda meta: (
+316	        in_n * in_c,
+317	        triton.cdiv(out_h, meta["BLOCK_H"]) * triton.cdiv(out_w, meta["BLOCK_W"]),
+318	    )
+319
+320	    max_pool2d_forward_kernel[grid](
+321	        input,
+322	        output,
+323	        indices,
+324	        input.stride(0),
+325	        input.stride(1),
+326	        input.stride(2),
+327	        input.stride(3),
+328	        in_c,
+329	        in_h,
+330	        in_w,
+331	        out_h,
+332	        out_w,
+333	        kernel_h,
+334	        kernel_w,
+335	        stride_h,
+336	        stride_w,
+337	        padding_h,
+338	        padding_w,
+339	        dilation_h,
+340	        dilation_w,
+341	    )
+342
+343	    return output, indices
+344
+345
+346	def max_pool2d_backward(
+347	    grad_output: torch.Tensor,
+348	    input: torch.Tensor,
+349	    indices: torch.Tensor,
+350	    kernel_size,
+351	    stride,
+352	    padding,
+353	    dilation,
+354	    ceil_mode,
+355	):
+356	    logger.debug("GEMS MAX_POOL2D BACKWARD")
+357	    grad_output = grad_output.contiguous()
+358	    indices = indices.contiguous()
+359
+360	    params = _parse_pool_params(kernel_size, stride, padding, dilation)
+361	    (
+362	        kernel_h,
+363	        kernel_w,
+364	        stride_h,
+365	        stride_w,
+366	        padding_h,
+367	        padding_w,
+368	        dilation_h,
+369	        dilation_w,
+370	    ) = params
+371
+372	    in_n, in_c, in_h, in_w = input.shape
+373	    out_h, out_w = grad_output.shape[2], grad_output.shape[3]
+374
+375	    grad_input = torch.zeros_like(input, dtype=torch.float32)
+376
+377	    if grad_input.numel() == 0:
+378	        return grad_input.to(grad_output.dtype)
+379
+380	    grid = lambda meta: (
+381	        in_n * in_c,
+382	        triton.cdiv(in_h, meta["BLOCK_IN_H"]) * triton.cdiv(in_w, meta["BLOCK_IN_W"]),
+383	    )
+384
+385	    out_stride_nc = out_h * out_w
+386	    out_stride_h = out_w
+387	    out_stride_w = 1
+388
+389	    max_pool2d_backward_kernel[grid](
+390	        grad_output,
+391	        indices,
+392	        grad_input,
+393	        in_h,
+394	        in_w,
+395	        out_h,
+396	        out_w,
+397	        out_stride_nc,
+398	        out_stride_h,
+399	        out_stride_w,
+400	        kernel_h,
+401	        kernel_w,
+402	        stride_h,
+403	        stride_w,
+404	        padding_h,
+405	        padding_w,
+406	        dilation_h,
+407	        dilation_w,
+408	    )
+409
+410	    return grad_input.to(grad_output.dtype)
+411
+[claude] tool result metadata: id=call_01_JYokR5rsrM5otvsYctsR3923 is_error=False
+[claude] 💭 thinking...
+[claude] turn 5  in=27255 out=0 cache=0
+[claude] 💭 thinking done (9s, 2992 chars)
+[claude] 💭 content:
+Now I have a clear picture of the conventions. Let me analyze:
+
+1. The generic op `max_pool3d_with_indices` has the function signature:
+   ```python
+   def max_pool3d_with_indices(input, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False)
+   ```
+
+2. The provided kernel code has:
+   ```python
+   def run(x, kernel_size, stride, padding, dilation, ceil_mode)
+   ```
+
+   Wait, but the task says to rename `def run(` to `def <operator>(`. The operator is `max_pool3d_with_indices`. But the generic function signature uses `input` as the first parameter and has `stride=None` with a default.
+
+   Let me re-read the instructions:
+   - "Rename `def run(` to `def <operator>(` — change ONLY the function name, not the parameters, not the body, not the default values"
+
+   So I should change `def run(` to `def max_pool3d_with_indices(` and keep everything else exactly the same.
+
+   But wait - the kernel code has `stride` as a required parameter (no default), while the generic op has `stride=None`. The instructions explicitly say: "Do NOT... Add, remove, or reorder function parameters or default values."
+
+   So I should keep the function signature exactly as in the kernel code but rename it to `max_pool3d_with_indices`. The SpecOpRegistrar will call this function with whatever arguments the generic op's call pattern uses. Looking at the generic op:
+   ```python
+   def max_pool3d_with_indices(input, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False)
+   ```
+
+   But the vendor kernel has:
+   ```python
+   def run(x, kernel_size, stride, padding, dilation, ceil_mode)
+   ```
+
+   I need to keep the parameters exactly as in the kernel code. The registrar will handle matching by name.
+
+   Now let me also look at how the ascend vendor ops use imports. Looking at `argmax.py`, it uses:
+   ```python
+   from flag_gems import runtime
+   from flag_gems.runtime import torch_device_fn
+   from flag_gems.utils import libentry
+   from flag_gems.utils import triton_lang_extension as ext
+   from flag_gems.utils.limits import get_dtype_min
+   ```
+
+   But the provided kernel code uses simpler imports:
+   ```python
+   import math
+   import torch
+   import triton
+   import triton.language as tl
+   ```
+
+   Per the rules, I must keep everything verbatim except:
+   1. Prepend copyright header
+   2. Add `import logging` and `logger = logging.getLogger(__name__)`
+   3. Rename `def run(` to `def max_pool3d_with_indices(`
+   4. Optionally add a `logger.debug(...)` line
+
+   So let me write the file now.
+
+   For the `__init__.py` registration, I need to add the import and `__all__` entry in alphabetical order. Looking at the __init__.py:
+   - `"max"` and `"max_dim"` are in `__all__` (between "matmul_int8" and "mean")
+   - I need to add `"max_pool3d_with_indices"` after "max_dim" and before "mean"
+
+   And the import line: `from .max_pool3d_with_indices import max_pool3d_with_indices` should go between the `from .max import ...` and `from .mean import ...` lines.
+[claude] 💭 end
+[claude] text: Now I have a clear understanding of the conventions. Let me write the kernel file and update the registration.
+
+**Step 2: Write the vendor-specialized kernel**
+[claude] 🔧 Write: src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py (4455 chars)
+[claude] tool input id=call_00_uWhjakW7ZX97QLZ5p5Xw3298:
+{
+  "file_path": "src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py",
+  "content": "# Copyright 2026 FlagOS Contributors\n#\n# Licensed under the Apache License, Version 2.0 (the \"License\");\n# you may not use this file except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#     http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an \"AS IS\" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\n\nimport logging\nimport math\n\nimport torch\nimport triton\nimport triton.language as tl\n\nlogger = logging.getLogger(__name__)\n\n\n@triton.jit\ndef max_pool3d_kernel(\n    x_ptr,\n    out_ptr,\n    indices_ptr,\n    N,\n    C,\n    D,\n    H,\n    W,\n    D_out,\n    H_out,\n    W_out,\n    kernel_size: tl.constexpr,\n    stride: tl.constexpr,\n    padding: tl.constexpr,\n    dilation: tl.constexpr,\n    BLOCK_SIZE: tl.constexpr,\n):\n    pid = tl.program_id(0)\n    block_start = pid * BLOCK_SIZE\n    offsets = block_start + tl.arange(0, BLOCK_SIZE)\n\n    total = N * C * D_out * H_out * W_out\n    mask = offsets < total\n\n    w_out = offsets % W_out\n    tmp1 = offsets // W_out\n    h_out = tmp1 % H_out\n    tmp2 = tmp1 // H_out\n    d_out = tmp2 % D_out\n    tmp3 = tmp2 // D_out\n    c = tmp3 % C\n    n = tmp3 // C\n\n    d_in_start = d_out * stride - padding\n    h_in_start = h_out * stride - padding\n    w_in_start = w_out * stride - padding\n\n    NEG_INF: tl.constexpr = -1.0e30\n    max_val = tl.full((BLOCK_SIZE,), NEG_INF, dtype=tl.float32)\n    max_idx = tl.full((BLOCK_SIZE,), -1, dtype=tl.int32)\n\n    D_spatial = D * H * W\n    HW = H * W\n\n    for kd in tl.static_range(kernel_size):\n        d_in = d_in_start + kd * dilation\n        d_valid = (d_in >= 0) & (d_in < D)\n        for kh in tl.static_range(kernel_size):\n            h_in = h_in_start + kh * dilation\n            dh_valid = d_valid & (h_in >= 0) & (h_in < H)\n            for kw in tl.static_range(kernel_size):\n                w_in = w_in_start + kw * dilation\n                valid = dh_valid & (w_in >= 0) & (w_in < W)\n\n                flat_in = (\n                    n * C * D_spatial\n                    + c * D_spatial\n                    + d_in * HW\n                    + h_in * W\n                    + w_in\n                )\n                spatial_idx = d_in * HW + h_in * W + w_in\n\n                val = tl.load(\n                    x_ptr + flat_in,\n                    mask=mask & valid,\n                    other=NEG_INF,\n                )\n\n                is_better = val > max_val\n                max_val = tl.where(is_better & valid, val, max_val)\n                max_idx = tl.where(\n                    is_better & valid, spatial_idx, max_idx\n                )\n\n    flat_out = (\n        n * C * D_out * H_out * W_out\n        + c * D_out * H_out * W_out\n        + d_out * H_out * W_out\n        + h_out * W_out\n        + w_out\n    )\n    tl.store(out_ptr + flat_out, max_val, mask=mask)\n    tl.store(indices_ptr + flat_out, max_idx, mask=mask)\n\n\ndef max_pool3d_with_indices(x, kernel_size, stride, padding, dilation, ceil_mode):\n    logger.debug(\"GEMS_ASCEND MAX_POOL3D_WITH_INDICES\")\n    N, C, D, H, W = x.shape\n\n    numerator_d = D + 2 * padding - dilation * (kernel_size - 1) - 1\n    numerator_h = H + 2 * padding - dilation * (kernel_size - 1) - 1\n    numerator_w = W + 2 * padding - dilation * (kernel_size - 1) - 1\n\n    if ceil_mode:\n        D_out = (numerator_d + stride - 1) // stride + 1\n        H_out = (numerator_h + stride - 1) // stride + 1\n        W_out = (numerator_w + stride - 1) // stride + 1\n    else:\n        D_out = numerator_d // stride + 1\n        H_out = numerator_h // stride + 1\n        W_out = numerator_w // stride + 1\n\n    total_outputs = N * C * D_out * H_out * W_out\n\n    BLOCK_SIZE = 256\n    grid = (triton.cdiv(total_outputs, BLOCK_SIZE),)\n\n    out = torch.empty(\n        (N, C, D_out, H_out, W_out), dtype=x.dtype, device=x.device\n    )\n    indices = torch.empty(\n        (N, C, D_out, H_out, W_out), dtype=torch.int32, device=x.device\n    )\n\n    max_pool3d_kernel[grid](\n        x,\n        out,\n        indices,\n        N,\n        C,\n        D,\n        H,\n        W,\n        D_out,\n        H_out,\n        W_out,\n        kernel_size=kernel_size,\n        stride=stride,\n        padding=padding,\n        dilation=dilation,\n        BLOCK_SIZE=BLOCK_SIZE,\n    )\n\n    return (out, indices)\n"
+}
+[claude] 📎 File created successfully at: src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py (file state is current in your context — no need to Read it back)
+[claude] tool result metadata: id=call_00_uWhjakW7ZX97QLZ5p5Xw3298 is_error=False
+[claude] 💭 thinking...
+[claude] turn 6  in=29251 out=0 cache=0
+[claude] 💭 thinking done (1s, 302 chars)
+[claude] 💭 content:
+Now register in `__init__.py`. I need to add the import line and __all__ entry in alphabetical order. Looking at the current __init__.py:
+
+Import lines to add between:
+```
+from .max import max, max_dim
+```
+and
+```
+from .mean import mean, mean_dim
+```
+
+__all__ entry to add between "max_dim" and "mean".
+[claude] 💭 end
+[claude] text: Now let me register the kernel in the `__init__.py`:
+[claude] 🔧 Edit: src/flag_gems/runtime/backend/_ascend/ops/__init__.py  old='from .max import max, max_dim\nfrom .mean import mean, mean_dim'
+[claude] tool input id=call_00_4LmmE3g2udj5CTymHOXg4852:
+{
+  "replace_all": false,
+  "file_path": "src/flag_gems/runtime/backend/_ascend/ops/__init__.py",
+  "old_string": "from .max import max, max_dim\nfrom .mean import mean, mean_dim",
+  "new_string": "from .max import max, max_dim\nfrom .max_pool3d_with_indices import max_pool3d_with_indices\nfrom .mean import mean, mean_dim"
+}
+[claude] 📎 The file src/flag_gems/runtime/backend/_ascend/ops/__init__.py has been updated successfully. (file state is current in your context — no need to Read it back)
+[claude] tool result metadata: id=call_00_4LmmE3g2udj5CTymHOXg4852 is_error=False
+[claude] 💭 thinking...
+[claude] turn 7  in=29420 out=0 cache=0
+[claude] 💭 thinking done (0s, 57 chars)
+[claude] 💭 content:
+Now add to the __all__ list between "max_dim" and "mean":
+[claude] 💭 end
+[claude] 🔧 Edit: src/flag_gems/runtime/backend/_ascend/ops/__init__.py  old='    "max_dim",\n    "mean",'
+[claude] tool input id=call_00_K5G9viLh7U48eKIvnHf23594:
+{
+  "replace_all": false,
+  "file_path": "src/flag_gems/runtime/backend/_ascend/ops/__init__.py",
+  "old_string": "    \"max_dim\",\n    \"mean\",",
+  "new_string": "    \"max_dim\",\n    \"max_pool3d_with_indices\",\n    \"mean\","
+}
+[claude] 📎 The file src/flag_gems/runtime/backend/_ascend/ops/__init__.py has been updated successfully. (file state is current in your context — no need to Read it back)
+[claude] tool result metadata: id=call_00_K5G9viLh7U48eKIvnHf23594 is_error=False
+[claude] 💭 thinking...
+[claude] turn 8  in=29551 out=0 cache=0
+[claude] 💭 thinking done (0s, 85 chars)
+[claude] 💭 content:
+Now let's run the static checks. First the sort_registrations check, then pre-commit.
+[claude] 💭 end
+[claude] 🔧 Bash: $ Check alphabetical order in vendor __init__.py
+[claude] tool input id=call_00_dv39p8aNX1Z0UKV49hsB2467:
+{
+  "command": "python tools/sort_registrations.py --vendor-init src/flag_gems/runtime/backend/_ascend/ops/__init__.py --check",
+  "description": "Check alphabetical order in vendor __init__.py"
+}
+[claude] 📎 Exit code 2
+python: can't open file '/share-evpfs/tj/workspace/code-integration/FlagGems-Experimental/.worktrees/kernelgen-ascend-max_pool3d_with_indices/tools/sort_registrations.py': [Errno 2] No such file or directory
+[claude] tool result metadata: id=call_00_dv39p8aNX1Z0UKV49hsB2467 is_error=True
+[claude] 💭 thinking...
+[claude] turn 9  in=29670 out=0 cache=0
+[claude] 💭 thinking done (0s, 43 chars)
+[claude] 💭 content:
+Let me find the sort_registrations.py tool.
+[claude] 💭 end
+[claude] 🔧 Glob: **/sort_registrations.py  in .
+[claude] tool input id=call_00_j4UqFOugwG0Af6FHpF384356:
+{
+  "pattern": "**/sort_registrations.py"
+}
+[claude] 📎 No files found
+[claude] tool result metadata: id=call_00_j4UqFOugwG0Af6FHpF384356 is_error=False
+[claude] 💭 thinking...
+[claude] turn 10  in=29691 out=0 cache=0
+[claude] 💭 thinking done (0s, 75 chars)
+[claude] 💭 content:
+The tool doesn't exist. Let me proceed with pre-commit and skip that check.
+[claude] 💭 end
+[claude] 🔧 Bash: $ Stage all changes
+[claude] tool input id=call_00_RdND2dOCHhTrUfpkxHHE2687:
+{
+  "command": "git add -A",
+  "description": "Stage all changes"
+}
+[claude] 📎 (Bash completed with no output)
+[claude] tool result metadata: id=call_00_RdND2dOCHhTrUfpkxHHE2687 is_error=False
+[claude] turn 11  in=29721 out=0 cache=0
+[claude] 🔧 Bash: $ Run pre-commit on changed files
+[claude] tool input id=call_00_ET_htLOnr7hdquPuJtprCvK9537:
+{
+  "command": "pre-commit run --files $(git diff --cached --name-only | tr '\\n' ' ')",
+  "description": "Run pre-commit on changed files",
+  "timeout": 120000
+}
+[claude] 📎 Exit code 1
+Check Yaml...........................................(no files to check)Skipped
+Fix End of Files.........................................................Passed
+Trim Trailing Whitespace.................................................Failed
+- hook id: trailing-whitespace
+- exit code: 1
+- files were modified by this hook
+
+Fixing .kernelgen/claude-runtime.log
+
+Flake8...................................................................Failed
+- hook id: flake8
+- exit code: 1
+
+src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py:16:1: F401 'math' imported but unused
+
+clang-format.........................................(no files to check)Skipped
+isort....................................................................Passed
+black....................................................................Failed
+- hook id: black
+- files were modified by this hook
+
+Warning: Python 3.12 cannot parse code formatted for Python 3.15. To fix this: run Black with Python 3.15, set --target-version to py312, or use --fast to skip the safety check. Black's safety check verifies equivalence by parsing the AST, which fails when the running Python is older than the target version.
+reformatted src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py
+
+All done! ✨ 🍰 ✨
+1 file reformatted, 1 file left unchanged.
+
+black-jupyter............................................................Passed
+[claude] tool result metadata: id=call_00_ET_htLOnr7hdquPuJtprCvK9537 is_error=True
+[claude] 💭 thinking...
+[claude] turn 12  in=32339 out=0 cache=0
+[claude] 💭 thinking done (1s, 270 chars)
+[claude] 💭 content:
+Two issues:
+1. `import math` is unused — need to remove it from the kernel file
+2. Black reformatted the file
+
+Also, the `trailing-whitespace` issue was in a `.kernelgen/claude-runtime.log` file, not in our changes.
+
+Let me check what black did and fix the flake8 issue.
+[claude] 💭 end
+[claude] 🔧 Read: src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py
+[claude] tool input id=call_00_GOnK0LsQnIBbhZhLMHTM4903:
+{
+  "file_path": "src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py"
+}
+[claude] 📎 Wasted call — file unchanged since your last Read. Refer to that earlier tool_result instead.
+[claude] tool result metadata: id=call_00_GOnK0LsQnIBbhZhLMHTM4903 is_error=False
+[claude] 💭 thinking...
+[claude] turn 13  in=32397 out=0 cache=0
+[claude] 💭 thinking done (1s, 230 chars)
+[claude] 💭 content:
+The file was reformatted by black but the Read tool says it's unchanged since last read. That's because the tool tracks file state based on our edits, but black changed it. Let me read the file with bash to see what black changed.
+[claude] 💭 end
+[claude] 🔧 Bash: $ Show current state of kernel file after black reformat
+[claude] tool input id=call_00_mfszkNPJ29AuU0JC4nUr2801:
+{
+  "command": "cat -n src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py",
+  "description": "Show current state of kernel file after black reformat"
+}
+[claude] 📎      1	# Copyright 2026 FlagOS Contributors
+     2	#
+     3	# Licensed under the Apache License, Version 2.0 (the "License");
+     4	# you may not use this file except in compliance with the License.
+     5	# You may obtain a copy of the License at
+     6	#
+     7	#     http://www.apache.org/licenses/LICENSE-2.0
+     8	#
+     9	# Unless required by applicable law or agreed to in writing, software
+    10	# distributed under the License is distributed on an "AS IS" BASIS,
+    11	# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    12	# See the License for the specific language governing permissions and
+    13	# limitations under the License.
+    14
+    15	import logging
+    16	import math
+    17
+    18	import torch
+    19	import triton
+    20	import triton.language as tl
+    21
+    22	logger = logging.getLogger(__name__)
+    23
+    24
+    25	@triton.jit
+    26	def max_pool3d_kernel(
+    27	    x_ptr,
+    28	    out_ptr,
+    29	    indices_ptr,
+    30	    N,
+    31	    C,
+    32	    D,
+    33	    H,
+    34	    W,
+    35	    D_out,
+    36	    H_out,
+    37	    W_out,
+    38	    kernel_size: tl.constexpr,
+    39	    stride: tl.constexpr,
+    40	    padding: tl.constexpr,
+    41	    dilation: tl.constexpr,
+    42	    BLOCK_SIZE: tl.constexpr,
+    43	):
+    44	    pid = tl.program_id(0)
+    45	    block_start = pid * BLOCK_SIZE
+    46	    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    47
+    48	    total = N * C * D_out * H_out * W_out
+    49	    mask = offsets < total
+    50
+    51	    w_out = offsets % W_out
+    52	    tmp1 = offsets // W_out
+    53	    h_out = tmp1 % H_out
+    54	    tmp2 = tmp1 // H_out
+    55	    d_out = tmp2 % D_out
+    56	    tmp3 = tmp2 // D_out
+    57	    c = tmp3 % C
+    58	    n = tmp3 // C
+    59
+    60	    d_in_start = d_out * stride - padding
+    61	    h_in_start = h_out * stride - padding
+    62	    w_in_start = w_out * stride - padding
+    63
+    64	    NEG_INF: tl.constexpr = -1.0e30
+    65	    max_val = tl.full((BLOCK_SIZE,), NEG_INF, dtype=tl.float32)
+    66	    max_idx = tl.full((BLOCK_SIZE,), -1, dtype=tl.int32)
+    67
+    68	    D_spatial = D * H * W
+    69	    HW = H * W
+    70
+    71	    for kd in tl.static_range(kernel_size):
+    72	        d_in = d_in_start + kd * dilation
+    73	        d_valid = (d_in >= 0) & (d_in < D)
+    74	        for kh in tl.static_range(kernel_size):
+    75	            h_in = h_in_start + kh * dilation
+    76	            dh_valid = d_valid & (h_in >= 0) & (h_in < H)
+    77	            for kw in tl.static_range(kernel_size):
+    78	                w_in = w_in_start + kw * dilation
+    79	                valid = dh_valid & (w_in >= 0) & (w_in < W)
+    80
+    81	                flat_in = (
+    82	                    n * C * D_spatial + c * D_spatial + d_in * HW + h_in * W + w_in
+    83	                )
+    84	                spatial_idx = d_in * HW + h_in * W + w_in
+    85
+    86	                val = tl.load(
+    87	                    x_ptr + flat_in,
+    88	                    mask=mask & valid,
+    89	                    other=NEG_INF,
+    90	                )
+    91
+    92	                is_better = val > max_val
+    93	                max_val = tl.where(is_better & valid, val, max_val)
+    94	                max_idx = tl.where(is_better & valid, spatial_idx, max_idx)
+    95
+    96	    flat_out = (
+    97	        n * C * D_out * H_out * W_out
+    98	        + c * D_out * H_out * W_out
+    99	        + d_out * H_out * W_out
+   100	        + h_out * W_out
+   101	        + w_out
+   102	    )
+   103	    tl.store(out_ptr + flat_out, max_val, mask=mask)
+   104	    tl.store(indices_ptr + flat_out, max_idx, mask=mask)
+   105
+   106
+   107	def max_pool3d_with_indices(x, kernel_size, stride, padding, dilation, ceil_mode):
+   108	    logger.debug("GEMS_ASCEND MAX_POOL3D_WITH_INDICES")
+   109	    N, C, D, H, W = x.shape
+   110
+   111	    numerator_d = D + 2 * padding - dilation * (kernel_size - 1) - 1
+   112	    numerator_h = H + 2 * padding - dilation * (kernel_size - 1) - 1
+   113	    numerator_w = W + 2 * padding - dilation * (kernel_size - 1) - 1
+   114
+   115	    if ceil_mode:
+   116	        D_out = (numerator_d + stride - 1) // stride + 1
+   117	        H_out = (numerator_h + stride - 1) // stride + 1
+   118	        W_out = (numerator_w + stride - 1) // stride + 1
+   119	    else:
+   120	        D_out = numerator_d // stride + 1
+   121	        H_out = numerator_h // stride + 1
+   122	        W_out = numerator_w // stride + 1
+   123
+   124	    total_outputs = N * C * D_out * H_out * W_out
+   125
+   126	    BLOCK_SIZE = 256
+   127	    grid = (triton.cdiv(total_outputs, BLOCK_SIZE),)
+   128
+   129	    out = torch.empty((N, C, D_out, H_out, W_out), dtype=x.dtype, device=x.device)
+   130	    indices = torch.empty(
+   131	        (N, C, D_out, H_out, W_out), dtype=torch.int32, device=x.device
+   132	    )
+   133
+   134	    max_pool3d_kernel[grid](
+   135	        x,
+   136	        out,
+   137	        indices,
+   138	        N,
+   139	        C,
+   140	        D,
+   141	        H,
+   142	        W,
+   143	        D_out,
+   144	        H_out,
+   145	        W_out,
+   146	        kernel_size=kernel_size,
+   147	        stride=stride,
+   148	        padding=padding,
+   149	        dilation=dilation,
+   150	        BLOCK_SIZE=BLOCK_SIZE,
+   151	    )
+   152
+   153	    return (out, indices)
+[claude] tool result metadata: id=call_00_mfszkNPJ29AuU0JC4nUr2801 is_error=False
+[claude] 💭 thinking...
+[claude] turn 14  in=34943 out=0 cache=0
+[claude] 💭 thinking done (3s, 962 chars)
+[claude] 💭 content:
+Black reformatted things — it merged the multi-line `flat_in` expression into one line (line 81-83) and merged the multi-line `torch.empty` into one (line 129). These are cosmetic changes black made. The remaining issue is:
+
+1. `import math` is unused — flake8 F401. I need to remove it.
+
+Note that the task instructions say: "The ONLY changes allowed are: 1. Prepend a copyright header... 2. Add `import logging` and `logger`... 3. Rename `def run(` to `def <operator>(`... 4. Optionally add one `logger.debug(...)` line"
+
+But now black has reformatted the code and we have a flake8 error. I must fix the flake8 error by removing the unused `import math`. The task says "Everything else... MUST be copied character-for-character" but also says "If any static check fails and you cannot fix it, stop and report CHECKS_FAILED." Since removing an unused import is a fix that's necessary to pass static checks, I should do it.
+
+Let me remove the `import math` line.
+[claude] 💭 end
+[claude] 🔧 Edit: src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py  old='import logging\nimport math\n\nimport torch'
+[claude] tool input id=call_00_qr7il3dQ0udQhawth4hC4942:
+{
+  "replace_all": false,
+  "file_path": "src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py",
+  "old_string": "import logging\nimport math\n\nimport torch",
+  "new_string": "import logging\n\nimport torch"
+}
+[claude] 📎 The file src/flag_gems/runtime/backend/_ascend/ops/max_pool3d_with_indices.py has been updated successfully. (file state is current in your context — no need to Read it back)
+[claude] tool result metadata: id=call_00_qr7il3dQ0udQhawth4hC4942 is_error=False
+[claude] turn 15  in=35064 out=0 cache=0
+[claude] 🔧 Bash: $ Re-run pre-commit after fixing unused import
+[claude] tool input id=call_00_ET_MFLWZzVHA4HJp2CtHmhx4101:
+{
+  "command": "git add -A && pre-commit run --files $(git diff --cached --name-only | tr '\\n' ' ')",
+  "description": "Re-run pre-commit after fixing unused import",
+  "timeout": 120000
+}
+[claude] 📎 Exit code 1
+Check Yaml...........................................(no files to check)Skipped
+Fix End of Files.........................................................Passed
+Trim Trailing Whitespace.................................................Failed
+- hook id: trailing-whitespace
+- exit code: 1
+- files were modified by this hook
+
+Fixing .kernelgen/claude-runtime.log
+
+Flake8...................................................................Passed
+clang-format.........................................(no files to check)Skipped
+isort....................................................................Passed
+black....................................................................Passed
+black-jupyter............................................................Passed
+[claude] tool result metadata: id=call_00_ET_MFLWZzVHA4HJp2CtHmhx4101 is_error=True
+[claude] 💭 thinking...
+[claude] turn 16  in=35397 out=0 cache=0
+[claude] 💭 thinking done (0s, 245 chars)
+[claude] 💭 content:
+Flake8 passed, black passed. The only failure is the trailing-whitespace fix to `.kernelgen/claude-runtime.log` which is an unrelated file. Let me check if this is blocking or not — the hook will fix it automatically. Let me re-stage and re-run.
+[claude] 💭 end
+[claude] 🔧 Bash: $ Re-run pre-commit after auto-fixing trailing whitespace
+[claude] tool input id=call_00_Id0noSVDOfmEoJJLBw651723:
+{
+  "command": "git add -A && pre-commit run --files $(git diff --cached --name-only | tr '\\n' ' ')",
+  "description": "Re-run pre-commit after auto-fixing trailing whitespace",
+  "timeout": 120000
+}
