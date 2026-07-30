@@ -25,52 +25,83 @@ from flag_gems.utils import libentry
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Registration-key fix
+# Registration-key fix (overload remap)
 # ---------------------------------------------------------------------------
 #
+# Why this is needed
+# ------------------
 # The general layer registers the fused RNN implementation under the *bare*
-# aten name ``rnn_relu`` (see ``flag_gems.__init__._FULL_CONFIG``).  However the
-# ATen operator ``torch.rnn_relu`` only exposes the overloads
-# ``rnn_relu.input`` and ``rnn_relu.data`` -- there is no default overload:
+# aten name ``rnn_relu`` (see ``flag_gems.__init__._FULL_CONFIG``).  But the
+# ATen operator ``torch.rnn_relu`` only exposes the overloads ``rnn_relu.input``
+# and ``rnn_relu.data`` -- there is no default (empty) overload:
 #
 #     aten::rnn_relu.input(Tensor input, Tensor hx, Tensor[] params,
 #                          bool has_biases, int num_layers, float dropout,
 #                          bool train, bool bidirectional, bool batch_first)
 #                          -> (Tensor, Tensor)
 #
-# Calling ``lib.impl("rnn_relu", fn, "CUDA")`` therefore binds ``fn`` to a
-# phantom empty overload that is never dispatched to.  As a result the general
-# fused kernel is silently *never invoked*: under ``flag_gems.use_gems()`` the
-# composite ``torch.rnn_relu`` decomposes into many tiny aten sub-ops, each of
-# which is replaced by a standalone gems kernel.  On Hygon the bfloat16 path in
-# particular ran ~0.38x of native torch this way.
+# So ``lib.impl("rnn_relu", fn, "CUDA")`` binds ``fn`` to a phantom empty
+# overload that is never dispatched to, and the fused kernel is silently never
+# invoked: under ``flag_gems.use_gems()`` the composite ``torch.rnn_relu``
+# decomposes into many tiny aten sub-ops instead.  On Hygon the bfloat16 path
+# ran ~0.38x of native torch this way.  The correct key is ``rnn_relu.input``
+# (``_FULL_CONFIG`` already uses ``<op>.<overload>`` keys elsewhere, e.g.
+# ``addmm.out``); the bare ``rnn_relu`` entry there is effectively a bug, but we
+# must not edit the shared general layer from a vendor PR.
 #
-# We cannot edit the shared ``_FULL_CONFIG``, so we remap the registration key
-# inside ``GeneralOpRegistrar.register_impl``.  The patch is vendor-scoped
-# (this module only loads when GEMS_VENDOR=hygon) and only rewrites the single
-# ``rnn_relu`` key, leaving every other op and the native (outside
-# ``use_gems``) dispatch path untouched.
+# Why the remap lives in ``register_impl``
+# ----------------------------------------
+# The registration must take effect only inside the ``use_gems()`` context
+# (the general layer registers/unregisters there).  Registering ``.input`` at
+# import time via an independent ``torch.library.Library`` would hijack
+# ``torch.rnn_relu`` globally -- even outside ``use_gems()`` -- which is
+# incorrect.  Intercepting the general registration path is therefore the only
+# way to fix the key while preserving gems' scoping.
+#
+# Safety of the wrapper
+# ---------------------
+# Instead of hard-coding a single key rewrite, we keep a *class-level mapping*
+# ``_KEY_OVERLOAD_REMAP`` and wrap ``register_impl`` once (idempotent).  The
+# wrapper:
+#   * only rewrites keys present in the shared mapping and leaves every other
+#     op untouched (so it never changes another op's dispatch);
+#   * is additive across vendors -- if another backend needs its own overload
+#     remap it registers the key in the same dict rather than re-wrapping the
+#     method, so there is no conflicting second patch;
+#   * preserves and delegates to the original ``register_impl`` unchanged;
+#   * does not touch the native (outside ``use_gems``) dispatch path.
 
 _RNN_RELU_KEY = "rnn_relu"
 _RNN_RELU_OVERLOAD_KEY = "rnn_relu.input"
 
 
-def _install_overload_key_patch():
-    if getattr(GeneralOpRegistrar, "_rnn_relu_key_patched", False):
+def _register_key_overload_remap(bare_key, overload_key):
+    """Record a bare-name -> overload-key remap and install the wrapper once.
+
+    Idempotent and additive: multiple ops (and multiple vendor modules) can
+    register their own remaps into the shared class-level table without
+    re-patching ``register_impl`` or clobbering each other.
+    """
+    remap = getattr(GeneralOpRegistrar, "_key_overload_remap", None)
+    if remap is None:
+        remap = {}
+        GeneralOpRegistrar._key_overload_remap = remap
+    remap[bare_key] = overload_key
+
+    if getattr(GeneralOpRegistrar, "_key_overload_remap_installed", False):
         return
 
     _orig_register_impl = GeneralOpRegistrar.register_impl
 
     def register_impl(self, key, fn, extra_dispatch_keys=()):
-        if key == _RNN_RELU_KEY:
-            key = _RNN_RELU_OVERLOAD_KEY
+        key = GeneralOpRegistrar._key_overload_remap.get(key, key)
         return _orig_register_impl(self, key, fn, extra_dispatch_keys)
 
     GeneralOpRegistrar.register_impl = register_impl
-    GeneralOpRegistrar._rnn_relu_key_patched = True
+    GeneralOpRegistrar._key_overload_remap_installed = True
 
 
-_install_overload_key_patch()
+_register_key_overload_remap(_RNN_RELU_KEY, _RNN_RELU_OVERLOAD_KEY)
 
 
 # ---------------------------------------------------------------------------
