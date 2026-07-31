@@ -33,9 +33,7 @@ def _ctz(x):
 
 
 @triton.jit
-def _binary_gcd(
-    ax, ay, normal, MAX_ITERS: tl.constexpr
-):
+def _binary_gcd(ax, ay, normal, MAX_ITERS: tl.constexpr):
     """Binary GCD (Stein's algorithm).
 
     Both operands are pre-stripped of trailing zeros before entering
@@ -65,9 +63,7 @@ def _binary_gcd(
         # After first iteration v is always even (odd - odd),
         # so _ctz(v) >= 1 and never called on zero.
         v_s = tl.where(active, v, 1)
-        v_shifted = tl.where(
-            active, v_s >> _ctz(v_s), v
-        )
+        v_shifted = tl.where(active, v_s >> _ctz(v_s), v)
         swap = active & (u > v_shifted)
         small = tl.where(swap, v_shifted, u)
         large = tl.where(swap, u, v_shifted)
@@ -208,25 +204,13 @@ def _kernel_meta(dtype):
         return lcm_kernel_i32
     if dtype == torch.int64:
         return lcm_kernel_i64
-    raise TypeError(
-        f"unsupported dtype for lcm: {dtype}"
-    )
+    raise TypeError(f"unsupported dtype for lcm: {dtype}")
 
 
 def _materialize_inputs(self, other):
-    promoted_dtype = torch.promote_types(
-        self.dtype, other.dtype
-    )
-    lhs = (
-        self
-        if self.dtype == promoted_dtype
-        else self.to(promoted_dtype)
-    )
-    rhs = (
-        other
-        if other.dtype == promoted_dtype
-        else other.to(promoted_dtype)
-    )
+    promoted_dtype = torch.promote_types(self.dtype, other.dtype)
+    lhs = self if self.dtype == promoted_dtype else self.to(promoted_dtype)
+    rhs = other if other.dtype == promoted_dtype else other.to(promoted_dtype)
     lhs, rhs = torch.broadcast_tensors(lhs, rhs)
     return (
         lhs.contiguous(),
@@ -244,9 +228,7 @@ def lcm(self, other):
       - int64      : MAX_ITERS = 126
     """
     logger.debug("GEMS_METAX LCM")
-    lhs, rhs, promoted_dtype = _materialize_inputs(
-        self, other
-    )
+    lhs, rhs, promoted_dtype = _materialize_inputs(self, other)
     result = torch.empty_like(lhs, dtype=promoted_dtype)
     numel = result.numel()
     if numel == 0:
