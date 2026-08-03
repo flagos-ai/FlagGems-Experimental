@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .any import any, any_dim, any_dims
 from .attention import (
     ScaleDotProductAttention,
@@ -22,18 +21,14 @@ from .attention import (
     scaled_dot_product_attention_backward,
     scaled_dot_product_attention_forward,
 )
-from .broadcast_to import broadcast_to
-from .cudnn_convolution import cudnn_convolution
 from .exponential_ import exponential_
 from .fill import fill_scalar, fill_scalar_, fill_tensor, fill_tensor_
 from .gelu import gelu, gelu_
 from .hadamard_transform import hadamard_transform
-from .index_copy_ import index_copy, index_copy_
 from .isin import isin
+from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
-from .max_pool3d_with_indices import max_pool3d_backward, max_pool3d_with_indices
-from .median import median_dim, median_dim_values
 from .mm import mm
 from .mul import mul, mul_
 from .per_token_group_quant_fp8 import SUPPORTED_FP8_DTYPE, per_token_group_quant_fp8
@@ -45,7 +40,6 @@ from .pow import (
     pow_tensor_tensor_,
 )
 from .randperm import randperm
-from .renorm_ import renorm_
 from .silu import silu, silu_, silu_backward
 from .sort import sort, sort_stable
 from .unique import _unique2
@@ -55,12 +49,9 @@ __all__ = [
     "_unique2",
     "ScaleDotProductAttention",
     "SUPPORTED_FP8_DTYPE",
-    "adaptive_max_pool3d_backward",
     "any",
     "any_dim",
     "any_dims",
-    "broadcast_to",
-    "cudnn_convolution",
     "exponential_",
     "fill_scalar",
     "fill_scalar_",
@@ -71,15 +62,10 @@ __all__ = [
     "gelu",
     "gelu_",
     "hadamard_transform",
-    "index_copy",
-    "index_copy_",
     "isin",
+    "log_normal_",
     "matmul_bf16",
     "matmul_int8",
-    "max_pool3d_backward",
-    "max_pool3d_with_indices",
-    "median_dim",
-    "median_dim_values",
     "mul",
     "mul_",
     "mm",
@@ -90,7 +76,6 @@ __all__ = [
     "pow_tensor_tensor",
     "pow_tensor_tensor_",
     "randperm",
-    "renorm_",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
