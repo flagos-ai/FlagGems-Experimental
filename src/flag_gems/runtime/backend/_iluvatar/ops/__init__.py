@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ._linalg_eigvals import _linalg_eigvals
 from .addmm import addmm, addmm_out
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
@@ -23,6 +24,7 @@ from .matmul_int8 import matmul_int8
 from .mm import mm, mm_out
 from .repeat import repeat
 from .scatter_add import scatter_add_
+from .softplus import softplus_backward
 from .special_modified_bessel_k1 import (
     special_modified_bessel_k1,
     special_modified_bessel_k1_out,
@@ -35,6 +37,7 @@ from .var import var, var_correction, var_dim
 
 __all__ = [
     "_conv_depthwise2d",
+    "_linalg_eigvals",
     "conv_transpose1d",
     "addmm",
     "addmm_out",
@@ -46,6 +49,7 @@ __all__ = [
     "matmul_int8",
     "repeat",
     "scatter_add_",
+    "softplus_backward",
     "special_modified_bessel_k1",
     "special_modified_bessel_k1_out",
     "special_shifted_chebyshev_polynomial_w",
