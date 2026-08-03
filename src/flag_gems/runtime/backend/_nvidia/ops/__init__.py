@@ -12,15 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Example for multi-backend ops.
-
-
-from .add import add
-from .gelu import gelu
+from ._linalg_eigvals import _linalg_eigvals
 
 __all__ = [
-    "add",
-    "gelu",
+    "_linalg_eigvals",
 ]
-"""
