@@ -12,6 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+adaptive_max_pool3d_backward:
+  - META:
+      BLOCK_SIZE: 64
+    num_warps: 4
+    num_stages: 3
+  - META:
+      BLOCK_SIZE: 128
+    num_warps: 4
+    num_stages: 3
+  - META:
+      BLOCK_SIZE: 256
+    num_warps: 8
+    num_stages: 3
+  - META:
+      BLOCK_SIZE: 512
+    num_warps: 8
+    num_stages: 2
+  - META:
+      BLOCK_SIZE: 1024
+    num_warps: 8
+    num_stages: 2
+
 attention:
 - gen: true
   param_map:
