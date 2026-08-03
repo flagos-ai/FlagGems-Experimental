@@ -28,6 +28,7 @@ from .index_put import index_put, index_put_
 from .index_select import index_select
 from .isin import isin
 from .layernorm import layer_norm, layer_norm_backward
+from .lgamma_ import lgamma, lgamma_
 from .linalg_svdvals import linalg_svdvals
 from .log_softmax import log_softmax, log_softmax_backward
 from .masked_fill import masked_fill, masked_fill_
@@ -75,6 +76,8 @@ __all__ = [
     "isin",
     "layer_norm",
     "layer_norm_backward",
+    "lgamma",
+    "lgamma_",
     "log_softmax",
     "log_softmax_backward",
     "linalg_svdvals",

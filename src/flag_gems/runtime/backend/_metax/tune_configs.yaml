@@ -184,6 +184,21 @@ argmin_split_k:
         - 4
         - 8
         - 16
+
+lgamma:
+  - META:
+      BLOCK_SIZE: 256
+    num_warps: 4
+    num_stages: 2
+  - META:
+      BLOCK_SIZE: 512
+    num_warps: 4
+    num_stages: 2
+  - META:
+      BLOCK_SIZE: 1024
+    num_warps: 4
+    num_stages: 2
+
 log_softmax:
 - META:
     BLOCK_M: 1
