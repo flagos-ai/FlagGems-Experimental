@@ -35,15 +35,13 @@ def _abs_u64(x):
 
 
 @triton.jit
-def _lcm_while_i32(x, y):
-    # Per-lane Euclid by remainder with an early-exit warp ballot: lanes that
-    # have converged skip the div/rem, and the loop stops as soon as every
-    # lane in the program is done. On thead PPU the ballot (tl.sum over the
-    # predicate) is far cheaper than the fixed worst-case unrolled Euclid the
-    # generic binary-GCD kernel serializes through, because random full-range
-    # inputs only need ~35 remainder steps on average (vs 48 unrolled rounds).
-    ax = _abs_u32(x)
-    ay = _abs_u32(y)
+def _gcd_ballot_u32(ax, ay):
+    # Per-lane Euclid by remainder with an early-exit program-wide ballot:
+    # lanes that have converged skip the div/rem, and the loop stops as soon
+    # as every lane in the program is done. On thead PPU the ballot (tl.sum
+    # over the predicate) is far cheaper than the fixed worst-case unrolled
+    # binary-GCD loop the generic kernel serializes through, because random
+    # full-range inputs only need ~35 remainder steps on average.
     a = ax
     b = ay
     active = b != 0
@@ -53,18 +51,36 @@ def _lcm_while_i32(x, y):
         a = tl.where(active, b, a)
         b = tl.where(active, r, b)
         active = active & (b != 0)
-    g = a.to(tl.int32)
-    # lcm(x, y) = |x| / g * |y|, divide first, in the native signed dtype.
-    # Reproduces torch's wrap-around semantics on overflowing results (e.g.
-    # lcm(INT32_MAX, 100) == 100 because the quotient comes out negative).
-    g_safe = tl.where(g == 0, 1, g)
-    q = ax.to(tl.int32) // g_safe
-    res = q * ay.to(tl.int32)
-    return tl.where(g == 0, 0, res)
+    return a
+
+
+@triton.jit
+def _lcm_epilogue_i32(ax, ay, g):
+    # Reproduce torch's exact overflow semantics for int32: the exact product
+    # |x| / g * |y| is computed in uint64 (it can reach ~2^62), wrapped mod
+    # 2^32, and the wrapped 32-bit value is then taken in absolute value
+    # (two's-complement negate), matching torch's CPU/CUDA native kernels.
+    g64 = g.to(tl.uint64)
+    g_safe = tl.where(g64 == 0, 1, g64)
+    prod = (ax.to(tl.uint64) // g_safe) * ay.to(tl.uint64)
+    w = (prod % 4294967296).to(tl.uint32)
+    res = tl.where(w.to(tl.int32) < 0, 0 - w, w)
+    return tl.where(g64 == 0, 0, res)
+
+
+@triton.jit
+def _lcm_while_i32(x, y):
+    ax = _abs_u32(x)
+    ay = _abs_u32(y)
+    g = _gcd_ballot_u32(ax, ay)
+    return _lcm_epilogue_i32(ax, ay, g)
 
 
 @triton.jit
 def _lcm_while_i64(x, y):
+    # uint64 all the way: the product wraps mod 2^64 exactly like the exact
+    # result truncated to the storage dtype, and the wrapped value is taken
+    # in absolute value to match torch's native semantics.
     ax = _abs_u64(x)
     ay = _abs_u64(y)
     a = ax
@@ -76,10 +92,10 @@ def _lcm_while_i64(x, y):
         a = tl.where(active, b, a)
         b = tl.where(active, r, b)
         active = active & (b != 0)
-    g = a.to(tl.int64)
+    g = a
     g_safe = tl.where(g == 0, 1, g)
-    q = ax.to(tl.int64) // g_safe
-    res = q * ay.to(tl.int64)
+    w = (ax // g_safe) * ay
+    res = tl.where(w.to(tl.int64) < 0, 0 - w, w)
     return tl.where(g == 0, 0, res)
 
 
@@ -97,16 +113,23 @@ def lcm_kernel_i32(x_ptr, y_ptr, out_ptr, n_elements, BLOCK: tl.constexpr):
 
 @triton.jit
 def lcm_kernel_i16(x_ptr, y_ptr, out_ptr, n_elements, BLOCK: tl.constexpr):
-    # int8/int16 path: promote to int32 so |dtype-min| and the divided product
-    # are representable, compute there, then narrow (mod 2**n) back to the
-    # storage dtype — the same wrap-around semantics as the native-dtype path.
+    # int8/int16 path: torch promotes the computation to a wider signed type
+    # and narrows the wrapped result WITHOUT the final abs() (narrowing after
+    # the 32-bit abs is identical to plain truncation). So: Euclid in uint32,
+    # product in uint64, truncate mod 2^bits.
     pid = tl.program_id(0)
     offsets = pid * BLOCK + tl.arange(0, BLOCK)
     mask = offsets < n_elements
 
-    x = tl.load(x_ptr + offsets, mask=mask, other=0)
-    y = tl.load(y_ptr + offsets, mask=mask, other=0)
-    res = _lcm_while_i32(x.to(tl.int32), y.to(tl.int32))
+    x = tl.load(x_ptr + offsets, mask=mask, other=0).to(tl.int32)
+    y = tl.load(y_ptr + offsets, mask=mask, other=0).to(tl.int32)
+    ax = _abs_u32(x)
+    ay = _abs_u32(y)
+    g = _gcd_ballot_u32(ax, ay)
+    g64 = g.to(tl.uint64)
+    g_safe = tl.where(g64 == 0, 1, g64)
+    prod = (ax.to(tl.uint64) // g_safe) * ay.to(tl.uint64)
+    res = tl.where(g64 == 0, 0, prod.to(tl.uint32))
     tl.store(out_ptr + offsets, res.to(out_ptr.type.element_ty), mask=mask)
 
 
@@ -143,9 +166,15 @@ def lcm_inplace_kernel_i16(x_ptr, y_ptr, n_elements, BLOCK: tl.constexpr):
     offsets = pid * BLOCK + tl.arange(0, BLOCK)
     mask = offsets < n_elements
 
-    x = tl.load(x_ptr + offsets, mask=mask, other=0)
-    y = tl.load(y_ptr + offsets, mask=mask, other=0)
-    res = _lcm_while_i32(x.to(tl.int32), y.to(tl.int32))
+    x = tl.load(x_ptr + offsets, mask=mask, other=0).to(tl.int32)
+    y = tl.load(y_ptr + offsets, mask=mask, other=0).to(tl.int32)
+    ax = _abs_u32(x)
+    ay = _abs_u32(y)
+    g = _gcd_ballot_u32(ax, ay)
+    g64 = g.to(tl.uint64)
+    g_safe = tl.where(g64 == 0, 1, g64)
+    prod = (ax.to(tl.uint64) // g_safe) * ay.to(tl.uint64)
+    res = tl.where(g64 == 0, 0, prod.to(tl.uint32))
     tl.store(x_ptr + offsets, res.to(x_ptr.type.element_ty), mask=mask)
 
 
@@ -164,15 +193,14 @@ def lcm_inplace_kernel_i64(x_ptr, y_ptr, n_elements, BLOCK: tl.constexpr):
 def _kernel_meta(dtype):
     # The early-exit ballot (tl.sum over the active predicate) is cheaper the
     # fewer lanes a program has to scan per iteration, so tiny blocks with a
-    # single warp win on thead PPU: BLOCK=64/nw=1 for int32 (64-lane ballot),
-    # BLOCK=32/nw=1 for int16 (full-range int16 converges in <= ~12 steps,
-    # so the program-wide trip count stays low and the ballot dominates).
+    # single warp win on thead PPU: BLOCK=32/nw=1 measured fastest for both
+    # the int32 and the int16/int8 paths on full-range random inputs.
     if dtype in (torch.int8, torch.int16):
         return lcm_kernel_i16, lcm_inplace_kernel_i16, 32, 1
     if dtype == torch.int32:
-        return lcm_kernel_i32, lcm_inplace_kernel_i32, 64, 1
+        return lcm_kernel_i32, lcm_inplace_kernel_i32, 32, 1
     if dtype == torch.int64:
-        return lcm_kernel_i64, lcm_inplace_kernel_i64, 64, 1
+        return lcm_kernel_i64, lcm_inplace_kernel_i64, 32, 1
     raise TypeError(f"unsupported dtype for lcm: {dtype}")
 
 
@@ -193,9 +221,12 @@ def _materialize_inputs(self, other):
 def lcm(self, other):
     """Compute element-wise least common multiple.
 
-    Uses per-lane Euclid (remainder loop with an early-exit warp ballot) to
-    derive lcm(a, b) = |a| / gcd(a, b) * |b|, avoiding the fixed worst-case
-    unrolled binary-GCD loop that serializes the generic kernel on thead PPU.
+    Uses per-lane Euclid (remainder loop with an early-exit ballot) to derive
+    lcm(a, b) = |a| / gcd(a, b) * |b|, avoiding the fixed worst-case unrolled
+    binary-GCD loop that serializes the generic kernel on thead PPU. The
+    product is formed in uint64 and the wrapped result taken in absolute
+    value (int32/int64) or plainly truncated (int8/int16), reproducing
+    torch's native overflow semantics on full-range inputs.
     """
     logger.debug("GEMS_THEAD LCM")
     lhs, rhs, promoted_dtype = _materialize_inputs(self, other)
