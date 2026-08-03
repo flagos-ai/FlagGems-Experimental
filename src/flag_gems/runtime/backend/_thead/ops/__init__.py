@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
+from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cudnn_batch_norm_backward import cudnn_batch_norm_backward
 from .gcd_ import gcd, gcd_
@@ -27,6 +28,7 @@ from .special_shifted_chebyshev_polynomial_w import (
 
 __all__ = [
     "adaptive_max_pool3d_backward",
+    "broadcast_tensors",
     "broadcast_to",
     "cudnn_batch_norm_backward",
     "gcd",
