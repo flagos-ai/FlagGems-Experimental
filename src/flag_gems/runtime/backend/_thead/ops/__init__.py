@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ._thnn_fused_lstm_cell_backward_impl import _thnn_fused_lstm_cell_backward_impl
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
@@ -30,6 +31,7 @@ from .special_shifted_chebyshev_polynomial_w import (
 )
 
 __all__ = [
+    "_thnn_fused_lstm_cell_backward_impl",
     "adaptive_max_pool3d_backward",
     "broadcast_tensors",
     "broadcast_to",
