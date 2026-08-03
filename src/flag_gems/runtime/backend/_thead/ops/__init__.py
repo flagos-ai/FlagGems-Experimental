@@ -13,6 +13,7 @@
 # limitations under the License.
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .broadcast_to import broadcast_to
+from .flash_attention_forward import flash_attention_forward
 from .index_copy_ import index_copy, index_copy_
 from .lcm import lcm, lcm_
 from .log_normal_ import log_normal_
@@ -21,6 +22,7 @@ from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
 __all__ = [
     "adaptive_max_pool3d_backward",
     "broadcast_to",
+    "flash_attention_forward",
     "index_copy",
     "index_copy_",
     "lcm",
