@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ._linalg_eigvals import _linalg_eigvals
 from .addmm import addmm, addmm_out
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
@@ -35,6 +36,7 @@ from .var import var, var_correction, var_dim
 
 __all__ = [
     "_conv_depthwise2d",
+    "_linalg_eigvals",
     "conv_transpose1d",
     "addmm",
     "addmm_out",
