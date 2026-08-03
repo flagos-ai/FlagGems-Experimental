@@ -12,15 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Example for multi-backend ops.
-
-
-from .add import add
-from .gelu import gelu
+from .softplus import softplus_backward
 
 __all__ = [
-    "add",
-    "gelu",
+    "softplus_backward",
 ]
-"""
