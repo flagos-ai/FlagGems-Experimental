@@ -23,6 +23,7 @@ from .linear_backward import linear_backward
 from .log_normal_ import log_normal_
 from .softplus_backward import softplus_backward
 from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
+from .special_erfinv import special_erfinv, special_erfinv_, special_erfinv_out
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
@@ -43,5 +44,8 @@ __all__ = [
     "log_normal_",
     "softplus_backward",
     "special_chebyshev_polynomial_u",
+    "special_erfinv",
+    "special_erfinv_",
+    "special_erfinv_out",
     "special_shifted_chebyshev_polynomial_w",
 ]
