@@ -86,9 +86,7 @@ QM_NS = [
 ]
 
 
-@pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="CUDA is required"
-)
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
 @pytest.mark.cudnn_attention_backward
 @pytest.mark.parametrize("batch, num_head, q_seq_len, kv_seq_len", QM_NS)
 @pytest.mark.parametrize("head_size", [64, 128])
