@@ -23,6 +23,7 @@ from flag_gems.runtime import torch_device_fn
 from flag_gems.utils.random_utils import set_philox_state
 
 from . import accuracy_utils as utils
+from .conftest import TO_CPU
 
 
 def make_qkv(batch, num_head, q_seq_len, kv_seq_len, head_size, dtype, device):
@@ -103,6 +104,10 @@ def test_cudnn_attention_backward(
     has_attn_bias,
     dtype,
 ):
+    if TO_CPU:
+        pytest.skip(
+            "_cudnn_attention_backward is CUDA-only, " "cannot run in quick-cpu mode"
+        )
     if is_causal and has_attn_bias:
         pytest.skip("causal + attn_bias combination: skip")
 
