@@ -15,6 +15,7 @@ from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cudnn_batch_norm_backward import cudnn_batch_norm_backward
+from .diagonal_scatter import diagonal_scatter
 from .gcd_ import gcd, gcd_
 from .index_copy_ import index_copy, index_copy_
 from .lcm import lcm, lcm_
@@ -33,6 +34,7 @@ __all__ = [
     "broadcast_tensors",
     "broadcast_to",
     "cudnn_batch_norm_backward",
+    "diagonal_scatter",
     "gcd",
     "gcd_",
     "index_copy",
