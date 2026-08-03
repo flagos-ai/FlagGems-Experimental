@@ -21,6 +21,7 @@ from .lcm import lcm, lcm_
 from .linalg_svdvals import linalg_svdvals
 from .linear_backward import linear_backward
 from .log_normal_ import log_normal_
+from .softplus_backward import softplus_backward
 from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
@@ -40,6 +41,7 @@ __all__ = [
     "linalg_svdvals",
     "linear_backward",
     "log_normal_",
+    "softplus_backward",
     "special_chebyshev_polynomial_u",
     "special_shifted_chebyshev_polynomial_w",
 ]
