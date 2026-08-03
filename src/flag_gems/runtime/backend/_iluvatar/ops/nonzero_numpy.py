@@ -25,146 +25,241 @@ from flag_gems.utils import libentry
 
 logger = logging.getLogger(__name__)
 
-THRESHOLD = 8 * 1024 * 1024  # 8M elements
+# Threshold for single-block vs two-pass strategy.  A block-local cumsum is
+# cheap up to ~8192 lanes on this hardware, growing super-linearly past that.
+SINGLE_BLOCK_THRESHOLD = 8192
+
+# Block size for the two-pass count + fill kernels.  Swept across {1024,
+# 2048, 4096, 8192}: 2048 is the sweet spot — wider tiles make the block-local
+# cumsum more expensive, narrower tiles leave the grid too fine-grained.
+TWO_PASS_BLOCK = 2048
+
+# Per-axis sizes are passed as plain scalar arguments rather than a device
+# tensor.  Building torch.tensor(shape) costs ~0.03 ms of host + H2D overhead
+# per call, which would dominate on the small shapes.
+MAX_NDIM = 4
 
 
 @libentry()
 @triton.jit
-def nonzero_2d_kernel(
-    inp_ptr,
-    out0_ptr,
-    out1_ptr,
+def nonzero_single_kernel(
+    inp,
+    out,
+    count_ptr,
     n_elements,
-    dim0: tl.constexpr,
-    BLOCK_SIZE: tl.constexpr,
+    s0,
+    s1,
+    s2,
+    s3,
+    ndim: tl.constexpr,
+    BLOCK: tl.constexpr,
 ):
-    """Single-pass 2D: per-block cumsum scatter into pre-allocated output."""
+    """Single-block nonzero for small tensors (≤ 8192 elements).
+
+    Fuses the (!=0) test, block-local prefix-sum, per-axis index
+    decomposition, and SoA scatter into one launch.  Grid is (1,)
+    so the local cumsum is already the global prefix sum — no
+    cross-block scan needed.
+    """
     pid = tl.program_id(0)
-    offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = offset < n_elements
-    vals = tl.load(inp_ptr + offset, mask=mask, other=0)
-    valid = mask & (vals != 0).to(tl.int1)
-    local_pos = tl.cumsum(valid.to(tl.int32))
-    local_pos = tl.where(valid, local_pos - 1, 0)
-    tl.store(out0_ptr + local_pos, (offset // dim0).to(tl.int64), mask=valid)
-    tl.store(out1_ptr + local_pos, (offset % dim0).to(tl.int64), mask=valid)
+    off = pid * BLOCK + tl.arange(0, BLOCK)
+    mask = off < n_elements
+
+    vals = tl.load(inp + off, mask=mask, other=0)
+    nz = (vals != 0) & mask
+
+    local_pos = tl.cumsum(nz.to(tl.int32))
+    local_pos = tl.where(nz, local_pos - 1, 0)
+
+    cnt = tl.sum(nz.to(tl.int32))
+    if pid == 0:
+        tl.store(count_ptr, cnt)
+
+    idx_flat = off
+    if ndim >= 4:
+        d = idx_flat % s3
+        idx_flat //= s3
+        tl.store(out + 3 * n_elements + local_pos, d.to(tl.int64), mask=nz)
+    if ndim >= 3:
+        d = idx_flat % s2
+        idx_flat //= s2
+        tl.store(out + 2 * n_elements + local_pos, d.to(tl.int64), mask=nz)
+    if ndim >= 2:
+        d = idx_flat % s1
+        idx_flat //= s1
+        tl.store(out + 1 * n_elements + local_pos, d.to(tl.int64), mask=nz)
+    if ndim >= 1:
+        d = idx_flat % s0
+        tl.store(out + 0 * n_elements + local_pos, d.to(tl.int64), mask=nz)
 
 
+@libentry()
 @triton.jit
-def count_kernel(inp, block_counts, n_elements, BLOCK_SIZE: tl.constexpr):
-    """Count non-zero elements per block."""
+def nonzero_count_kernel(
+    inp,
+    block_counts,
+    n_elements,
+    BLOCK: tl.constexpr,
+):
+    """First pass for large tensors: count nonzeros per block."""
     pid = tl.program_id(0)
-    off = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    off = pid * BLOCK + tl.arange(0, BLOCK)
     mask = off < n_elements
     vals = tl.load(inp + off, mask=mask, other=0)
-    tl.store(block_counts + pid, tl.sum((vals != 0).to(tl.int32)))
+    nz = (vals != 0) & mask
+    tl.store(block_counts + pid, tl.sum(nz.to(tl.int32)))
 
 
+@libentry()
 @triton.jit
-def fill_kernel(
+def nonzero_fill_kernel(
     inp,
-    block_offsets,
+    block_counts,
+    offsets,
     out,
     n_elements,
-    shape,
-    N,
+    s0,
+    s1,
+    s2,
+    s3,
+    n_total,
     ndim: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
-    """Fill non-zero indices with coalesced SoA writes."""
+    """Second pass: scatter indices with per-block exclusive-prefix offset.
+
+    ``offsets`` holds the inclusive prefix sum of per-block counts.
+    A block's exclusive base is ``offsets[pid] - block_counts[pid]``.
+    This preserves stable input order without atomics.
+    """
     pid = tl.program_id(0)
     off = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = off < n_elements
     vals = tl.load(inp + off, mask=mask, other=0)
-    nz_mask = mask & (vals != 0).to(tl.int1)
-    block_start = tl.load(block_offsets + pid)
-    local_pos = tl.cumsum(nz_mask.to(tl.int32))
-    local_pos = tl.where(nz_mask, local_pos - 1, 0)
-    out_pos = block_start + local_pos
+    nz = (vals != 0) & mask
+
+    cnt = tl.load(block_counts + pid)
+    incl = tl.load(offsets + pid)
+    base = incl - cnt
+
+    local_pos = tl.cumsum(nz.to(tl.int32))
+    local_pos = tl.where(nz, local_pos - 1, 0)
+    pos = base + local_pos
+
     idx_flat = off
-    for dim in range(ndim - 1, 0, -1):
-        dim_size = tl.load(shape + dim)
-        remainder = idx_flat % dim_size
-        idx_flat //= dim_size
-        tl.store(out + dim * N + out_pos, remainder, mask=nz_mask)
-    tl.store(out + out_pos, idx_flat, mask=nz_mask)
+    if ndim >= 4:
+        d = idx_flat % s3
+        idx_flat //= s3
+        tl.store(out + 3 * n_total + pos, d.to(tl.int64), mask=nz)
+    if ndim >= 3:
+        d = idx_flat % s2
+        idx_flat //= s2
+        tl.store(out + 2 * n_total + pos, d.to(tl.int64), mask=nz)
+    if ndim >= 2:
+        d = idx_flat % s1
+        idx_flat //= s1
+        tl.store(out + 1 * n_total + pos, d.to(tl.int64), mask=nz)
+    if ndim >= 1:
+        d = idx_flat % s0
+        tl.store(out + 0 * n_total + pos, d.to(tl.int64), mask=nz)
+
+
+def _shape_scalars(inp):
+    """Per-axis sizes as scalar ints, innermost axis first, padded to MAX_NDIM."""
+    shape = list(inp.shape)
+    if len(shape) > MAX_NDIM:
+        shape = shape[-MAX_NDIM:]
+    return shape + [1] * (MAX_NDIM - len(shape))
+
+
+def _nonzero_single(inp, n_elements, ndim, shape):
+    """Single-block path for small tensors."""
+    flat = inp.contiguous().view(n_elements)
+    block = triton.next_power_of_2(max(n_elements, 4))
+    num_warps = 4 if block <= 4096 else 8
+    out = torch.empty(ndim, n_elements, dtype=torch.int64, device=inp.device)
+    count = torch.empty(1, dtype=torch.int32, device=inp.device)
+    with torch_device_fn.device(inp.device):
+        nonzero_single_kernel[(1,)](
+            flat,
+            out,
+            count,
+            n_elements,
+            shape[0],
+            shape[1],
+            shape[2],
+            shape[3],
+            ndim,
+            BLOCK=block,
+            num_warps=num_warps,
+        )
+    nnz = int(count.item())
+    return [out[d, :nnz] for d in range(ndim)]
+
+
+def _nonzero_two_pass(inp, n_elements, ndim, shape):
+    """Two-pass path for large tensors."""
+    flat = inp.contiguous().view(n_elements)
+    block = TWO_PASS_BLOCK
+    grid = triton.cdiv(n_elements, block)
+    block_counts = torch.empty(grid, dtype=torch.int32, device=inp.device)
+    with torch_device_fn.device(inp.device):
+        nonzero_count_kernel[(grid,)](
+            flat,
+            block_counts,
+            n_elements,
+            BLOCK=block,
+        )
+    offsets = block_counts.cumsum(axis=0)
+    nnz = int(offsets[grid - 1].item())
+    if nnz == 0:
+        return [inp.new_empty(0, dtype=torch.int64) for _ in range(ndim)]
+    out = torch.empty(ndim, nnz, dtype=torch.int64, device=inp.device)
+    with torch_device_fn.device(inp.device):
+        nonzero_fill_kernel[(grid,)](
+            flat,
+            block_counts,
+            offsets,
+            out,
+            n_elements,
+            shape[0],
+            shape[1],
+            shape[2],
+            shape[3],
+            nnz,
+            ndim,
+            BLOCK_SIZE=block,
+            num_warps=8,
+        )
+    return [out[d] for d in range(ndim)]
 
 
 def nonzero_numpy(inp):
-    """Returns a list of 1D tensors with indices of non-zero elements.
+    """Iluvatar-specific nonzero_numpy.
 
-    Hybrid strategy for Iluvatar BI-V150:
-    - < 8M elements: single-pass libentry kernel with per-block cumsum.
-    - >= 8M elements: two-pass count+fill to save memory and improve
-      throughput for very large tensors.
+    Two-tier strategy matching the thead backend (PR #54):
 
-    Note: Small input performance is limited by flag_gems dispatch
-    overhead (~0.5 ms), which dominates kernel time for < 1M elements.
-    Future work should register nonzero_numpy as a native aten dispatch
-    target to eliminate this overhead.
+    * Small tensor (≤8192 elements): single-block fused kernel
+      (count + index decompose + scatter, one launch, one sync)
+    * Large tensor: two-pass count + cumsum + fill (avoids the
+      full-tensor scan bottleneck of the generic path)
+
+    The generic implementation delegates to ``nonzero()`` which issues
+    three separate kernels per call (elementwise !=0, full-tensor
+    cumsum, scatter).  The combined launch overhead dominates on small
+    shapes, causing speedup to regress to ~0.2–0.4x.
     """
-    logger.debug("GEMS NONZERO_NUMPY")
+    logger.debug("GEMS ILUVATAR NONZERO_NUMPY")
+
     inp = inp.contiguous()
     n_elements = inp.numel()
+    ndim = inp.ndim
 
-    if inp.ndim == 2 and n_elements < THRESHOLD:
-        return _nonzero_small(inp, n_elements)
-    return _nonzero_large(inp, n_elements)
+    if n_elements == 0:
+        return [inp.new_empty(0, dtype=torch.int64) for _ in range(ndim)]
 
+    shape = _shape_scalars(inp)
 
-def _nonzero_small(inp, n_elements):
-    """Optimized single-pass 2D kernel for inputs < 8M elements."""
-    device = inp.device
-    flat = inp.view(n_elements)
-    dim0 = inp.shape[1]
-    out0 = torch.empty(n_elements, dtype=torch.int64, device=device)
-    out1 = torch.empty(n_elements, dtype=torch.int64, device=device)
-    BLOCK_SIZE = 1024
-    grid = (triton.cdiv(n_elements, BLOCK_SIZE),)
-    with torch_device_fn.device(device):
-        nonzero_2d_kernel[grid](
-            flat,
-            out0,
-            out1,
-            n_elements,
-            dim0=dim0,
-            BLOCK_SIZE=BLOCK_SIZE,
-        )
-    nnz = int((flat != 0).sum().item())
-    return [out0[:nnz], out1[:nnz]]
-
-
-def _nonzero_large(inp, n_elements):
-    """Two-pass count+fill for large or non-2D inputs (any ndim)."""
-    flat = inp.view(n_elements)
-    inp_ndim = inp.ndim
-    shape = torch.tensor(inp.shape, dtype=torch.int32, device=inp.device)
-    BLOCK_SIZE = 1024
-    device = inp.device
-    grid_size = triton.cdiv(n_elements, BLOCK_SIZE)
-    block_counts = torch.empty(grid_size, dtype=torch.int32, device=device)
-    count_kernel[(grid_size,)](
-        flat, block_counts, n_elements, BLOCK_SIZE=BLOCK_SIZE, num_warps=8
-    )
-    nnz = int(block_counts.sum().item())
-    if nnz == 0:
-        return [inp.new_empty(0, dtype=torch.int64) for _ in range(inp_ndim)]
-    if grid_size > 1:
-        offsets = torch.empty(grid_size, dtype=torch.int32, device=device)
-        offsets[0] = 0
-        torch.cumsum(block_counts[:-1], dim=0, out=offsets[1:])
-    else:
-        offsets = torch.zeros(1, dtype=torch.int32, device=device)
-    out = torch.empty(inp_ndim, nnz, dtype=torch.int64, device=device)
-    fill_kernel[(grid_size,)](
-        flat,
-        offsets,
-        out,
-        n_elements,
-        shape,
-        nnz,
-        ndim=inp_ndim,
-        BLOCK_SIZE=BLOCK_SIZE,
-        num_warps=16,
-    )
-    return list(out)
+    if n_elements <= SINGLE_BLOCK_THRESHOLD:
+        return _nonzero_single(inp, n_elements, ndim, shape)
+    return _nonzero_two_pass(inp, n_elements, ndim, shape)
