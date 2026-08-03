@@ -30,10 +30,12 @@ from .special_erfinv import special_erfinv, special_erfinv_, special_erfinv_out
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
+from .unsafe_masked_index_put_accumulate import _unsafe_masked_index_put_accumulate
 
 __all__ = [
     "_conv_depthwise2d",
     "_thnn_fused_lstm_cell_backward_impl",
+    "_unsafe_masked_index_put_accumulate",
     "adaptive_max_pool3d_backward",
     "broadcast_tensors",
     "broadcast_to",
