@@ -13,6 +13,7 @@
 # limitations under the License.
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .broadcast_to import broadcast_to
+from .cudnn_batch_norm_backward import cudnn_batch_norm_backward
 from .gcd_ import gcd, gcd_
 from .index_copy_ import index_copy, index_copy_
 from .lcm import lcm, lcm_
@@ -27,6 +28,7 @@ from .special_shifted_chebyshev_polynomial_w import (
 __all__ = [
     "adaptive_max_pool3d_backward",
     "broadcast_to",
+    "cudnn_batch_norm_backward",
     "gcd",
     "gcd_",
     "index_copy",
