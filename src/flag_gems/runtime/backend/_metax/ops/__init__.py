@@ -27,6 +27,7 @@ from .index import index
 from .index_put import index_put, index_put_
 from .index_select import index_select
 from .isin import isin
+from .kthvalue import kthvalue
 from .layernorm import layer_norm, layer_norm_backward
 from .linalg_svdvals import linalg_svdvals
 from .log_softmax import log_softmax, log_softmax_backward
@@ -73,6 +74,7 @@ __all__ = [
     "index_put_",
     "index_select",
     "isin",
+    "kthvalue",
     "layer_norm",
     "layer_norm_backward",
     "log_softmax",
