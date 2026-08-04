@@ -74,6 +74,10 @@ from .randperm import randperm
 from .renorm_ import renorm_
 from .silu import silu, silu_, silu_backward
 from .sort import sort, sort_stable
+from .special_chebyshev_polynomial_v import (
+    special_chebyshev_polynomial_v,
+    special_chebyshev_polynomial_v_out,
+)
 from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w,
     special_chebyshev_polynomial_w_out,
@@ -152,6 +156,8 @@ __all__ = [
     "true_divide_out",
     "trunc_divide",
     "trunc_divide_",
+    "special_chebyshev_polynomial_v",
+    "special_chebyshev_polynomial_v_out",
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
     "upsample_nearest2d",
