@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .addmm import addmm, addmm_, addmm_out
+from .avg_pool3d import avg_pool3d_backward
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .div import div_mode, div_mode_
@@ -41,6 +42,7 @@ __all__ = [
     "addmm",
     "addmm_",
     "addmm_out",
+    "avg_pool3d_backward",
     "div_mode",
     "div_mode_",
     "hadamard_transform",
