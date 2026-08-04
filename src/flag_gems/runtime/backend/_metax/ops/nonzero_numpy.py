@@ -22,21 +22,18 @@ import triton.language as tl
 
 from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
+from flag_gems.utils import triton_lang_extension as ext
 
 logger = logging.getLogger(__name__)
 
-# Threshold for single-block vs two-pass strategy.  A block-local cumsum is
-# cheap up to ~8192 lanes on this hardware, growing super-linearly past that.
+# Threshold for single-block vs two-pass strategy.
 SINGLE_BLOCK_THRESHOLD = 8192
 
-# Block size for the two-pass count + fill kernels.  Swept across {1024,
-# 2048, 4096, 8192}: 2048 is the sweet spot — wider tiles make the block-local
-# cumsum more expensive, narrower tiles leave the grid too fine-grained.
+# Block size for the two-pass count + fill kernels.
 TWO_PASS_BLOCK = 2048
 
-# Per-axis sizes are passed as plain scalar arguments rather than a device
-# tensor.  Building torch.tensor(shape) costs ~0.03 ms of host + H2D overhead
-# per call, which would dominate on the small shapes.
+# Per-axis sizes are passed as plain scalar arguments (avoids
+# ~0.03 ms of torch.tensor(shape) H2D overhead per call).
 MAX_NDIM = 4
 
 
@@ -54,14 +51,13 @@ def nonzero_single_kernel(
     ndim: tl.constexpr,
     BLOCK: tl.constexpr,
 ):
-    """Single-block nonzero for small tensors (≤ 8192 elements).
+    """Single-block nonzero for tensors <= 8192 elements.
 
-    Fuses the (!=0) test, block-local prefix-sum, per-axis index
-    decomposition, and SoA scatter into one launch.  Grid is (1,)
-    so the local cumsum is already the global prefix sum — no
-    cross-block scan needed.
+    Fuses (!=0) test, block-local prefix-sum, per-axis index
+    decomposition, and SoA scatter into one launch.  Grid size is
+    (1,) so the local cumsum is also the global prefix sum.
     """
-    pid = tl.program_id(0)
+    pid = ext.program_id(0)
     off = pid * BLOCK + tl.arange(0, BLOCK)
     mask = off < n_elements
 
@@ -102,7 +98,7 @@ def nonzero_count_kernel(
     BLOCK: tl.constexpr,
 ):
     """First pass for large tensors: count nonzeros per block."""
-    pid = tl.program_id(0)
+    pid = ext.program_id(0)
     off = pid * BLOCK + tl.arange(0, BLOCK)
     mask = off < n_elements
     vals = tl.load(inp + off, mask=mask, other=0)
@@ -126,13 +122,12 @@ def nonzero_fill_kernel(
     ndim: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
-    """Second pass: scatter indices with per-block exclusive-prefix offset.
+    """Second pass: scatter indices with per-block exclusive prefix.
 
     ``offsets`` holds the inclusive prefix sum of per-block counts.
     A block's exclusive base is ``offsets[pid] - block_counts[pid]``.
-    This preserves stable input order without atomics.
     """
-    pid = tl.program_id(0)
+    pid = ext.program_id(0)
     off = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = off < n_elements
     vals = tl.load(inp + off, mask=mask, other=0)
@@ -165,17 +160,12 @@ def nonzero_fill_kernel(
 
 
 def _shape_scalars(inp):
-    """Per-axis sizes as scalar ints, innermost axis first, padded to MAX_NDIM.
-
-    Only called when inp.ndim <= MAX_NDIM — the caller is responsible for
-    falling back to the generic path for higher-dimensional inputs.
-    """
     shape = list(inp.shape)
     return shape + [1] * (MAX_NDIM - len(shape))
 
 
 def _nonzero_single(inp, n_elements, ndim, shape):
-    """Single-block path for small tensors."""
+    """Single-block path for tensors <= 8192 elements."""
     flat = inp.contiguous().view(n_elements)
     block = triton.next_power_of_2(max(n_elements, 4))
     num_warps = 4 if block <= 4096 else 8
@@ -200,7 +190,7 @@ def _nonzero_single(inp, n_elements, ndim, shape):
 
 
 def _nonzero_two_pass(inp, n_elements, ndim, shape):
-    """Two-pass path for large tensors."""
+    """Two-pass path for tensors > 8192 elements."""
     flat = inp.contiguous().view(n_elements)
     block = TWO_PASS_BLOCK
     grid = triton.cdiv(n_elements, block)
@@ -237,24 +227,22 @@ def _nonzero_two_pass(inp, n_elements, ndim, shape):
 
 
 def nonzero_numpy(inp):
-    """Iluvatar-specific nonzero_numpy.
+    """Return indices of non-zero elements as a list of 1-D tensors.
 
-    Two-tier strategy matching the thead backend (PR #54):
+    Two-tier strategy:
+    * Small tensor (<= 8192 elements, <= 4-D): single-block fused
+      kernel (count + index decompose + scatter, one launch / one sync)
+    * Large tensor (<= 4-D): two-pass count + cumsum + fill (avoids
+      the full-tensor scan bottleneck of the generic path)
+    * > 4-D: falls back to the generic nonzero + unbind path
 
-    * Small tensor (≤8192 elements, ≤ 4-D): single-block fused kernel
-      (count + index decompose + scatter, one launch, one sync)
-    * Large tensor (≤ 4-D): two-pass count + cumsum + fill (avoids the
-      full-tensor scan bottleneck of the generic path)
-    * > 4-D: fall back to the generic ``nonzero()`` + ``unbind()``
-      path, which supports arbitrary dimensionality via device-tensor
-      shape arguments at the cost of ~0.03 ms of H2D overhead.
-
-    The generic implementation delegates to ``nonzero()`` which issues
-    three separate kernels per call (elementwise !=0, full-tensor
-    cumsum, scatter).  The combined launch overhead dominates on small
-    shapes, causing speedup to regress to ~0.2–0.4x.
+    The generic implementation does a full-tensor cumsum per call
+    which is O(N) with a serial dependency.  This implementation
+    avoids that scan entirely on small tensors (single-block path)
+    and reduces it to per-block counts + short cumulative sum on
+    large tensors.
     """
-    logger.debug("GEMS ILUVATAR NONZERO_NUMPY")
+    logger.debug("GEMS_METAX NONZERO_NUMPY")
 
     inp = inp.contiguous()
     n_elements = inp.numel()
@@ -263,9 +251,8 @@ def nonzero_numpy(inp):
     if n_elements == 0:
         return [inp.new_empty(0, dtype=torch.int64) for _ in range(ndim)]
 
-    # The optimized kernels pass per-axis sizes as scalar arguments (up to
-    # MAX_NDIM).  For higher-dimensional inputs, fall back to the generic
-    # nonzero() + unbind() path which loads shape from a device tensor.
+    # For high-dimensional inputs, fall back to the generic nonzero
+    # path which loads shape from a device tensor.
     if ndim > MAX_NDIM:
         from flag_gems.ops.nonzero import nonzero
 
