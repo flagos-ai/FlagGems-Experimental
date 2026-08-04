@@ -16,6 +16,7 @@ from .addmm import addmm, addmm_, addmm_out
 from .avg_pool3d import avg_pool3d_backward
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
+from .diagonal_scatter import diagonal_scatter
 from .div import div_mode, div_mode_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
@@ -44,6 +45,7 @@ __all__ = [
     "addmm_",
     "addmm_out",
     "avg_pool3d_backward",
+    "diagonal_scatter",
     "div_mode",
     "div_mode_",
     "hadamard_transform",
