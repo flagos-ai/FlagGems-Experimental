@@ -30,6 +30,7 @@ from .gelu import gelu, gelu_
 from .hadamard_transform import hadamard_transform
 from .index_copy_ import index_copy, index_copy_
 from .isin import isin
+from .lcm import lcm, lcm_
 from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
@@ -79,6 +80,8 @@ __all__ = [
     "index_copy",
     "index_copy_",
     "isin",
+    "lcm",
+    "lcm_",
     "log_normal_",
     "matmul_bf16",
     "matmul_int8",
