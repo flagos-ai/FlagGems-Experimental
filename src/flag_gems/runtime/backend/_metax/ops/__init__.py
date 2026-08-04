@@ -35,6 +35,7 @@ from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .min import min, min_dim
 from .mm import mm, mm_out
+from .mvlgamma_ import mvlgamma_
 from .nonzero import nonzero
 from .ones import ones
 from .ones_like import ones_like
@@ -84,6 +85,7 @@ __all__ = [
     "masked_fill_",
     "min_dim",
     "min",
+    "mvlgamma_",
     "mm",
     "mm_out",
     "nonzero",
