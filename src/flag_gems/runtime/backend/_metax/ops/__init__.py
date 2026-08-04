@@ -17,6 +17,7 @@ from .index_select import index_select
 from .isin import isin
 from .kthvalue import kthvalue
 from .layernorm import layer_norm, layer_norm_backward
+from .lgamma_ import lgamma, lgamma_
 from .linalg_svdvals import linalg_svdvals
 from .log_sigmoid_forward import log_sigmoid_forward
 from .log_softmax import log_softmax, log_softmax_backward
@@ -72,6 +73,8 @@ __all__ = [
     "layer_norm_backward",
     "linalg_svdvals",
     "log_sigmoid_forward",
+    "lgamma",
+    "lgamma_",
     "log_softmax",
     "log_softmax_backward",
     "matmul_bf16",
