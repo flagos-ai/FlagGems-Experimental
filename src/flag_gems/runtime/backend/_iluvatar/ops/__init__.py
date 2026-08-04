@@ -13,9 +13,11 @@
 # limitations under the License.
 
 from .addmm import addmm, addmm_, addmm_out
+from .avg_pool3d import avg_pool3d_backward
 from .broadcast_tensors import broadcast_tensors
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
+from .diagonal_scatter import diagonal_scatter
 from .div import div_mode, div_mode_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
@@ -26,6 +28,7 @@ from .mm import mm, mm_out
 from .nonzero_numpy import nonzero_numpy
 from .repeat import repeat
 from .scatter_add import scatter_add_
+from .softplus import softplus_backward
 from .special_modified_bessel_k1 import (
     special_modified_bessel_k1,
     special_modified_bessel_k1_out,
@@ -43,6 +46,8 @@ __all__ = [
     "addmm",
     "addmm_",
     "addmm_out",
+    "avg_pool3d_backward",
+    "diagonal_scatter",
     "div_mode",
     "div_mode_",
     "hadamard_transform",
@@ -55,6 +60,7 @@ __all__ = [
     "nonzero_numpy",
     "repeat",
     "scatter_add_",
+    "softplus_backward",
     "special_modified_bessel_k1",
     "special_modified_bessel_k1_out",
     "special_shifted_chebyshev_polynomial_w",
