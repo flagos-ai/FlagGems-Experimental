@@ -15,6 +15,7 @@
 from .addmm import addmm, addmm_, addmm_out
 from .avg_pool3d import avg_pool3d_backward
 from .broadcast_tensors import broadcast_tensors
+from .broadcast_to import broadcast_to
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .diagonal_scatter import diagonal_scatter
@@ -41,12 +42,13 @@ from .var import var, var_correction, var_dim
 
 __all__ = [
     "_conv_depthwise2d",
-    "broadcast_tensors",
-    "conv_transpose1d",
     "addmm",
     "addmm_",
     "addmm_out",
     "avg_pool3d_backward",
+    "broadcast_tensors",
+    "broadcast_to",
+    "conv_transpose1d",
     "diagonal_scatter",
     "div_mode",
     "div_mode_",
