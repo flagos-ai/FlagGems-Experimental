@@ -16,6 +16,7 @@ from ._native_batch_norm_legit_functional import _native_batch_norm_legit_functi
 from .addmm import addmm, addmm_out
 from .arccosh_ import arccosh_
 from .addmm import addmm, addmm_, addmm_out
+from .avg_pool3d import avg_pool3d_backward
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .div import div_mode, div_mode_
@@ -46,6 +47,7 @@ __all__ = [
     "addmm_out",
     "arccosh_",
     "conv_transpose1d",
+    "avg_pool3d_backward",
     "div_mode",
     "div_mode_",
     "hadamard_transform",
