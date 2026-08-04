@@ -55,6 +55,7 @@ from .special_chebyshev_polynomial_w import (
 )
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
+from .weight_norm import WeightNorm, weight_norm
 
 __all__ = [
     "_unique2",
@@ -108,4 +109,6 @@ __all__ = [
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
     "upsample_nearest2d",
+    "WeightNorm",
+    "weight_norm",
 ]
