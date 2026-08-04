@@ -31,11 +31,13 @@ from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
 from .unsafe_masked_index_put_accumulate import _unsafe_masked_index_put_accumulate
+from .upsample_nearest_exact2d_backward import _upsample_nearest_exact2d_backward
 
 __all__ = [
     "_conv_depthwise2d",
     "_thnn_fused_lstm_cell_backward_impl",
     "_unsafe_masked_index_put_accumulate",
+    "_upsample_nearest_exact2d_backward",
     "adaptive_max_pool3d_backward",
     "broadcast_tensors",
     "broadcast_to",
