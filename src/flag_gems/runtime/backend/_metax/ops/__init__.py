@@ -30,6 +30,7 @@ from .index_select import index_select
 from .isin import isin
 from .kthvalue import kthvalue
 from .layernorm import layer_norm, layer_norm_backward
+from .lgamma_ import lgamma, lgamma_
 from .linalg_svdvals import linalg_svdvals
 from .log_softmax import log_softmax, log_softmax_backward
 from .masked_fill import masked_fill, masked_fill_
@@ -81,6 +82,8 @@ __all__ = [
     "kthvalue",
     "layer_norm",
     "layer_norm_backward",
+    "lgamma",
+    "lgamma_",
     "log_softmax",
     "log_softmax_backward",
     "linalg_svdvals",
