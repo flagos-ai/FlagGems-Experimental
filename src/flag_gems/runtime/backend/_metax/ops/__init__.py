@@ -35,6 +35,7 @@ from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .min import min, min_dim
 from .mm import mm, mm_out
+from .new_ones import new_ones
 from .nonzero import nonzero
 from .ones import ones
 from .ones_like import ones_like
@@ -86,6 +87,7 @@ __all__ = [
     "min",
     "mm",
     "mm_out",
+    "new_ones",
     "nonzero",
     "ones",
     "ones_like",
