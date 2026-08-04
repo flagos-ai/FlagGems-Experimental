@@ -25,6 +25,7 @@ from .matmul_int8 import matmul_int8
 from .min import min, min_dim
 from .mm import mm, mm_out
 from .nonzero import nonzero
+from .nonzero_numpy import nonzero_numpy
 from .ones import ones
 from .ones_like import ones_like
 from .outer import outer
@@ -79,6 +80,7 @@ __all__ = [
     "mm",
     "mm_out",
     "nonzero",
+    "nonzero_numpy",
     "ones",
     "ones_like",
     "outer",
