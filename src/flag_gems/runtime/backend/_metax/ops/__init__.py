@@ -15,6 +15,7 @@
 from ._nested_view_from_buffer_copy import _nested_view_from_buffer_copy
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .addmm import addmm
+from .alpha_dropout import alpha_dropout
 from .amax import amax
 from .arange import arange, arange_start
 from .batch_norm import batch_norm, batch_norm_backward
@@ -63,8 +64,9 @@ from .zeros_like import zeros_like
 __all__ = [
     "_nested_view_from_buffer_copy",
     "_unique2",
-    "addmm",
     "adaptive_max_pool3d_backward",
+    "addmm",
+    "alpha_dropout",
     "amax",
     "arange",
     "arange_start",
