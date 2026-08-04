@@ -17,6 +17,7 @@ from .addmm import addmm, addmm_out
 from .arccosh_ import arccosh_
 from .addmm import addmm, addmm_, addmm_out
 from .avg_pool3d import avg_pool3d_backward
+from .broadcast_tensors import broadcast_tensors
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .diagonal_scatter import diagonal_scatter
@@ -44,6 +45,8 @@ from .var import var, var_correction, var_dim
 __all__ = [
     "_conv_depthwise2d",
     "_native_batch_norm_legit_functional",
+    "broadcast_tensors",
+    "conv_transpose1d",
     "addmm",
     "addmm_",
     "addmm_out",
@@ -60,6 +63,7 @@ __all__ = [
     "matmul_int8",
     "mm",
     "mm_out",
+    "nonzero_numpy",
     "repeat",
     "scatter_add_",
     "softplus_backward",
@@ -70,7 +74,4 @@ __all__ = [
     "var",
     "var_correction",
     "var_dim",
-    "mm",
-    "mm_out",
-    "nonzero_numpy",
 ]
