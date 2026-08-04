@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ._amp_foreach_non_finite_check_and_unscale_ import (
+    _amp_foreach_non_finite_check_and_unscale_,
+)
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .any import any, any_dim, any_dims
 from .attention import (
@@ -22,14 +25,18 @@ from .attention import (
     scaled_dot_product_attention_backward,
     scaled_dot_product_attention_forward,
 )
+from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cudnn_convolution import cudnn_convolution
+from .diff import diff
 from .exponential_ import exponential_
 from .fill import fill_scalar, fill_scalar_, fill_tensor, fill_tensor_
 from .gelu import gelu, gelu_
 from .hadamard_transform import hadamard_transform
 from .index_copy_ import index_copy, index_copy_
+from .index_select_backward import index_select_backward
 from .isin import isin
+from .lcm import lcm, lcm_
 from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
@@ -49,14 +56,21 @@ from .randperm import randperm
 from .renorm_ import renorm_
 from .silu import silu, silu_, silu_backward
 from .sort import sort, sort_stable
+from .special_chebyshev_polynomial_v import (
+    special_chebyshev_polynomial_v,
+    special_chebyshev_polynomial_v_out,
+)
 from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w,
     special_chebyshev_polynomial_w_out,
 )
+from .split_with_sizes_copy import split_with_sizes_copy
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
+from .weight_norm import WeightNorm, weight_norm
 
 __all__ = [
+    "_amp_foreach_non_finite_check_and_unscale_",
     "_unique2",
     "ScaleDotProductAttention",
     "SUPPORTED_FP8_DTYPE",
@@ -64,8 +78,10 @@ __all__ = [
     "any",
     "any_dim",
     "any_dims",
+    "broadcast_tensors",
     "broadcast_to",
     "cudnn_convolution",
+    "diff",
     "exponential_",
     "fill_scalar",
     "fill_scalar_",
@@ -78,7 +94,10 @@ __all__ = [
     "hadamard_transform",
     "index_copy",
     "index_copy_",
+    "index_select_backward",
     "isin",
+    "lcm",
+    "lcm_",
     "log_normal_",
     "matmul_bf16",
     "matmul_int8",
@@ -105,7 +124,12 @@ __all__ = [
     "silu_backward",
     "sort",
     "sort_stable",
+    "special_chebyshev_polynomial_v",
+    "special_chebyshev_polynomial_v_out",
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
+    "split_with_sizes_copy",
     "upsample_nearest2d",
+    "WeightNorm",
+    "weight_norm",
 ]
