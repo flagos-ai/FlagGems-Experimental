@@ -37,6 +37,7 @@ from .div import (
 )
 from .broadcast_to import broadcast_to
 from .cudnn_convolution import cudnn_convolution
+from .diff import diff
 from .exponential_ import exponential_
 from .fill import (
     fill_scalar,
@@ -92,6 +93,7 @@ __all__ = [
     "div_mode_",
     "broadcast_to",
     "cudnn_convolution",
+    "diff",
     "exponential_",
     "fill_scalar",
     "fill_scalar_",
