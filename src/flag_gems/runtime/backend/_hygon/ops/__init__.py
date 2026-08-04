@@ -24,6 +24,7 @@ from .attention import (
 )
 from .broadcast_to import broadcast_to
 from .cudnn_convolution import cudnn_convolution
+from .diff import diff
 from .exponential_ import exponential_
 from .fill import fill_scalar, fill_scalar_, fill_tensor, fill_tensor_
 from .gelu import gelu, gelu_
@@ -68,6 +69,7 @@ __all__ = [
     "any_dims",
     "broadcast_to",
     "cudnn_convolution",
+    "diff",
     "exponential_",
     "fill_scalar",
     "fill_scalar_",
