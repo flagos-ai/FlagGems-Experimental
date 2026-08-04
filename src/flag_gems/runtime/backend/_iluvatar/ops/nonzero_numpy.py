@@ -165,10 +165,12 @@ def nonzero_fill_kernel(
 
 
 def _shape_scalars(inp):
-    """Per-axis sizes as scalar ints, innermost axis first, padded to MAX_NDIM."""
+    """Per-axis sizes as scalar ints, innermost axis first, padded to MAX_NDIM.
+
+    Only called when inp.ndim <= MAX_NDIM — the caller is responsible for
+    falling back to the generic path for higher-dimensional inputs.
+    """
     shape = list(inp.shape)
-    if len(shape) > MAX_NDIM:
-        shape = shape[-MAX_NDIM:]
     return shape + [1] * (MAX_NDIM - len(shape))
 
 
@@ -239,10 +241,13 @@ def nonzero_numpy(inp):
 
     Two-tier strategy matching the thead backend (PR #54):
 
-    * Small tensor (≤8192 elements): single-block fused kernel
+    * Small tensor (≤8192 elements, ≤ 4-D): single-block fused kernel
       (count + index decompose + scatter, one launch, one sync)
-    * Large tensor: two-pass count + cumsum + fill (avoids the
+    * Large tensor (≤ 4-D): two-pass count + cumsum + fill (avoids the
       full-tensor scan bottleneck of the generic path)
+    * > 4-D: fall back to the generic ``nonzero()`` + ``unbind()``
+      path, which supports arbitrary dimensionality via device-tensor
+      shape arguments at the cost of ~0.03 ms of H2D overhead.
 
     The generic implementation delegates to ``nonzero()`` which issues
     three separate kernels per call (elementwise !=0, full-tensor
@@ -257,6 +262,15 @@ def nonzero_numpy(inp):
 
     if n_elements == 0:
         return [inp.new_empty(0, dtype=torch.int64) for _ in range(ndim)]
+
+    # The optimized kernels pass per-axis sizes as scalar arguments (up to
+    # MAX_NDIM).  For higher-dimensional inputs, fall back to the generic
+    # nonzero() + unbind() path which loads shape from a device tensor.
+    if ndim > MAX_NDIM:
+        from flag_gems.ops.nonzero import nonzero
+
+        out = nonzero(inp, as_tuple=False)
+        return list(out.unbind(dim=1))
 
     shape = _shape_scalars(inp)
 
