@@ -29,6 +29,7 @@ from .fill import fill_scalar, fill_scalar_, fill_tensor, fill_tensor_
 from .gelu import gelu, gelu_
 from .hadamard_transform import hadamard_transform
 from .index_copy_ import index_copy, index_copy_
+from .index_select_backward import index_select_backward
 from .isin import isin
 from .lcm import lcm, lcm_
 from .log_normal_ import log_normal_
@@ -79,6 +80,7 @@ __all__ = [
     "hadamard_transform",
     "index_copy",
     "index_copy_",
+    "index_select_backward",
     "isin",
     "lcm",
     "lcm_",
