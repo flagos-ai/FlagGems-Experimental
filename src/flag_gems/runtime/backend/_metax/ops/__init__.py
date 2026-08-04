@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from ._nested_view_from_buffer_copy import _nested_view_from_buffer_copy
+from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .addmm import addmm
 from .amax import amax
 from .arange import arange, arange_start
@@ -63,6 +64,7 @@ __all__ = [
     "_nested_view_from_buffer_copy",
     "_unique2",
     "addmm",
+    "adaptive_max_pool3d_backward",
     "amax",
     "arange",
     "arange_start",
