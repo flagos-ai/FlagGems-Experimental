@@ -647,6 +647,7 @@ from flag_gems.ops.uniform import uniform_
 from flag_gems.ops.unique import _unique2
 from flag_gems.ops.unique_consecutive import unique_consecutive
 from flag_gems.ops.unique_dim import unique_dim
+from flag_gems.ops.unsafe_split_with_sizes import unsafe_split_with_sizes
 from flag_gems.ops.unsqueeze import unsqueeze, unsqueeze_
 from flag_gems.ops.upsample_bicubic2d import upsample_bicubic2d
 from flag_gems.ops.upsample_bicubic2d_aa import _upsample_bicubic2d_aa
@@ -1435,6 +1436,7 @@ __all__ = [
     "uniform_",
     "unique_consecutive",
     "unique_dim",
+    "unsafe_split_with_sizes",
     "unsqueeze",
     "unsqueeze_",
     "upsample_bicubic2d",
