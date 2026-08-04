@@ -25,6 +25,7 @@ from .attention import (
     scaled_dot_product_attention_backward,
     scaled_dot_product_attention_forward,
 )
+from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cudnn_convolution import cudnn_convolution
 from .diff import diff
@@ -77,6 +78,7 @@ __all__ = [
     "any",
     "any_dim",
     "any_dims",
+    "broadcast_tensors",
     "broadcast_to",
     "cudnn_convolution",
     "diff",
