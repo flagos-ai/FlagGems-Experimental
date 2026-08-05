@@ -24,6 +24,7 @@ from .diagonal_scatter import diagonal_scatter
 from .div import div_mode, div_mode_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
+from .index_select_backward import index_select_backward
 from .linear import linear
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
@@ -58,6 +59,7 @@ __all__ = [
     "div_mode_",
     "hadamard_transform",
     "histc",
+    "index_select_backward",
     "linear",
     "matmul_bf16",
     "matmul_int8",
