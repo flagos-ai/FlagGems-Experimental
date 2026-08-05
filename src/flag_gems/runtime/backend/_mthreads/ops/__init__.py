@@ -25,6 +25,7 @@ from .conv2d import conv2d
 from .dropout import dropout, dropout_backward
 from .flip import flip
 from .gather import gather, gather_backward
+from .im2col import im2col
 from .index_add import index_add, index_add_
 from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
@@ -85,6 +86,7 @@ __all__ = [
     "flip",
     "gather",
     "gather_backward",
+    "im2col",
     "index_add",
     "index_add_",
     "index_put",
