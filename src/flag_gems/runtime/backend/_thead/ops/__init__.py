@@ -17,6 +17,7 @@ from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .conv_depthwise2d import _conv_depthwise2d
 from .cudnn_batch_norm_backward import cudnn_batch_norm_backward
+from .cudnn_convolution import cudnn_convolution
 from .diagonal_scatter import diagonal_scatter
 from .gcd_ import gcd, gcd_
 from .index_copy_ import index_copy, index_copy_
@@ -42,6 +43,7 @@ __all__ = [
     "broadcast_tensors",
     "broadcast_to",
     "cudnn_batch_norm_backward",
+    "cudnn_convolution",
     "diagonal_scatter",
     "gcd",
     "gcd_",
