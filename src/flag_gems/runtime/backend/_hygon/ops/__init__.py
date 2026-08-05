@@ -27,6 +27,7 @@ from .attention import (
 )
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
+from .conv_transpose1d import conv_transpose1d
 from .cudnn_convolution import cudnn_convolution
 from .diff import diff
 from .exponential_ import exponential_
@@ -80,6 +81,7 @@ __all__ = [
     "any_dims",
     "broadcast_tensors",
     "broadcast_to",
+    "conv_transpose1d",
     "cudnn_convolution",
     "diff",
     "exponential_",
