@@ -59,6 +59,7 @@ from .special_shifted_chebyshev_polynomial_w import (
 from .tanh import tanh
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
+from .weight_norm import weight_norm_interface, weight_norm_interface_backward
 from .zeros import zeros
 from .zeros_like import zeros_like
 
@@ -118,6 +119,8 @@ __all__ = [
     "special_shifted_chebyshev_polynomial_w",
     "tanh",
     "upsample_nearest2d",
+    "weight_norm_interface",
+    "weight_norm_interface_backward",
     "zeros",
     "zeros_like",
 ]
