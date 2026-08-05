@@ -23,6 +23,7 @@ from .batch_norm import batch_norm, batch_norm_backward
 from .celu import celu
 from .conv2d import conv2d
 from .dropout import dropout, dropout_backward
+from .erfinv import erfinv
 from .flip import flip
 from .gather import gather, gather_backward
 from .index_add import index_add, index_add_
@@ -82,6 +83,7 @@ __all__ = [
     "conv2d",
     "dropout",
     "dropout_backward",
+    "erfinv",
     "flip",
     "gather",
     "gather_backward",
