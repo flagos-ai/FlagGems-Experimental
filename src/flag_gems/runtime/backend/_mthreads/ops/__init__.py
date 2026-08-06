@@ -39,6 +39,7 @@ from .log_softmax import (
 from .max import max, max_dim
 from .min import min, min_dim
 from .mode import mode
+from .norm import norm, norm_scalar, norm_scalaropt_dim
 from .normal import normal_
 from .one_hot import one_hot
 from .ones import ones
@@ -103,6 +104,9 @@ __all__ = [
     "min",
     "min_dim",
     "mode",
+    "norm",
+    "norm_scalar",
+    "norm_scalaropt_dim",
     "normal_",
     "one_hot",
     "ones",
