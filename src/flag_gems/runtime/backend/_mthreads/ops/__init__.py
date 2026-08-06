@@ -24,6 +24,7 @@ from .celu import celu
 from .conv2d import conv2d
 from .dropout import dropout, dropout_backward
 from .flip import flip
+from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
 from .gather import gather, gather_backward
 from .index_add import index_add, index_add_
 from .index_put import _index_put_impl_, index_put, index_put_
@@ -83,6 +84,9 @@ __all__ = [
     "dropout",
     "dropout_backward",
     "flip",
+    "fmod_",
+    "fmod_scalar_",
+    "fmod_tensor_",
     "gather",
     "gather_backward",
     "index_add",
