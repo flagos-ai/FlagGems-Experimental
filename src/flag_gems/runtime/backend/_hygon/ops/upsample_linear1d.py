@@ -89,7 +89,9 @@ def upsample_linear1d(
     NC = N * C
 
     if output_size is not None:
-        W_out = int(output_size[0] if isinstance(output_size, (list, tuple)) else output_size)
+        W_out = int(
+            output_size[0] if isinstance(output_size, (list, tuple)) else output_size
+        )
     else:
         assert scales is not None
         W_out = int(math.floor(W_in * scales))
