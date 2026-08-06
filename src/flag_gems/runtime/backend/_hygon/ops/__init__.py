@@ -75,7 +75,7 @@ from .pow import (
     pow_tensor_tensor_,
 )
 from .randperm import randperm
-from .renorm_ import renorm_
+from .renorm import renorm, renorm_
 from .silu import silu, silu_, silu_backward
 from .sort import sort, sort_stable
 from .special_chebyshev_polynomial_v import (
@@ -149,6 +149,7 @@ __all__ = [
     "randperm",
     "remainder",
     "remainder_",
+    "renorm",
     "renorm_",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
