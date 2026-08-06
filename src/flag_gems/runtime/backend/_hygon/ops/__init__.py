@@ -76,6 +76,7 @@ from .pow import (
 )
 from .randperm import randperm
 from .renorm_ import renorm_
+from .repeat import repeat
 from .silu import silu, silu_, silu_backward
 from .sort import sort, sort_stable
 from .special_chebyshev_polynomial_v import (
@@ -150,6 +151,7 @@ __all__ = [
     "remainder",
     "remainder_",
     "renorm_",
+    "repeat",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
