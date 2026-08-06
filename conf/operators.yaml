@@ -6993,6 +6993,7 @@ ops:
     labels:
       - aten
       - IR
+      - KernelGen
     kind:
       - NeuralNetwork
     stages:

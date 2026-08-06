@@ -66,6 +66,7 @@ from .median import median_dim, median_dim_values
 from .mm import mm
 from .mul import mul, mul_
 from .nansum import nansum, nansum_out
+from .nll_loss_backward import nll_loss_backward
 from .per_token_group_quant_fp8 import SUPPORTED_FP8_DTYPE, per_token_group_quant_fp8
 from .pow import (
     pow_scalar,
@@ -140,6 +141,7 @@ __all__ = [
     "mm",
     "nansum",
     "nansum_out",
+    "nll_loss_backward",
     "per_token_group_quant_fp8",
     "pow_scalar",
     "pow_tensor_scalar",
