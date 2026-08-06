@@ -75,6 +75,7 @@ from .pow import (
     pow_tensor_tensor_,
 )
 from .randperm import randperm
+from .reflection_pad3d_backward import reflection_pad3d_backward
 from .renorm_ import renorm_
 from .silu import silu, silu_, silu_backward
 from .sort import sort, sort_stable
@@ -147,6 +148,7 @@ __all__ = [
     "pow_tensor_tensor",
     "pow_tensor_tensor_",
     "randperm",
+    "reflection_pad3d_backward",
     "remainder",
     "remainder_",
     "renorm_",
