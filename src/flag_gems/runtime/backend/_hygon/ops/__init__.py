@@ -88,6 +88,7 @@ from .special_chebyshev_polynomial_w import (
 )
 from .split_with_sizes_copy import split_with_sizes_copy
 from .unique import _unique2
+from .upsample_bicubic2d import upsample_bicubic2d
 from .upsample_nearest2d import upsample_nearest2d
 from .weight_norm import WeightNorm, weight_norm
 
@@ -168,6 +169,7 @@ __all__ = [
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
     "split_with_sizes_copy",
+    "upsample_bicubic2d",
     "upsample_nearest2d",
     "WeightNorm",
     "weight_norm",

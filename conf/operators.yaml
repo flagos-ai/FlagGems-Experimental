@@ -10841,6 +10841,7 @@ ops:
     labels:
       - aten
       - Reduction
+      - KernelGen
     kind:
       - NeuralNetwork
     stages:
