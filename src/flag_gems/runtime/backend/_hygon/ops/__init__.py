@@ -62,6 +62,7 @@ from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .max_pool3d_with_indices import max_pool3d_backward, max_pool3d_with_indices
+from .max_unpool2d import max_unpool2d
 from .median import median_dim, median_dim_values
 from .mm import mm
 from .mul import mul, mul_
@@ -133,6 +134,7 @@ __all__ = [
     "matmul_int8",
     "max_pool3d_backward",
     "max_pool3d_with_indices",
+    "max_unpool2d",
     "median_dim",
     "median_dim_values",
     "mul",
