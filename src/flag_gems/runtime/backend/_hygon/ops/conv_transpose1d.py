@@ -45,7 +45,13 @@ def conv_transpose1d_output_size(
     Returns:
         Output size of 1D transposed convolution.
     """
-    return (in_size - 1) * stride - 2 * padding + dilation * (kernel_size - 1) + output_padding + 1
+    return (
+        (in_size - 1) * stride
+        - 2 * padding
+        + dilation * (kernel_size - 1)
+        + output_padding
+        + 1
+    )
 
 
 def get_hygon_configs():
@@ -140,7 +146,9 @@ def conv_transpose1d_forward_kernel_hygon(
 
     # Pointers setup
     input_base = (
-        input_pointer + (input_n_stride * batch_idx)[:, None] + (input_c_stride * pid_group * in_channels_per_group)
+        input_pointer
+        + (input_n_stride * batch_idx)[:, None]
+        + (input_c_stride * pid_group * in_channels_per_group)
     )
     weight_base = (
         weight_pointer
@@ -165,7 +173,11 @@ def conv_transpose1d_forward_kernel_hygon(
         in_w_idx = numerator // stride_width
 
         # Load input values
-        curr_input_pointer = input_base + (input_c_stride * ic_offset)[None, :] + (input_w_stride * in_w_idx)[:, None]
+        curr_input_pointer = (
+            input_base
+            + (input_c_stride * ic_offset)[None, :]
+            + (input_w_stride * in_w_idx)[:, None]
+        )
         input_mask = (
             (batch_idx < batch_size)[:, None]
             & (ic_offset < in_channels_per_group)[None, :]
@@ -176,12 +188,20 @@ def conv_transpose1d_forward_kernel_hygon(
         input_block = tl.load(curr_input_pointer, mask=input_mask, other=0.0)
 
         # Load weight values
-        curr_weight_pointer = weight_base + (weight_ic_stride * ic_offset)[:, None] + (weight_w_stride * k)
-        weight_mask = (ic_offset < in_channels_per_group)[:, None] & (oc_offset < out_channels_per_group)[None, :]
+        curr_weight_pointer = (
+            weight_base
+            + (weight_ic_stride * ic_offset)[:, None]
+            + (weight_w_stride * k)
+        )
+        weight_mask = (ic_offset < in_channels_per_group)[:, None] & (
+            oc_offset < out_channels_per_group
+        )[None, :]
         weight_block = tl.load(curr_weight_pointer, mask=weight_mask, other=0.0)
 
         # Accumulate using FP32 for numerical stability on Hygon DCU
-        accum += tl.dot(input_block.to(tl.float32), weight_block.to(tl.float32), allow_tf32=False)
+        accum += tl.dot(
+            input_block.to(tl.float32), weight_block.to(tl.float32), allow_tf32=False
+        )
 
     # Add bias if present
     bias_ptr = bias_pointer + pid_group * out_channels_per_group + oc_offset
@@ -234,7 +254,9 @@ def conv_transpose1d(
 
     assert input.ndim == 3, f"Input must be 3D, received shape {input.shape}"
     assert weight.ndim == 3, f"Weights must be 3D, received shape {weight.shape}"
-    assert bias is None or bias.ndim == 1, f"Bias must be 1D, received shape {bias.shape}"
+    assert (
+        bias is None or bias.ndim == 1
+    ), f"Bias must be 1D, received shape {bias.shape}"
 
     # Parse stride, padding, output_padding, dilation
     if isinstance(stride, (list, tuple)):
@@ -263,7 +285,9 @@ def conv_transpose1d(
     assert (
         in_channels == in_channels_weight
     ), f"Input channels ({in_channels}) must match weight in_channels ({in_channels_weight})"
-    assert in_channels % groups == 0, f"in_channels ({in_channels}) must be divisible by groups ({groups})"
+    assert (
+        in_channels % groups == 0
+    ), f"in_channels ({in_channels}) must be divisible by groups ({groups})"
 
     out_channels = out_channels_per_group * groups
 
@@ -298,7 +322,9 @@ def conv_transpose1d(
 
     # Create bias pointer (zeros if no bias)
     if bias is None:
-        bias_pointer = torch.zeros(out_channels, device=input.device, dtype=output_dtype)
+        bias_pointer = torch.zeros(
+            out_channels, device=input.device, dtype=output_dtype
+        )
     else:
         bias_pointer = bias
 
