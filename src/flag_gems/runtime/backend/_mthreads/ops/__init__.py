@@ -20,6 +20,7 @@ from .any import any, any_dim, any_dims
 from .arange import arange, arange_start
 from .argmin import argmin
 from .batch_norm import batch_norm, batch_norm_backward
+from .bucketize import bucketize
 from .celu import celu
 from .conv2d import conv2d
 from .dropout import dropout, dropout_backward
@@ -76,6 +77,7 @@ __all__ = [
     "argmin",
     "batch_norm",
     "batch_norm_backward",
+    "bucketize",
     "celu",
     # "celu_",
     "conv2d",
