@@ -86,6 +86,7 @@ from .select_backward import select_backward
 from .select_scatter import select_scatter
 from .slice_scatter import slice_scatter
 from .softmax import softmax, softmax_backward, softmax_backward_out, softmax_out
+from .softplus_backward import softplus_backward
 from .sort import sort
 from .stack import stack
 from .threshold import threshold, threshold_backward
@@ -199,6 +200,7 @@ __all__ = [
     "softmax_backward",
     "softmax_backward_out",
     "softmax_out",
+    "softplus_backward",
     "sort",
     "stack",
     "threshold",
