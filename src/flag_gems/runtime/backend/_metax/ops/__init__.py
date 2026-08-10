@@ -1,5 +1,7 @@
 from ._make_dep_token import _make_dep_token
 from ._nested_view_from_buffer_copy import _nested_view_from_buffer_copy
+from ._thnn_fused_lstm_cell_backward_impl import _thnn_fused_lstm_cell_backward_impl
+from ._unsafe_masked_index_put_accumulate import _unsafe_masked_index_put_accumulate
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .addmm import addmm
 from .alpha_dropout import alpha_dropout
@@ -13,9 +15,11 @@ from .full import full
 from .full_like import full_like
 from .groupnorm import group_norm
 from .hadamard_transform import hadamard_transform
+from .histc import histc
 from .index import index
 from .index_put import index_put, index_put_
 from .index_select import index_select
+from .index_select_backward import index_select_backward
 from .isin import isin
 from .kthvalue import kthvalue
 from .layernorm import layer_norm, layer_norm_backward
@@ -54,7 +58,9 @@ from .zeros_like import zeros_like
 __all__ = [
     "_make_dep_token",
     "_nested_view_from_buffer_copy",
+    "_thnn_fused_lstm_cell_backward_impl",
     "_unique2",
+    "_unsafe_masked_index_put_accumulate",
     "adaptive_max_pool3d_backward",
     "addmm",
     "alpha_dropout",
@@ -70,10 +76,12 @@ __all__ = [
     "full_like",
     "group_norm",
     "hadamard_transform",
+    "histc",
     "index",
     "index_put",
     "index_put_",
     "index_select",
+    "index_select_backward",
     "isin",
     "kthvalue",
     "layer_norm",
