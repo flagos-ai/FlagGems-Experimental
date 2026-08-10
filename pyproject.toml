@@ -106,7 +106,7 @@ enflame-tops1910 = [
     "torchaudio==2.10.0+cpu",
     "torchvision==0.25.0+cpu",
     "torch-gcu==2.10.0+3.7.20260408",
-    "flash-attn==2.7.2+torch.2.10.0.gcu.3.4.20260506",
+    "flash-attn==2.8.3.post1",
 ]
 
 enflame-tops1106 = [
@@ -118,7 +118,7 @@ enflame-tops1106 = [
     "torchvision==0.26.0+cpu",
     "torch-gcu==2.11.0+3.8.20260713",
     "torchcodec==3.8.20260624+torch.2.11.0",
-    "flash-attn==2.7.2+torch.2.11.0.gcu.3.8.20260706",
+    "flash-attn==2.8.3.post1",
     "tops-extension==3.6.20260529+torch.2.11.0",
     "topstx==1.10.6",
 ]
@@ -138,7 +138,7 @@ kunlunxin = [
     "apex==0.1",
     "benchflow==1.0.0",
     "colorama==0.4.6",
-    "flash_attn==2.4.2+7e2dd4d",
+    "flash_attn==2.8.3.post1",
     "hydrax==0.1.0",
     "hyperparameter==0.5.6",
     "psutil==6.1.0",
@@ -156,13 +156,13 @@ metax-maca3720 = [
     "torch==2.8.0+metax3.7.2.0",
     "torchaudio==2.4.1+metax3.7.2.0",
     "torchvision==0.15.1+metax3.7.2.0",
-    "flash_attn==2.6.3+metax3.7.2.0torch2.8",
+    "flash_attn==2.8.3.post1",
     "numpy==2.3.5",
 ]
 
 metax-maca3810 = [
     "apex==0.1+metax3.8.1.0",
-    "flash_attn==2.6.3+metax3.8.1.0torch2.10",
+    "flash_attn==2.8.3.post1",
     "flashinfer==0.2.6+metax3.8.1.0torch2.10",
     "flash_linear_attention==0.5.0+metax3.8.1.0torch2.10",
     "flash_mla==1.0.1+metax3.8.1.0torch2.10",
