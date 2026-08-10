@@ -13,9 +13,8 @@
 # limitations under the License.
 
 from ._native_batch_norm_legit_functional import _native_batch_norm_legit_functional
-from .addmm import addmm, addmm_out
-from .arccosh_ import arccosh_
 from .addmm import addmm, addmm_, addmm_out
+from .arccosh_ import arccosh_
 from .avg_pool3d import avg_pool3d_backward
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
@@ -46,13 +45,10 @@ from .var import var, var_correction, var_dim
 __all__ = [
     "_conv_depthwise2d",
     "_native_batch_norm_legit_functional",
-    "broadcast_tensors",
-    "conv_transpose1d",
     "addmm",
     "addmm_",
     "addmm_out",
     "arccosh_",
-    "conv_transpose1d",
     "avg_pool3d_backward",
     "broadcast_tensors",
     "broadcast_to",
