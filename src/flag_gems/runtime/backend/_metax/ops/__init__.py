@@ -87,6 +87,7 @@ __all__ = [
     "layer_norm",
     "layer_norm_backward",
     "linalg_svdvals",
+    "linear_backward",
     "log_sigmoid_forward",
     "lgamma",
     "lgamma_",
