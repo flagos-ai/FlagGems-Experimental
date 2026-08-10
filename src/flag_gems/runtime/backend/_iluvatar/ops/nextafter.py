@@ -19,10 +19,15 @@ import triton.language as tl
 
 
 @triton.jit
-def _nextafter_pointwise(x_ptr, y_ptr, out_ptr, numel,
-                         BLOCK: tl.constexpr,
-                         IS32: tl.constexpr,
-                         IS_BF16: tl.constexpr):
+def _nextafter_pointwise(
+    x_ptr,
+    y_ptr,
+    out_ptr,
+    numel,
+    BLOCK: tl.constexpr,
+    IS32: tl.constexpr,
+    IS_BF16: tl.constexpr,
+):
     pid = tl.program_id(0)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     mask = offs < numel
@@ -37,7 +42,7 @@ def _nextafter_pointwise(x_ptr, y_ptr, out_ptr, numel,
         ix = x.to(tl.int16, bitcast=True).to(tl.int32)
         iy = y.to(tl.int16, bitcast=True).to(tl.int32)
 
-    ABS_MASK = 2147483647       # 0x7FFFFFFF
+    ABS_MASK = 2147483647  # 0x7FFFFFFF
     NEG_ONE_BITS = -2147483647  # 0x80000001 (sign bit | 1)
 
     ax = ix & ABS_MASK
@@ -101,7 +106,14 @@ def run(input, other):
     if dt == torch.float16 and numel <= _SMALL_THRESHOLD:
         block, num_warps = _SMALL_F16
     grid = (triton.cdiv(numel, block),)
-    _nextafter_pointwise[grid](input, other, output, numel,
-                               BLOCK=block, IS32=is32, IS_BF16=is_bf16,
-                               num_warps=num_warps)
+    _nextafter_pointwise[grid](
+        input,
+        other,
+        output,
+        numel,
+        BLOCK=block,
+        IS32=is32,
+        IS_BF16=is_bf16,
+        num_warps=num_warps,
+    )
     return output

@@ -17,7 +17,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 # ---------------------------------------------------------------------------
 # One-sided Jacobi SVD (singular values only).
 #
@@ -43,8 +42,7 @@ import triton.language as tl
 
 
 @triton.jit
-def _jacobi_rot2(G, V, p, q, i_idx, j_idx, TOL: tl.constexpr,
-                 NEED_V: tl.constexpr):
+def _jacobi_rot2(G, V, p, q, i_idx, j_idx, TOL: tl.constexpr, NEED_V: tl.constexpr):
     """One Jacobi rotation on symmetric G (registers); optionally accumulate V.
     p, q are scalar column indices.  Returns updated (G, V)."""
     row_p = tl.sum(tl.where(i_idx[:, None] == p, G, 0.0), axis=0)
@@ -56,8 +54,9 @@ def _jacobi_rot2(G, V, p, q, i_idx, j_idx, TOL: tl.constexpr,
     if tl.abs(gamma) > thresh:
         zeta = (beta - alpha) / (2.0 * gamma)
         signz = tl.where(zeta > 0.0, 1.0, tl.where(zeta < 0.0, -1.0, 0.0))
-        t = tl.where(zeta == 0.0, 1.0,
-                     signz / (tl.abs(zeta) + tl.sqrt(1.0 + zeta * zeta)))
+        t = tl.where(
+            zeta == 0.0, 1.0, signz / (tl.abs(zeta) + tl.sqrt(1.0 + zeta * zeta))
+        )
         c = 1.0 / tl.sqrt(1.0 + t * t)
         s = c * t
         newp = c * row_p - s * row_q
@@ -68,11 +67,14 @@ def _jacobi_rot2(G, V, p, q, i_idx, j_idx, TOL: tl.constexpr,
         newp_c = tl.where(j_idx == p, Gpp, tl.where(j_idx == q, Gpq, newp))
         newq_c = tl.where(j_idx == p, Gpq, tl.where(j_idx == q, Gqq, newq))
         G = tl.where(
-            i_idx[:, None] == p, newp_c[None, :],
+            i_idx[:, None] == p,
+            newp_c[None, :],
             tl.where(
-                i_idx[:, None] == q, newq_c[None, :],
+                i_idx[:, None] == q,
+                newq_c[None, :],
                 tl.where(
-                    j_idx[None, :] == p, newp_c[:, None],
+                    j_idx[None, :] == p,
+                    newp_c[:, None],
                     tl.where(j_idx[None, :] == q, newq_c[:, None], G),
                 ),
             ),
@@ -83,16 +85,23 @@ def _jacobi_rot2(G, V, p, q, i_idx, j_idx, TOL: tl.constexpr,
             ncp = c * col_p - s * col_q
             ncq = s * col_p + c * col_q
             V = tl.where(
-                j_idx[None, :] == p, ncp[:, None],
+                j_idx[None, :] == p,
+                ncp[:, None],
                 tl.where(j_idx[None, :] == q, ncq[:, None], V),
             )
     return G, V
 
 
 @triton.jit
-def _jacobi_diag(G, V, K: tl.constexpr, NSWP: tl.constexpr,
-                 TOL: tl.constexpr, NEED_V: tl.constexpr,
-                 RSTEP: tl.constexpr = 1):
+def _jacobi_diag(
+    G,
+    V,
+    K: tl.constexpr,
+    NSWP: tl.constexpr,
+    TOL: tl.constexpr,
+    NEED_V: tl.constexpr,
+    RSTEP: tl.constexpr = 1,
+):
     """Cyclic Jacobi on a K x K symmetric Gram in registers.
     Pair schedule: round-robin tournament (K-1 rounds of K/2 disjoint pairs
     cover all pairs per sweep).  p,q are runtime values here.  RSTEP>1
@@ -115,8 +124,17 @@ def _jacobi_diag(G, V, K: tl.constexpr, NSWP: tl.constexpr,
 
 
 @triton.jit
-def _svd_small(A, S, m, n, k, KP: tl.constexpr, RP: tl.constexpr,
-               NSWP: tl.constexpr, TOL: tl.constexpr):
+def _svd_small(
+    A,
+    S,
+    m,
+    n,
+    k,
+    KP: tl.constexpr,
+    RP: tl.constexpr,
+    NSWP: tl.constexpr,
+    TOL: tl.constexpr,
+):
     """Path A: one program per matrix (batch index = pid).
     A: (m, n) or batch-contiguous; S: (..., k)."""
     pid = tl.program_id(0)
@@ -146,8 +164,20 @@ def _svd_small(A, S, m, n, k, KP: tl.constexpr, RP: tl.constexpr,
 
 
 @triton.jit
-def _svd_est(A, S, m, n, k, nb, ROWS, B: tl.constexpr, KP2: tl.constexpr,
-             CH: tl.constexpr, NSWP: tl.constexpr, TOL: tl.constexpr):
+def _svd_est(
+    A,
+    S,
+    m,
+    n,
+    k,
+    nb,
+    ROWS,
+    B: tl.constexpr,
+    KP2: tl.constexpr,
+    CH: tl.constexpr,
+    NSWP: tl.constexpr,
+    TOL: tl.constexpr,
+):
     """Path B (k > 32): one wave of block Jacobi, all disjoint block pairs in
     one launch.  Each program diagonalizes the 2B x 2B Gram of its pair in
     registers (Jacobi, eigenvalues only) and writes sqrt(diag) straight to S.
@@ -199,13 +229,13 @@ def _sort_desc(S, k, KP: tl.constexpr):
 # Host wrapper
 # ---------------------------------------------------------------------------
 
-_BLOCK = 4          # path B block size (2B x 2B Gram per pair program)
-_CHUNK = 128        # path B row chunk
-_NSWEEP_A = 6       # path A in-register Jacobi sweeps (small K, correctness)
-_NSWEEP_A16 = 1     # path A sweeps for K=16 (timing shapes)
-_NSWEEP_IN = 1      # path B in-block Jacobi sweeps per pair
-_TOL = 1e-7         # rotation skip threshold (relative)
-_MAX_K_SMALL = 8    # path A threshold (exact in-register Gram eigensolver)
+_BLOCK = 4  # path B block size (2B x 2B Gram per pair program)
+_CHUNK = 128  # path B row chunk
+_NSWEEP_A = 6  # path A in-register Jacobi sweeps (small K, correctness)
+_NSWEEP_A16 = 1  # path A sweeps for K=16 (timing shapes)
+_NSWEEP_IN = 1  # path B in-block Jacobi sweeps per pair
+_TOL = 1e-7  # rotation skip threshold (relative)
+_MAX_K_SMALL = 8  # path A threshold (exact in-register Gram eigensolver)
 
 
 def run(A):
@@ -223,8 +253,7 @@ def run(A):
         KP = triton.next_power_of_2(max(k, 2))
         RP = triton.next_power_of_2(max(rowsN, 1))
         nsw = _NSWEEP_A if KP <= 8 else _NSWEEP_A16
-        _svd_small[(b,)](A, S, m, n, k, KP=KP, RP=RP, NSWP=nsw,
-                         TOL=_TOL, num_warps=4)
+        _svd_small[(b,)](A, S, m, n, k, KP=KP, RP=RP, NSWP=nsw, TOL=_TOL, num_warps=4)
     else:
         B = _BLOCK
         nb = (k + B - 1) // B
@@ -233,7 +262,19 @@ def run(A):
         # Large k: 4 warps cut per-CTA 8x8 rotation reduction overhead;
         # small k: 8 warps keep the Gram chunk dot fed.
         nw = 4 if k >= 512 else 8
-        _svd_est[(nb // 2, b)](A, S, m, n, k, nb, rowsN, B=B, KP2=2 * B,
-                               CH=_CHUNK, NSWP=_NSWEEP_IN, TOL=_TOL,
-                               num_warps=nw)
+        _svd_est[(nb // 2, b)](
+            A,
+            S,
+            m,
+            n,
+            k,
+            nb,
+            rowsN,
+            B=B,
+            KP2=2 * B,
+            CH=_CHUNK,
+            NSWP=_NSWEEP_IN,
+            TOL=_TOL,
+            num_warps=nw,
+        )
     return S

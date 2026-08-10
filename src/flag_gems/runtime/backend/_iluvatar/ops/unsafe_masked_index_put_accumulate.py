@@ -17,7 +17,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 _MAX_RANK = 8
 _FUSED_LIMIT = 4096
 _COPY_BLOCK = 1024
@@ -36,10 +35,30 @@ def _copy_kernel(inp_ptr, out_ptr, N, BLOCK: tl.constexpr):
 
 
 @triton.jit
-def _scatter_kernel(out_ptr, mask_ptr, val_ptr,
-                    i0, i1, i2, i3, i4, i5, i6, i7,
-                    s0, s1, s2, s3, s4, s5, s6, s7,
-                    M, RANK: tl.constexpr, BLOCK: tl.constexpr):
+def _scatter_kernel(
+    out_ptr,
+    mask_ptr,
+    val_ptr,
+    i0,
+    i1,
+    i2,
+    i3,
+    i4,
+    i5,
+    i6,
+    i7,
+    s0,
+    s1,
+    s2,
+    s3,
+    s4,
+    s5,
+    s6,
+    s7,
+    M,
+    RANK: tl.constexpr,
+    BLOCK: tl.constexpr,
+):
     pid = tl.program_id(0)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     m = offs < M
@@ -66,10 +85,31 @@ def _scatter_kernel(out_ptr, mask_ptr, val_ptr,
 
 
 @triton.jit
-def _fused_kernel(inp_ptr, out_ptr, mask_ptr, val_ptr,
-                  i0, i1, i2, i3, i4, i5, i6, i7,
-                  s0, s1, s2, s3, s4, s5, s6, s7,
-                  N, RANK: tl.constexpr, BLOCK: tl.constexpr):
+def _fused_kernel(
+    inp_ptr,
+    out_ptr,
+    mask_ptr,
+    val_ptr,
+    i0,
+    i1,
+    i2,
+    i3,
+    i4,
+    i5,
+    i6,
+    i7,
+    s0,
+    s1,
+    s2,
+    s3,
+    s4,
+    s5,
+    s6,
+    s7,
+    N,
+    RANK: tl.constexpr,
+    BLOCK: tl.constexpr,
+):
     offs = tl.arange(0, BLOCK)
     m = offs < N
     v = tl.load(inp_ptr + offs, mask=m)
@@ -98,12 +138,35 @@ def _fused_kernel(inp_ptr, out_ptr, mask_ptr, val_ptr,
 
 
 @triton.jit
-def _grid_kernel(inp_ptr, out_ptr, mask_ptr, val_ptr, flag_ptr,
-                 i0, i1, i2, i3, i4, i5, i6, i7,
-                 s0, s1, s2, s3, s4, s5, s6, s7,
-                 N, M, NB_COPY,
-                 RANK: tl.constexpr,
-                 COPY_BLOCK: tl.constexpr, SCATTER_BLOCK: tl.constexpr):
+def _grid_kernel(
+    inp_ptr,
+    out_ptr,
+    mask_ptr,
+    val_ptr,
+    flag_ptr,
+    i0,
+    i1,
+    i2,
+    i3,
+    i4,
+    i5,
+    i6,
+    i7,
+    s0,
+    s1,
+    s2,
+    s3,
+    s4,
+    s5,
+    s6,
+    s7,
+    N,
+    M,
+    NB_COPY,
+    RANK: tl.constexpr,
+    COPY_BLOCK: tl.constexpr,
+    SCATTER_BLOCK: tl.constexpr,
+):
     pid = tl.program_id(0)
     if pid < NB_COPY:
         offs = pid * COPY_BLOCK + tl.arange(0, COPY_BLOCK)
@@ -168,10 +231,16 @@ def run(inp, mask, indices, values):
         if nw > 16:
             nw = 16
         _fused_kernel[(1,)](
-            inp, out, mask, values,
+            inp,
+            out,
+            mask,
+            values,
             *idx_args,
             *stride_args,
-            N, RANK=rank, BLOCK=BLOCK, num_warps=nw,
+            N,
+            RANK=rank,
+            BLOCK=BLOCK,
+            num_warps=nw,
         )
     else:
         flag = torch.zeros(1, dtype=torch.int32, device=inp.device)
@@ -179,11 +248,19 @@ def run(inp, mask, indices, values):
         sb = _SCATTER_BLOCK_LARGE if M >= _SCATTER_THRESHOLD else _SCATTER_BLOCK_SMALL
         grid = (nb_copy + triton.cdiv(M, sb),)
         _grid_kernel[grid](
-            inp, out, mask, values, flag,
+            inp,
+            out,
+            mask,
+            values,
+            flag,
             *idx_args,
             *stride_args,
-            N, M, nb_copy,
-            RANK=rank, COPY_BLOCK=_COPY_BLOCK, SCATTER_BLOCK=sb,
+            N,
+            M,
+            nb_copy,
+            RANK=rank,
+            COPY_BLOCK=_COPY_BLOCK,
+            SCATTER_BLOCK=sb,
             num_warps=8,
         )
     return out

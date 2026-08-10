@@ -23,8 +23,8 @@ def _adaptive_max_pool3d_backward_scatter(
     grad_out_ptr,
     indices_ptr,
     out_ptr,
-    out_plane_size,   # D_out * H_out * W_out
-    in_plane_size,    # D_in * H_in * W_in
+    out_plane_size,  # D_out * H_out * W_out
+    in_plane_size,  # D_in * H_in * W_in
     BLOCK: tl.constexpr,
 ):
     pid_plane = tl.program_id(0)
@@ -54,8 +54,11 @@ def run(grad_output, self_input, indices):
 
     grid = (planes, triton.cdiv(out_plane_size, _BLOCK))
     _adaptive_max_pool3d_backward_scatter[grid](
-        grad_output, indices, out,
-        out_plane_size, in_plane_size,
+        grad_output,
+        indices,
+        out,
+        out_plane_size,
+        in_plane_size,
         BLOCK=_BLOCK,
     )
     return out
