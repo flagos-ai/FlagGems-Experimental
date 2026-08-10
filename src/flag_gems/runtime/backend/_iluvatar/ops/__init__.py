@@ -26,6 +26,8 @@ from .div import div_mode, div_mode_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
 from .linalg_eigvals import run as _linalg_eigvals
+from .linalg_ldl_factor_ex import run as ldl_factor_ex
+from .linalg_svdvals import run as linalg_svdvals
 from .linear import linear
 from .linear_backward import run as linear_backward
 from .matmul_bf16 import matmul_bf16
@@ -72,6 +74,8 @@ __all__ = [
     "div_mode_",
     "hadamard_transform",
     "histc",
+    "ldl_factor_ex",
+    "linalg_svdvals",
     "linear",
     "linear_backward",
     "matmul_bf16",
