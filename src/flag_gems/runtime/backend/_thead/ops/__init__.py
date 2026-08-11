@@ -31,6 +31,7 @@ from .special_erfinv import special_erfinv, special_erfinv_, special_erfinv_out
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
+from .unbind_copy import unbind_copy
 from .unsafe_masked_index_put_accumulate import _unsafe_masked_index_put_accumulate
 from .upsample_nearest_exact2d_backward import _upsample_nearest_exact2d_backward
 
@@ -60,4 +61,5 @@ __all__ = [
     "special_erfinv_",
     "special_erfinv_out",
     "special_shifted_chebyshev_polynomial_w",
+    "unbind_copy",
 ]
