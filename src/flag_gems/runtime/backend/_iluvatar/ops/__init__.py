@@ -23,6 +23,7 @@ from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .diagonal_scatter import diagonal_scatter
 from .div import div_mode, div_mode_
+from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
 from .linalg_eigvals import run as _linalg_eigvals
@@ -72,6 +73,7 @@ __all__ = [
     "diagonal_scatter",
     "div_mode",
     "div_mode_",
+    "gcd_",
     "hadamard_transform",
     "histc",
     "ldl_factor_ex",
