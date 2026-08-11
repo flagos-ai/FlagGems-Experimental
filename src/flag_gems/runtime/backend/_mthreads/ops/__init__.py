@@ -27,6 +27,7 @@ from .erfinv_ import erfinv_
 from .flip import flip
 from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
 from .gather import gather, gather_backward
+from .im2col import im2col
 from .index_add import index_add, index_add_
 from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
@@ -94,6 +95,7 @@ __all__ = [
     "fmod_tensor_",
     "gather",
     "gather_backward",
+    "im2col",
     "index_add",
     "index_add_",
     "index_put",
