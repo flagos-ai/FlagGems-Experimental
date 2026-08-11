@@ -23,6 +23,7 @@ from .diagonal_scatter import diagonal_scatter
 from .gcd_ import gcd, gcd_
 from .index_copy_ import index_copy, index_copy_
 from .lcm import lcm, lcm_
+from .linalg_eigvals import _linalg_eigvals
 from .linalg_svdvals import linalg_svdvals
 from .linear_backward import linear_backward
 from .log_normal_ import log_normal_
@@ -39,6 +40,7 @@ from .upsample_nearest_exact2d_backward import _upsample_nearest_exact2d_backwar
 __all__ = [
     "_conj",
     "_conv_depthwise2d",
+    "_linalg_eigvals",
     "_thnn_fused_lstm_cell_backward_impl",
     "_unsafe_masked_index_put_accumulate",
     "_upsample_nearest_exact2d_backward",
