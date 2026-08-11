@@ -26,6 +26,7 @@ from .div import div_mode, div_mode_
 from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
+from .index_select_backward import index_select_backward
 from .linalg_eigvals import run as _linalg_eigvals
 from .linalg_ldl_factor_ex import run as ldl_factor_ex
 from .linalg_svdvals import run as linalg_svdvals
@@ -76,6 +77,7 @@ __all__ = [
     "gcd_",
     "hadamard_transform",
     "histc",
+    "index_select_backward",
     "ldl_factor_ex",
     "linalg_svdvals",
     "linear",
