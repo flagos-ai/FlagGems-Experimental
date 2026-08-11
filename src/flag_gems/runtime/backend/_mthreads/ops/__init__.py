@@ -24,6 +24,7 @@ from .bucketize import bucketize
 from .celu import celu
 from .conv2d import conv2d
 from .dropout import dropout, dropout_backward
+from .erfinv import erfinv
 from .erfinv_ import erfinv_
 from .flip import flip
 from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
@@ -90,6 +91,7 @@ __all__ = [
     "conv2d",
     "dropout",
     "dropout_backward",
+    "erfinv",
     "erfinv_",
     "flip",
     "fmod_",
