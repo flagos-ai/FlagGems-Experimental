@@ -77,6 +77,7 @@ from .pow import (
 from .randperm import randperm
 from .renorm_ import renorm_
 from .silu import silu, silu_, silu_backward
+from .softplus_backward import softplus_backward
 from .sort import sort, sort_stable
 from .special_chebyshev_polynomial_v import (
     special_chebyshev_polynomial_v,
@@ -156,6 +157,7 @@ __all__ = [
     "silu",
     "silu_",
     "silu_backward",
+    "softplus_backward",
     "sort",
     "sort_stable",
     "true_divide",

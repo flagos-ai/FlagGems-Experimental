@@ -9293,6 +9293,7 @@ ops:
       - aten
       - Activation
       - pointwise
+      - KernelGen
     kind:
       - NeuralNetwork
     stages:
