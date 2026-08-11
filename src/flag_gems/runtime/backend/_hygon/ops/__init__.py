@@ -75,8 +75,11 @@ from .pow import (
     pow_tensor_tensor_,
 )
 from .randperm import randperm
+from .reflection_pad3d_backward import reflection_pad3d_backward
 from .renorm import renorm, renorm_
+from .repeat import repeat
 from .silu import silu, silu_, silu_backward
+from .softplus_backward import softplus_backward
 from .sort import sort, sort_stable
 from .special_chebyshev_polynomial_v import (
     special_chebyshev_polynomial_v,
@@ -147,16 +150,19 @@ __all__ = [
     "pow_tensor_tensor",
     "pow_tensor_tensor_",
     "randperm",
+    "reflection_pad3d_backward",
     "remainder",
     "remainder_",
     "renorm",
     "renorm_",
+    "repeat",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
     "silu",
     "silu_",
     "silu_backward",
+    "softplus_backward",
     "sort",
     "sort_stable",
     "true_divide",
