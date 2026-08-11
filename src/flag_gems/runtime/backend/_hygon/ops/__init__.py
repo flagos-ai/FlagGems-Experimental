@@ -62,10 +62,12 @@ from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .max_pool3d_with_indices import max_pool3d_backward, max_pool3d_with_indices
+from .max_unpool2d import max_unpool2d
 from .median import median_dim, median_dim_values
 from .mm import mm
 from .mul import mul, mul_
 from .nansum import nansum, nansum_out
+from .nll_loss_backward import nll_loss_backward
 from .per_token_group_quant_fp8 import SUPPORTED_FP8_DTYPE, per_token_group_quant_fp8
 from .pow import (
     pow_scalar,
@@ -75,8 +77,11 @@ from .pow import (
     pow_tensor_tensor_,
 )
 from .randperm import randperm
-from .renorm_ import renorm_
+from .reflection_pad3d_backward import reflection_pad3d_backward
+from .renorm import renorm, renorm_
+from .repeat import repeat
 from .silu import silu, silu_, silu_backward
+from .softplus_backward import softplus_backward
 from .sort import sort, sort_stable
 from .special_chebyshev_polynomial_v import (
     special_chebyshev_polynomial_v,
@@ -87,6 +92,7 @@ from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w_out,
 )
 from .split_with_sizes_copy import split_with_sizes_copy
+from .tile import tile
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
 from .weight_norm import WeightNorm, weight_norm
@@ -133,6 +139,7 @@ __all__ = [
     "matmul_int8",
     "max_pool3d_backward",
     "max_pool3d_with_indices",
+    "max_unpool2d",
     "median_dim",
     "median_dim_values",
     "mul",
@@ -140,6 +147,7 @@ __all__ = [
     "mm",
     "nansum",
     "nansum_out",
+    "nll_loss_backward",
     "per_token_group_quant_fp8",
     "pow_scalar",
     "pow_tensor_scalar",
@@ -147,17 +155,22 @@ __all__ = [
     "pow_tensor_tensor",
     "pow_tensor_tensor_",
     "randperm",
+    "reflection_pad3d_backward",
     "remainder",
     "remainder_",
+    "renorm",
     "renorm_",
+    "repeat",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
     "silu",
     "silu_",
     "silu_backward",
+    "softplus_backward",
     "sort",
     "sort_stable",
+    "tile",
     "true_divide",
     "true_divide_",
     "true_divide_out",

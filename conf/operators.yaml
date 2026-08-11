@@ -6993,6 +6993,7 @@ ops:
     labels:
       - aten
       - IR
+      - KernelGen
     kind:
       - NeuralNetwork
     stages:
@@ -8034,6 +8035,7 @@ ops:
       - repeat
     labels:
       - aten
+      - KernelGen
     kind:
       - Tensor
     stages:
@@ -9293,6 +9295,7 @@ ops:
       - aten
       - Activation
       - pointwise
+      - KernelGen
     kind:
       - NeuralNetwork
     stages:
@@ -10433,6 +10436,7 @@ ops:
       - tile
     labels:
       - aten
+      - KernelGen
     kind:
       - Tensor
     stages:

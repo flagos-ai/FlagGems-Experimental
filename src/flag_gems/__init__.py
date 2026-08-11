@@ -895,8 +895,6 @@ _FULL_CONFIG = (
     ("special_log1p", special_log1p),
     ("special_log1p.out", special_log1p_out),
     ("special_logsumexp", special_logsumexp),
-    ("special_legendre_polynomial_p", legendre_polynomial_p),
-    ("special_legendre_polynomial_p.out", legendre_polynomial_p_out),
     ("special_log1p", special_log1p),
     ("special_log1p.out", special_log1p_out),
     ("special_logsumexp", special_logsumexp),
