@@ -77,7 +77,7 @@ from .pow import (
 )
 from .randperm import randperm
 from .reflection_pad3d_backward import reflection_pad3d_backward
-from .renorm_ import renorm_
+from .renorm import renorm, renorm_
 from .repeat import repeat
 from .silu import silu, silu_, silu_backward
 from .softplus_backward import softplus_backward
@@ -156,6 +156,7 @@ __all__ = [
     "reflection_pad3d_backward",
     "remainder",
     "remainder_",
+    "renorm",
     "renorm_",
     "repeat",
     "scaled_dot_product_attention",
