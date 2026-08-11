@@ -90,6 +90,7 @@ from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w_out,
 )
 from .split_with_sizes_copy import split_with_sizes_copy
+from .tile import tile
 from .unique import _unique2
 from .upsample_nearest2d import upsample_nearest2d
 from .weight_norm import WeightNorm, weight_norm
@@ -164,6 +165,7 @@ __all__ = [
     "softplus_backward",
     "sort",
     "sort_stable",
+    "tile",
     "true_divide",
     "true_divide_",
     "true_divide_out",

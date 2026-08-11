@@ -10435,6 +10435,7 @@ ops:
       - tile
     labels:
       - aten
+      - KernelGen
     kind:
       - Tensor
     stages:
