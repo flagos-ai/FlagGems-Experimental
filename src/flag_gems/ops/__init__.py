@@ -1187,8 +1187,6 @@ __all__ = [
     "leaky_relu",
     "leaky_relu_",
     "leaky_relu_out",
-    "legendre_polynomial_p",
-    "legendre_polynomial_p_out",
     "lerp_scalar",
     "lerp_scalar_",
     "lerp_tensor",
