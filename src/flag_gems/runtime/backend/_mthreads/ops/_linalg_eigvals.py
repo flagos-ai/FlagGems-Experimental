@@ -25,14 +25,8 @@ logger = logging.getLogger(
     f'flag_gems.runtime.backend._mthreads.ops.{__name__.split(".")[-1]}'
 )
 
-# Moore Threads hardware does not support fp64 compute. The Hessenberg reduction
-# (O(n³) bulk of the eigenvalue algorithm) runs in fp32 Triton on-device;
-# only the final QR eigenvalue extraction runs on CPU LAPACK. Matrices larger
-# than _HESS_MAX_N cannot fit in one register tile and fall back to a full
-# CPU solve. Complex inputs are unsupported (MUSA has no device-side complex
-# storage) and also fall back.
 _SUPPORTED_DTYPES = {torch.float32}
-_HESS_MAX_N = 192
+_HESS_MAX_N = 128
 
 
 @libentry()
@@ -147,12 +141,10 @@ def _linalg_eigvals(inp):
 
     Moore Threads specialization. The hardware does not support fp64 compute or
     device-side complex tensors, so the Hessenberg reduction runs in fp32 Triton
-    on-device (the O(n³) bulk of the algorithm), and only the final QR eigenvalue
-    extraction runs on CPU LAPACK. This structure matches the thead specialization
-    (#167) but operates entirely in fp32 due to MUSA hardware constraints.
+    on-device and the final QR eigenvalue extraction runs on CPU LAPACK.
 
-    Matrices up to 192×192 use the on-device Hessenberg kernel; larger matrices
-    exceed register tile limits and fall back to the generic implementation.
+    Matrices smaller than _HESS_MAX_N use the on-device Hessenberg kernel; larger
+    matrices fall back to the generic implementation.
     """
     logger.debug("GEMS_MTHREADS _LINALG_EIGVALS")
 
@@ -164,14 +156,11 @@ def _linalg_eigvals(inp):
             "_linalg_eigvals: input must be a square matrix or batch of square matrices"
         )
 
-    # Matrices >192×192 exceed the register tile limit of the Hessenberg kernel;
-    # defer to the generic implementation instead.
     n = inp.shape[-1]
-    if n > _HESS_MAX_N:
+    if n >= _HESS_MAX_N:
         return default_linalg_eigvals(inp)
 
     if inp.ndim > 2:
-        # Batched: reduce each matrix on device, one LAPACK solve each.
         flat = inp.reshape(-1, inp.shape[-2], inp.shape[-1])
         cols = [_eigvals_impl(m) for m in flat]
         return torch.stack(cols).reshape(*inp.shape[:-2], inp.shape[-1])
