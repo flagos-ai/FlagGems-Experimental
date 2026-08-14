@@ -19,6 +19,7 @@ import torch
 import triton
 import triton.language as tl
 
+from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,9 @@ def _linalg_eigvals(inp):
     BLOCK_SIZE = 128
     grid = (triton.cdiv(n_elements, BLOCK_SIZE),)
 
-    with torch.cuda.device(inp.device):
+    # Use the backend-agnostic device guard so non-CUDA vendors (e.g. MUSA)
+    # don't hit torch.cuda.device, which rejects a non-cuda device.
+    with torch_device_fn.device(inp.device):
         _linalg_eigvals_proxy_kernel[grid](inp, output, n_elements, BLOCK_SIZE)
 
     # Compute eigenvalues via PyTorch's public linalg API, which dispatches

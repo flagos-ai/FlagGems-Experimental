@@ -151,10 +151,8 @@ def _linalg_eigvals(inp):
     extraction runs on CPU LAPACK. This structure matches the thead specialization
     (#167) but operates entirely in fp32 due to MUSA hardware constraints.
 
-    The generic implementation crashes on MUSA (torch.cuda.device bug), so this
-    specialization must handle all sizes. Matrices up to 192×192 use the on-device
-    Hessenberg kernel; larger matrices exceed register tile limits and use a
-    direct CPU solve path (still faster than crashing).
+    Matrices up to 192×192 use the on-device Hessenberg kernel; larger matrices
+    exceed register tile limits and fall back to the generic implementation.
     """
     logger.debug("GEMS_MTHREADS _LINALG_EIGVALS")
 
@@ -166,11 +164,11 @@ def _linalg_eigvals(inp):
             "_linalg_eigvals: input must be a square matrix or batch of square matrices"
         )
 
-    # Matrices >192×192 exceed register tile limits, use direct CPU path
+    # Matrices >192×192 exceed the register tile limit of the Hessenberg kernel;
+    # defer to the generic implementation instead.
     n = inp.shape[-1]
     if n > _HESS_MAX_N:
-        # Direct CPU solve (no device kernel, but avoids the cuda.device bug)
-        return torch.linalg.eigvals(inp.cpu()).to(inp.device)
+        return default_linalg_eigvals(inp)
 
     if inp.ndim > 2:
         # Batched: reduce each matrix on device, one LAPACK solve each.
