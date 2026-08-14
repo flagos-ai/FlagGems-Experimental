@@ -33,6 +33,7 @@ logger = logging.getLogger(
 # storage) and also fall back.
 _SUPPORTED_DTYPES = {torch.float32}
 _HESS_MAX_N = 192
+_HESS_MIN_N = 256  # Below this size, CPU LAPACK is faster than kernel overhead
 
 
 @libentry()
@@ -151,12 +152,19 @@ def _linalg_eigvals(inp):
     extraction runs on CPU LAPACK. This structure matches the thead specialization
     (#167) but operates entirely in fp32 due to MUSA hardware constraints.
 
-    Real float32 inputs up to 192×192 run the on-device Hessenberg kernel; larger
-    matrices and all complex/fp64 inputs fall back to the generic implementation.
+    The Triton kernel has measurable launch overhead: for small matrices (<256×256),
+    CPU LAPACK is faster. For large matrices (256×256 to 192×192), the on-device
+    reduction eliminates redundant device transfers and reaches competitive
+    performance. Matrices outside this range fall back to the generic implementation.
     """
     logger.debug("GEMS_MTHREADS _LINALG_EIGVALS")
 
     if inp.device.type != "musa" or inp.dtype not in _SUPPORTED_DTYPES:
+        return default_linalg_eigvals(inp)
+
+    # Size gate: small matrices are faster on CPU LAPACK (kernel overhead dominates)
+    n = inp.shape[-1]
+    if n < _HESS_MIN_N or n > _HESS_MAX_N:
         return default_linalg_eigvals(inp)
 
     if inp.ndim < 2 or inp.shape[-2] != inp.shape[-1]:
