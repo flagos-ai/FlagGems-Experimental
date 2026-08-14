@@ -20,17 +20,23 @@ from .any import any, any_dim, any_dims
 from .arange import arange, arange_start
 from .argmin import argmin
 from .batch_norm import batch_norm, batch_norm_backward
+from .bucketize import bucketize
 from .celu import celu
 from .conv2d import conv2d
 from .dropout import dropout, dropout_backward
+from .erfinv import erfinv
+from .erfinv_ import erfinv_
 from .flip import flip
+from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
 from .gather import gather, gather_backward
+from .im2col import im2col
 from .index_add import index_add, index_add_
 from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
 from .linalg_cholesky import linalg_cholesky
 from .log import log
 from .log10 import log10, log10_, log10_out
+from .log_normal_ import log_normal_
 from .log_softmax import (
     log_softmax,
     log_softmax_backward,
@@ -40,6 +46,8 @@ from .log_softmax import (
 from .max import max, max_dim
 from .min import min, min_dim
 from .mode import mode
+from .nonzero_numpy import nonzero_numpy
+from .norm import norm, norm_scalar, norm_scalaropt_dim
 from .normal import normal_
 from .one_hot import one_hot
 from .ones import ones
@@ -77,14 +85,21 @@ __all__ = [
     "argmin",
     "batch_norm",
     "batch_norm_backward",
+    "bucketize",
     "celu",
     # "celu_",
     "conv2d",
     "dropout",
     "dropout_backward",
+    "erfinv",
+    "erfinv_",
     "flip",
+    "fmod_",
+    "fmod_scalar_",
+    "fmod_tensor_",
     "gather",
     "gather_backward",
+    "im2col",
     "index_add",
     "index_add_",
     "index_put",
@@ -96,6 +111,7 @@ __all__ = [
     "log10",
     "log10_",
     "log10_out",
+    "log_normal_",
     "log_softmax",
     "log_softmax_backward",
     "log_softmax_backward_out",
@@ -105,6 +121,10 @@ __all__ = [
     "min",
     "min_dim",
     "mode",
+    "nonzero_numpy",
+    "norm",
+    "norm_scalar",
+    "norm_scalaropt_dim",
     "normal_",
     "one_hot",
     "ones",
