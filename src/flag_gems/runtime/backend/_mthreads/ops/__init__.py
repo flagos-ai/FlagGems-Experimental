@@ -14,6 +14,7 @@
 
 from torch_musa import current_device, get_device_capability
 
+from ._linalg_eigvals import _linalg_eigvals
 from .all import all, all_dim, all_dims
 from .amax import amax
 from .any import any, any_dim, any_dims
@@ -106,6 +107,7 @@ __all__ = [
     "index_put_",
     "_index_put_impl_",
     "index_select",
+    "_linalg_eigvals",
     "linalg_cholesky",
     "log",
     "log10",
