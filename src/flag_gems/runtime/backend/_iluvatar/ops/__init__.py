@@ -28,7 +28,6 @@ from .div import div_mode, div_mode_
 from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
-from .index_copy import index_copy
 from .index_copy_ import index_copy_
 from .index_select_backward import index_select_backward
 from .linalg_cholesky import linalg_cholesky
@@ -85,7 +84,6 @@ __all__ = [
     "gcd_",
     "hadamard_transform",
     "histc",
-    "index_copy",
     "index_copy_",
     "index_select_backward",
     "linalg_cholesky",
