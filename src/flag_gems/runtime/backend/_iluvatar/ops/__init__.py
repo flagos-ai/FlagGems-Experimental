@@ -28,6 +28,8 @@ from .div import div_mode, div_mode_
 from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
+from .index_copy import index_copy
+from .index_copy_ import index_copy_
 from .index_select_backward import index_select_backward
 from .linalg_cholesky import linalg_cholesky
 from .linear import linear
@@ -53,6 +55,7 @@ from .special_hermite_polynomial_h import (
     special_hermite_polynomial_h,
     special_hermite_polynomial_h_tensor_tensor,
 )
+from .special_modified_bessel_k0 import special_modified_bessel_k0
 from .special_modified_bessel_k1 import (
     special_modified_bessel_k1,
     special_modified_bessel_k1_out,
@@ -82,6 +85,8 @@ __all__ = [
     "gcd_",
     "hadamard_transform",
     "histc",
+    "index_copy",
+    "index_copy_",
     "index_select_backward",
     "linalg_cholesky",
     "linear",
@@ -106,6 +111,7 @@ __all__ = [
     "special_gammainc",
     "special_hermite_polynomial_h",
     "special_hermite_polynomial_h_tensor_tensor",
+    "special_modified_bessel_k0",
     "special_modified_bessel_k1",
     "special_modified_bessel_k1_out",
     "special_shifted_chebyshev_polynomial_w",
