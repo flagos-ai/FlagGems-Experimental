@@ -10,9 +10,12 @@ from .arange import arange, arange_start
 from .batch_norm import batch_norm, batch_norm_backward
 from .bmm import bmm
 from .broadcast_to import broadcast_to
+from .erfinv import erfinv
+from .erfinv_ import erfinv_
 from .exponential_ import exponential_
 from .full import full
 from .full_like import full_like
+from .gcd_ import gcd_
 from .groupnorm import group_norm
 from .hadamard_transform import hadamard_transform
 from .histc import histc
@@ -24,7 +27,9 @@ from .isin import isin
 from .kthvalue import kthvalue
 from .layernorm import layer_norm, layer_norm_backward
 from .lgamma_ import lgamma, lgamma_
+from .linalg_cholesky import linalg_cholesky
 from .linalg_svdvals import linalg_svdvals
+from .log_normal_ import log_normal_
 from .log_sigmoid_forward import log_sigmoid_forward
 from .log_softmax import log_softmax, log_softmax_backward
 from .masked_fill import masked_fill, masked_fill_
@@ -46,6 +51,7 @@ from .resolve_conj import resolve_conj
 from .sigmoid import sigmoid
 from .special_bessel_j0 import special_bessel_j0, special_bessel_j0_out
 from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
+from .special_gammaln import special_gammaln
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
@@ -71,9 +77,12 @@ __all__ = [
     "batch_norm_backward",
     "bmm",
     "broadcast_to",
+    "erfinv",
+    "erfinv_",
     "exponential_",
     "full",
     "full_like",
+    "gcd_",
     "group_norm",
     "hadamard_transform",
     "histc",
@@ -86,11 +95,13 @@ __all__ = [
     "kthvalue",
     "layer_norm",
     "layer_norm_backward",
+    "linalg_cholesky",
     "linalg_svdvals",
     "linear_backward",
     "log_sigmoid_forward",
     "lgamma",
     "lgamma_",
+    "log_normal_",
     "log_softmax",
     "log_softmax_backward",
     "matmul_bf16",
@@ -117,6 +128,7 @@ __all__ = [
     "special_bessel_j0",
     "special_bessel_j0_out",
     "special_chebyshev_polynomial_u",
+    "special_gammaln",
     "special_shifted_chebyshev_polynomial_w",
     "tanh",
     "upsample_nearest2d",
