@@ -26,7 +26,8 @@ from .index_select_backward import index_select_backward
 from .isin import isin
 from .kthvalue import kthvalue
 from .layernorm import layer_norm, layer_norm_backward
-from .lgamma_ import lgamma, lgamma_
+from .lgamma import lgamma
+from .lgamma_ import lgamma_
 from .linalg_cholesky import linalg_cholesky
 from .linalg_svdvals import linalg_svdvals
 from .log_normal_ import log_normal_
