@@ -75,5 +75,7 @@ def lgamma(x):
         grid = (triton.cdiv(numel, BLOCK),)
     else:
         grid = (numel // BLOCK,)
-    _lgamma_kernel[grid](x, out, numel, BLOCK=BLOCK, NEED_MASK=need_mask, num_warps=NUM_WARPS)
+    _lgamma_kernel[grid](
+        x, out, numel, BLOCK=BLOCK, NEED_MASK=need_mask, num_warps=NUM_WARPS
+    )
     return out
