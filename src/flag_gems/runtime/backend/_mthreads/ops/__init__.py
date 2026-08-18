@@ -16,6 +16,9 @@ from torch_musa import current_device, get_device_capability
 
 from .all import all, all_dim, all_dims
 from .amax import amax
+from .amp_foreach_non_finite_check_and_unscale_ import (
+    _amp_foreach_non_finite_check_and_unscale_,
+)
 from .any import any, any_dim, any_dims
 from .arange import arange, arange_start
 from .argmin import argmin
@@ -95,6 +98,7 @@ from .zeros import zero_, zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "_amp_foreach_non_finite_check_and_unscale_",
     "amax",
     "all",
     "all_dim",
