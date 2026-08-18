@@ -32,6 +32,7 @@ from .div import (
     true_divide_,
     true_divide_out,
 )
+from .deg2rad_ import deg2rad_
 from .dropout import dropout, dropout_backward
 from .erfinv import erfinv
 from .erfinv_ import erfinv_
@@ -111,6 +112,7 @@ __all__ = [
     "celu",
     # "celu_",
     "conv2d",
+    "deg2rad_",
     "dropout",
     "dropout_backward",
     "erfinv",
