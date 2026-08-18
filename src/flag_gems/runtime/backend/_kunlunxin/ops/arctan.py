@@ -36,7 +36,9 @@ def _atan7(x):
 
 
 @triton.jit
-def _arctan_kernel(x_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr, EVEN: tl.constexpr):
+def _arctan_kernel(
+    x_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr, EVEN: tl.constexpr
+):
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     if EVEN:
@@ -64,7 +66,9 @@ def arctan(x):
         BLOCK_SIZE, num_warps = 2048, 8
     even = (n_elements % BLOCK_SIZE) == 0
     grid = (triton.cdiv(n_elements, BLOCK_SIZE),)
-    _arctan_kernel[grid](x, out, n_elements, BLOCK_SIZE=BLOCK_SIZE, EVEN=even, num_warps=num_warps)
+    _arctan_kernel[grid](
+        x, out, n_elements, BLOCK_SIZE=BLOCK_SIZE, EVEN=even, num_warps=num_warps
+    )
     return out
 
 
@@ -81,5 +85,7 @@ def arctan_(x):
         BLOCK_SIZE, num_warps = 2048, 8
     even = (n_elements % BLOCK_SIZE) == 0
     grid = (triton.cdiv(n_elements, BLOCK_SIZE),)
-    _arctan_kernel[grid](x, x, n_elements, BLOCK_SIZE=BLOCK_SIZE, EVEN=even, num_warps=num_warps)
+    _arctan_kernel[grid](
+        x, x, n_elements, BLOCK_SIZE=BLOCK_SIZE, EVEN=even, num_warps=num_warps
+    )
     return x
