@@ -54,6 +54,7 @@ from .log_softmax import (
     log_softmax_backward_out,
     log_softmax_out,
 )
+from .masked_scale import _masked_scale
 from .max import max, max_dim
 from .median import median, median_dim, median_dim_values, median_out
 from .min import min, min_dim
@@ -95,6 +96,7 @@ from .zeros import zero_, zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "_masked_scale",
     "amax",
     "all",
     "all_dim",
