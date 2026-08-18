@@ -21,7 +21,7 @@ import triton.language as tl
 
 from flag_gems.runtime import torch_device_fn
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("flag_gems").getChild(__name__.lstrip("."))
 
 
 @triton.jit

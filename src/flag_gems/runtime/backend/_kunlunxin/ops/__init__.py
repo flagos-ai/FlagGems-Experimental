@@ -341,6 +341,7 @@ __all__ = [
     "_thnn_fused_lstm_cell_backward_impl",
     "_conv_depthwise2d",
     "_safe_softmax",
+    "digamma",
     "digamma_",
     "soft_margin_loss",
     "soft_margin_loss_out",
@@ -782,5 +783,4 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
-    "digamma",
 ]
