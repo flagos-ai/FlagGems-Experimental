@@ -37,6 +37,9 @@ from .erfinv import erfinv
 from .erfinv_ import erfinv_
 from .flip import flip
 from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
+from .functional_sym_constrain_range_for_size import (
+    _functional_sym_constrain_range_for_size,
+)
 from .gather import gather, gather_backward
 from .histc import histc
 from .im2col import im2col
@@ -95,6 +98,7 @@ from .zeros import zero_, zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "_functional_sym_constrain_range_for_size",
     "amax",
     "all",
     "all_dim",
