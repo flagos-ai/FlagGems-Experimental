@@ -30,6 +30,7 @@ from .lgamma import lgamma
 from .lgamma_ import lgamma_
 from .linalg_cholesky import linalg_cholesky
 from .linalg_svdvals import linalg_svdvals
+from .linear_backward import linear_backward
 from .log_normal_ import log_normal_
 from .log_sigmoid_forward import log_sigmoid_forward
 from .log_softmax import log_softmax, log_softmax_backward
