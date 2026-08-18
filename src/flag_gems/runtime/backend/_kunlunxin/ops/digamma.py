@@ -20,8 +20,9 @@ def _digamma(x):
 
     rinv = 1.0 / r
     z = rinv * rinv
-    poly = z * (1.0 / 12.0 + z * (-1.0 / 120.0 + z * (1.0 / 252.0
-                + z * (-1.0 / 240.0))))
+    poly = z * (
+        1.0 / 12.0 + z * (-1.0 / 120.0 + z * (1.0 / 252.0 + z * (-1.0 / 240.0)))
+    )
     psi = tl.math.log(r) - 0.5 * rinv - poly - inv_sum
 
     cot = tl.math.cos(PI * x) / tl.math.sin(PI * x)
