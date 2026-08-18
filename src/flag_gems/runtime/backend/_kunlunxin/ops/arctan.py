@@ -8,6 +8,10 @@ from triton.language.extra import libdevice
 logger = logging.getLogger(__name__)
 
 
+# We approximate atan with an inline minimax polynomial instead of calling
+# tl_extra_shim.atan: on this backend the shim lowers to a slow path (and pulls
+# in tl.where-style selects), whereas this branchless polynomial keeps the whole
+# kernel in fast vector ops and still meets the accuracy tolerance.
 @triton.jit
 def _atan7(x):
     # atan(x) = sign(x) * [ pi/4 + (t*P(t^2) - pi/4) * s ]  with
@@ -53,10 +57,7 @@ def arctan(x):
     out = torch.empty_like(x)
     n_elements = x.numel()
     if n_elements >= 4 * 1024 * 1024:
-        if x.dtype == torch.float32:
-            BLOCK_SIZE, num_warps = 16384, 8
-        else:
-            BLOCK_SIZE, num_warps = 16384, 8
+        BLOCK_SIZE, num_warps = 16384, 8
     elif n_elements >= 65536:
         BLOCK_SIZE, num_warps = 8192, 8
     else:
@@ -73,10 +74,7 @@ def arctan_(x):
         x = x.contiguous()
     n_elements = x.numel()
     if n_elements >= 4 * 1024 * 1024:
-        if x.dtype == torch.float32:
-            BLOCK_SIZE, num_warps = 16384, 8
-        else:
-            BLOCK_SIZE, num_warps = 16384, 8
+        BLOCK_SIZE, num_warps = 16384, 8
     elif n_elements >= 65536:
         BLOCK_SIZE, num_warps = 8192, 8
     else:
