@@ -14,6 +14,7 @@
 
 from torch_musa import current_device, get_device_capability
 
+from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .all import all, all_dim, all_dims
 from .amax import amax
 from .any import any, any_dim, any_dims
@@ -95,6 +96,7 @@ from .zeros import zero_, zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "adaptive_max_pool3d_backward",
     "amax",
     "all",
     "all_dim",
