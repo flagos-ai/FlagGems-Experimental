@@ -85,6 +85,7 @@ from .repeat_interleave import (
 from .resolve_conj import resolve_conj
 from .round_ import round_
 from .softplus_backward import softplus_backward
+from .silu_backward import silu_backward
 from .sort import sort, sort_stable
 from .special_gammainc import special_gammainc
 from .tile import tile
@@ -180,6 +181,7 @@ __all__ = [
     "resolve_conj",
     "round_",
     "softplus_backward",
+    "silu_backward",
     "sort",
     "sort_stable",
     "special_gammainc",
