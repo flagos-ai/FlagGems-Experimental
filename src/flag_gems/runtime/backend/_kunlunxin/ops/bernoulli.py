@@ -69,7 +69,7 @@ def bernoulli(input):
     else:
         block = _BF16_BLOCK if input.dtype == torch.bfloat16 else _F32_BLOCK
         warps = _LARGE_WARPS
-    even = (n % block == 0)
+    even = n % block == 0
     block_u = even and n > _SMALL_THRESHOLD
     grid = (triton.cdiv(n, block),)
     _bernoulli_kernel[grid](
