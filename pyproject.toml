@@ -142,7 +142,7 @@ kunlunxin = [
     "hydrax==0.1.0",
     "hyperparameter==0.5.6",
     "psutil==6.1.0",
-    "regex==2026.4.4",
+    "regex==2026.7.19",
     "torch==2.9.0+cu129",
     "torchaudio==2.9.0+cu129",
     "torchvision==0.24.0+cu129",
