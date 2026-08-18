@@ -69,6 +69,7 @@ from .ones_like import ones_like
 from .pad import constant_pad_nd
 from .permute_copy import permute_copy
 from .prod import prod, prod_dim
+from .rad2deg_ import rad2deg_
 from .rand import rand
 from .rand_like import rand_like
 from .randn import randn
@@ -166,6 +167,7 @@ __all__ = [
     "permute_copy",
     "prod",
     "prod_dim",
+    "rad2deg_",
     "rand",
     "rand_like",
     "randn",
