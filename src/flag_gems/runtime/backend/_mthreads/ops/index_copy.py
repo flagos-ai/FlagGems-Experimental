@@ -19,7 +19,6 @@ import triton
 import triton.language as tl
 
 from flag_gems.ops.index_copy_ import index_copy as default_index_copy
-from flag_gems.ops.index_copy_ import index_copy_ as default_index_copy_
 from flag_gems.runtime import torch_device_fn
 from flag_gems.utils import libentry
 
@@ -295,13 +294,4 @@ def index_copy(inp, dim, index, src):
     return out
 
 
-def index_copy_(inp, dim, index, src):
-    logger.debug("GEMS_MTHREADS INDEX_COPY_")
-    if not _use_triton_kernel(inp, dim, index, src):
-        return default_index_copy_(inp, dim, index, src)
-    out = index_copy(inp, dim, index, src)
-    inp.copy_(out)
-    return inp
-
-
-__all__ = ["index_copy", "index_copy_"]
+__all__ = ["index_copy"]
