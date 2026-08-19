@@ -220,21 +220,3 @@ def feature_dropout(x: torch.Tensor, p, train=True):
     out = torch.empty_like(x)
     _launch(x, p, out)
     return out
-
-
-def feature_dropout_(x: torch.Tensor, p, train=True):
-    logger.debug("GEMS_MTHREADS FEATURE_DROPOUT_")
-    p = float(p)
-    if not bool(train) or p == 0.0:
-        return x
-    if not _use_triton_kernel(x, p, train):
-        out = default_feature_dropout(x, p, train)
-        x.copy_(out)
-        return x
-    if p == 1.0:
-        x.zero_()
-        return x
-    out = torch.empty_like(x)
-    _launch(x, p, out)
-    x.copy_(out)
-    return x

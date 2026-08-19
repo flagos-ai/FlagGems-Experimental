@@ -35,7 +35,7 @@ from .div import (
 from .dropout import dropout, dropout_backward
 from .erfinv import erfinv
 from .erfinv_ import erfinv_
-from .feature_dropout import feature_dropout, feature_dropout_
+from .feature_dropout import feature_dropout
 from .flip import flip
 from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
 from .gather import gather, gather_backward
@@ -117,7 +117,6 @@ __all__ = [
     "erfinv",
     "erfinv_",
     "feature_dropout",
-    "feature_dropout_",
     "flip",
     "fmod_",
     "fmod_scalar_",
