@@ -23,6 +23,7 @@ from .batch_norm import batch_norm, batch_norm_backward
 from .bucketize import bucketize
 from .celu import celu
 from .conv2d import conv2d
+from .diagonal_scatter import diagonal_scatter
 from .div import (
     div_mode,
     div_mode_,
@@ -32,7 +33,6 @@ from .div import (
     true_divide_,
     true_divide_out,
 )
-from .diagonal_scatter import diagonal_scatter
 from .dropout import dropout, dropout_backward
 from .erfinv import erfinv
 from .erfinv_ import erfinv_
