@@ -46,7 +46,7 @@ from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
 from .linalg_cholesky import linalg_cholesky
 from .log import log
-from .log10 import log10, log10_, log10_out
+from .log10 import log10, log10_out
 from .log10_ import log10_
 from .log_normal_ import log_normal_
 from .log_softmax import (
