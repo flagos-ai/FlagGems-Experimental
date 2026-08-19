@@ -57,7 +57,7 @@ from .log_softmax import (
 from .max import max, max_dim
 from .median import median, median_dim, median_dim_values, median_out
 from .min import min, min_dim
-from .mish import mish, mish_
+from .mish import mish
 from .mish_ import mish_
 from .mode import mode
 from .mul import mul, mul_
