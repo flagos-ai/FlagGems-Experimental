@@ -14,6 +14,7 @@
 
 from torch_musa import current_device, get_device_capability
 
+from ._masked_scale import _masked_scale
 from .all import all, all_dim, all_dims
 from .amax import amax
 from .any import any, any_dim, any_dims
@@ -54,7 +55,6 @@ from .log_softmax import (
     log_softmax_backward_out,
     log_softmax_out,
 )
-from .masked_scale import _masked_scale
 from .max import max, max_dim
 from .median import median, median_dim, median_dim_values, median_out
 from .min import min, min_dim
