@@ -14,6 +14,9 @@
 
 from torch_musa import current_device, get_device_capability
 
+from ._functional_sym_constrain_range_for_size import (
+    _functional_sym_constrain_range_for_size,
+)
 from .all import all, all_dim, all_dims
 from .amax import amax
 from .any import any, any_dim, any_dims
@@ -37,9 +40,6 @@ from .erfinv import erfinv
 from .erfinv_ import erfinv_
 from .flip import flip
 from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
-from .functional_sym_constrain_range_for_size import (
-    _functional_sym_constrain_range_for_size,
-)
 from .gather import gather, gather_backward
 from .histc import histc
 from .im2col import im2col
