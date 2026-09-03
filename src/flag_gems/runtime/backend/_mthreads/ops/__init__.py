@@ -14,10 +14,13 @@
 
 from torch_musa import current_device, get_device_capability
 
+from ._amp_foreach_non_finite_check_and_unscale_ import (
+    _amp_foreach_non_finite_check_and_unscale_,
+)
 from ._functional_sym_constrain_range_for_size import (
     _functional_sym_constrain_range_for_size,
-)
 from ._masked_scale import _masked_scale
+from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .all import all, all_dim, all_dims
 from .amax import amax
 from .any import any, any_dim, any_dims
@@ -27,9 +30,11 @@ from .argmin import argmin
 from .batch_norm import batch_norm, batch_norm_backward
 from .bucketize import bucketize
 from .celu import celu
+from .channel_shuffle import channel_shuffle
 from .clip_ import clip_
 from .conv2d import conv2d
 from .deg2rad_ import deg2rad_
+from .diagonal_scatter import diagonal_scatter
 from .div import (
     div_mode,
     div_mode_,
@@ -42,6 +47,7 @@ from .div import (
 from .dropout import dropout, dropout_backward
 from .erfinv import erfinv
 from .erfinv_ import erfinv_
+from .feature_dropout import feature_dropout
 from .fix import fix
 from .flip import flip
 from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
@@ -57,7 +63,8 @@ from .lcm import lcm
 from .linalg_cholesky import linalg_cholesky
 from .log import log
 from .log2_ import log2_
-from .log10 import log10, log10_, log10_out
+from .log10 import log10, log10_out
+from .log10_ import log10_
 from .log_normal_ import log_normal_
 from .log_softmax import (
     log_softmax,
@@ -110,8 +117,10 @@ from .zeros import zero_, zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "_amp_foreach_non_finite_check_and_unscale_",
     "_functional_sym_constrain_range_for_size",
     "_masked_scale",
+    "adaptive_max_pool3d_backward",
     "amax",
     "all",
     "all_dim",
@@ -128,13 +137,16 @@ __all__ = [
     "bucketize",
     "celu",
     # "celu_",
+    "channel_shuffle",
     "clip_",
     "conv2d",
     "deg2rad_",
+    "diagonal_scatter",
     "dropout",
     "dropout_backward",
     "erfinv",
     "erfinv_",
+    "feature_dropout",
     "fix",
     "flip",
     "fmod_",
