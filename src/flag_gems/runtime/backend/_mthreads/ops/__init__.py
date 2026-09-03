@@ -52,9 +52,9 @@ from .index_select import index_select
 from .lcm import lcm
 from .linalg_cholesky import linalg_cholesky
 from .log import log
+from .log2_ import log2_
 from .log10 import log10, log10_out
 from .log10_ import log10_
-from .log2_ import log2_
 from .log_normal_ import log_normal_
 from .log_softmax import (
     log_softmax,
