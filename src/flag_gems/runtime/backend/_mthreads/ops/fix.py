@@ -13,25 +13,20 @@
 # limitations under the License.
 
 import logging
-from typing import Tuple
 
 import torch
 import triton
 import triton.language as tl
 
-from flag_gems.ops.mish import mish as default_mish
+from flag_gems.ops.fix import fix as default_fix
 from flag_gems.runtime import torch_device_fn
-from flag_gems.utils import libentry, tl_extra_shim
+from flag_gems.utils import libentry
 
 logger = logging.getLogger(
     f'flag_gems.runtime.backend._mthreads.ops.{__name__.split(".")[-1]}'
 )
 
 _SUPPORTED_DTYPES = {torch.float16, torch.bfloat16, torch.float32}
-
-exp = tl_extra_shim.exp
-log = tl_extra_shim.log
-fast_tanh = tl_extra_shim.fast_tanh
 
 
 @libentry()
@@ -43,14 +38,12 @@ fast_tanh = tl_extra_shim.fast_tanh
         triton.Config({"BLOCK_SIZE": 512, "VEC": 4}, num_warps=8, num_stages=1),
         triton.Config({"BLOCK_SIZE": 1024, "VEC": 1}, num_warps=4, num_stages=2),
         triton.Config({"BLOCK_SIZE": 1024, "VEC": 2}, num_warps=8, num_stages=2),
-        triton.Config({"BLOCK_SIZE": 2048, "VEC": 4}, num_warps=8, num_stages=2),
-        triton.Config({"BLOCK_SIZE": 4096, "VEC": 1}, num_warps=8, num_stages=2),
-        triton.Config({"BLOCK_SIZE": 4096, "VEC": 2}, num_warps=16, num_stages=2),
+        triton.Config({"BLOCK_SIZE": 2048, "VEC": 1}, num_warps=8, num_stages=2),
     ],
     key=["n_elements", "dtype_size"],
 )
 @triton.jit
-def mish_kernel(
+def fix_kernel(
     x_ptr,
     out_ptr,
     n_elements,
@@ -62,42 +55,42 @@ def mish_kernel(
     BLOCK_ELEMS: tl.constexpr = BLOCK_SIZE * VEC
     offsets = (pid * BLOCK_ELEMS + tl.arange(0, BLOCK_ELEMS)).to(tl.int64)
     mask = offsets < n_elements
-    x = tl.load(x_ptr + offsets, mask=mask)
+    x = tl.load(x_ptr + offsets, mask=mask, other=0.0)
 
-    # mish(x) = x * tanh(softplus(x)) = x * tanh(ln(1 + e^x))
-    # compute in fp32 (mthreads has no fp64); tails are stable since for
-    # large |x| mish -> x (pos) or 0 (neg) and tanh saturates accordingly.
-    x_fp32 = x.to(tl.float32)
-    out = (x_fp32 * fast_tanh(log(1.0 + exp(x_fp32)))).to(x.dtype)
+    # torch.fix == truncate toward zero; compute in fp32 for stability.
+    # Moore Threads hardware does not support fp64.
+    xf = x.to(tl.float32)
+    y = tl.where(xf < 0.0, tl.ceil(xf), tl.floor(xf))
+    out = y.to(x.dtype)
 
     tl.store(out_ptr + offsets, out, mask=mask)
 
 
-def _use_triton_kernel(x: torch.Tensor) -> Tuple[bool, int]:
+def _use_triton_kernel(x: torch.Tensor) -> bool:
     if not isinstance(x, torch.Tensor):
-        return False, 0
+        return False
     if x.device.type != "musa" or x.dtype not in _SUPPORTED_DTYPES:
-        return False, 0
-    if x.numel() == 0 or not x.is_contiguous():
-        return False, 0
-    return True, x.element_size()
+        return False
+    if not x.is_contiguous() or x.numel() == 0:
+        return False
+    return True
 
 
-def _launch_mish(x: torch.Tensor, out: torch.Tensor, dtype_size: int):
+def _launch_fix(x: torch.Tensor, out: torch.Tensor):
     x_flat = x.view(-1)
     out_flat = out.view(-1)
     n_elements = out_flat.numel()
+    dtype_size = out_flat.element_size()
     grid = lambda META: (triton.cdiv(n_elements, META["BLOCK_SIZE"] * META["VEC"]),)
     with torch_device_fn.device(out.device):
-        mish_kernel[grid](x_flat, out_flat, n_elements, dtype_size)
+        fix_kernel[grid](x_flat, out_flat, n_elements, dtype_size)
     return out
 
 
-def mish(A):
-    logger.debug("GEMS_MTHREADS MISH")
-    use_triton, dtype_size = _use_triton_kernel(A)
-    if not use_triton:
-        return default_mish(A)
+def fix(input):
+    logger.debug("GEMS_MTHREADS FIX")
+    if not _use_triton_kernel(input):
+        return default_fix(input)
 
-    out = torch.empty_like(A)
-    return _launch_mish(A, out, dtype_size)
+    out = torch.empty_like(input)
+    return _launch_fix(input, out)
