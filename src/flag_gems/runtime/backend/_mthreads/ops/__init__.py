@@ -14,16 +14,20 @@
 
 from torch_musa import current_device, get_device_capability
 
+from ._masked_scale import _masked_scale
 from .all import all, all_dim, all_dims
 from .amax import amax
 from .any import any, any_dim, any_dims
 from .arange import arange, arange_start
+from .arctan_ import arctan_
 from .argmin import argmin
 from .batch_norm import batch_norm, batch_norm_backward
 from .bucketize import bucketize
 from .celu import celu
 from .channel_shuffle import channel_shuffle
+from .clip_ import clip_
 from .conv2d import conv2d
+from .deg2rad_ import deg2rad_
 from .div import (
     div_mode,
     div_mode_,
@@ -36,6 +40,7 @@ from .div import (
 from .dropout import dropout, dropout_backward
 from .erfinv import erfinv
 from .erfinv_ import erfinv_
+from .fix import fix
 from .flip import flip
 from .fmod_ import fmod_, fmod_scalar_, fmod_tensor_
 from .gather import gather, gather_backward
@@ -45,8 +50,10 @@ from .index_add import index_add, index_add_
 from .index_copy_ import index_copy, index_copy_
 from .index_put import _index_put_impl_, index_put, index_put_
 from .index_select import index_select
+from .lcm import lcm
 from .linalg_cholesky import linalg_cholesky
 from .log import log
+from .log2_ import log2_
 from .log10 import log10, log10_, log10_out
 from .log_normal_ import log_normal_
 from .log_softmax import (
@@ -58,7 +65,8 @@ from .log_softmax import (
 from .max import max, max_dim
 from .median import median, median_dim, median_dim_values, median_out
 from .min import min, min_dim
-from .mish import mish, mish_
+from .mish import mish
+from .mish_ import mish_
 from .mode import mode
 from .mul import mul, mul_
 from .nonzero_numpy import nonzero_numpy
@@ -70,6 +78,7 @@ from .ones_like import ones_like
 from .pad import constant_pad_nd
 from .permute_copy import permute_copy
 from .prod import prod, prod_dim
+from .rad2deg_ import rad2deg_
 from .rand import rand
 from .rand_like import rand_like
 from .randn import randn
@@ -85,9 +94,11 @@ from .repeat_interleave import (
 )
 from .resolve_conj import resolve_conj
 from .round_ import round_
+from .silu_backward import silu_backward
 from .softplus_backward import softplus_backward
 from .sort import sort, sort_stable
 from .special_gammainc import special_gammainc
+from .square_ import square_
 from .tile import tile
 from .trunc import trunc, trunc_
 from .unique import _unique2
@@ -96,6 +107,7 @@ from .zeros import zero_, zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "_masked_scale",
     "amax",
     "all",
     "all_dim",
@@ -105,6 +117,7 @@ __all__ = [
     "any_dims",
     "arange",
     "arange_start",
+    "arctan_",
     "argmin",
     "batch_norm",
     "batch_norm_backward",
@@ -112,11 +125,14 @@ __all__ = [
     "celu",
     # "celu_",
     "channel_shuffle",
+    "clip_",
     "conv2d",
+    "deg2rad_",
     "dropout",
     "dropout_backward",
     "erfinv",
     "erfinv_",
+    "fix",
     "flip",
     "fmod_",
     "fmod_scalar_",
@@ -133,11 +149,13 @@ __all__ = [
     "index_put_",
     "_index_put_impl_",
     "index_select",
+    "lcm",
     "linalg_cholesky",
     "log",
     "log10",
     "log10_",
     "log10_out",
+    "log2_",
     "log_normal_",
     "log_softmax",
     "log_softmax_backward",
@@ -168,6 +186,7 @@ __all__ = [
     "permute_copy",
     "prod",
     "prod_dim",
+    "rad2deg_",
     "rand",
     "rand_like",
     "randn",
@@ -181,10 +200,12 @@ __all__ = [
     "repeat_interleave_tensor",
     "resolve_conj",
     "round_",
+    "silu_backward",
     "softplus_backward",
     "sort",
     "sort_stable",
     "special_gammainc",
+    "square_",
     "tile",
     "true_divide",
     "true_divide_",
