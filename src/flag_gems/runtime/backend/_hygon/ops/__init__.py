@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ._amp_foreach_non_finite_check_and_unscale_ import (
+    _amp_foreach_non_finite_check_and_unscale_,
+)
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .any import any, any_dim, any_dims
 from .attention import (
@@ -110,6 +113,7 @@ from .weight_norm import (
 )
 
 __all__ = [
+    "_amp_foreach_non_finite_check_and_unscale_",
     "_unique2",
     "adaptive_max_pool3d_backward",
     "avg_pool3d_backward",
@@ -119,6 +123,7 @@ __all__ = [
     "conj_physical",
     "ScaleDotProductAttention",
     "SUPPORTED_FP8_DTYPE",
+    "adaptive_max_pool3d_backward",
     "any",
     "any_dim",
     "any_dims",
@@ -126,6 +131,10 @@ __all__ = [
     "diff",
     "div_mode",
     "div_mode_",
+    "broadcast_tensors",
+    "broadcast_to",
+    "cudnn_convolution",
+    "diff",
     "exponential_",
     "fill_scalar",
     "fill_scalar_",

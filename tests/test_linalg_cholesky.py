@@ -22,8 +22,12 @@ from . import accuracy_utils as utils
 
 @pytest.mark.linalg_cholesky
 @pytest.mark.parametrize("shape", [(2, 2), (4, 4), (8, 8), (16, 16), (32, 32)])
-# Cholesky only supports float32/float64; fp16/bf16 not supported by PyTorch
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+# Cholesky only supports float32/float64; fp16/bf16 not supported by PyTorch.
+# fp64 is gated on device support (Moore Threads hardware has no fp64).
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float32] + ([torch.float64] if utils.fp64_is_supported else []),
+)
 def test_linalg_cholesky(shape, dtype):
     # Create a positive-definite matrix: A = B @ B^T + I
     if flag_gems.vendor_name == "cambricon" and dtype == torch.float64:
@@ -48,8 +52,12 @@ def test_linalg_cholesky(shape, dtype):
 
 @pytest.mark.linalg_cholesky
 @pytest.mark.parametrize("shape", [(2, 2), (4, 4), (8, 8)])
-# Cholesky only supports float32/float64; fp16/bf16 not supported by PyTorch
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+# Cholesky only supports float32/float64; fp16/bf16 not supported by PyTorch.
+# fp64 is gated on device support (Moore Threads hardware has no fp64).
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float32] + ([torch.float64] if utils.fp64_is_supported else []),
+)
 def test_linalg_cholesky_upper(shape, dtype):
     # Test with upper=True
     if flag_gems.vendor_name == "cambricon" and dtype == torch.float64:
@@ -74,8 +82,12 @@ def test_linalg_cholesky_upper(shape, dtype):
 
 @pytest.mark.linalg_cholesky
 @pytest.mark.parametrize("shape", [(2, 4, 4), (3, 8, 8)])
-# Cholesky only supports float32/float64; fp16/bf16 not supported by PyTorch
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+# Cholesky only supports float32/float64; fp16/bf16 not supported by PyTorch.
+# fp64 is gated on device support (Moore Threads hardware has no fp64).
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float32] + ([torch.float64] if utils.fp64_is_supported else []),
+)
 def test_linalg_cholesky_batch(shape, dtype):
     # Create positive-definite matrices for batched input: A = B @ B^T + I
     if flag_gems.vendor_name == "cambricon" and dtype == torch.float64:

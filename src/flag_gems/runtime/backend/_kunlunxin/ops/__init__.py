@@ -56,6 +56,7 @@ from .attention import (
 from .avg_pool2d import avg_pool2d, avg_pool2d_backward
 from .baddbmm import baddbmm
 from .batch_norm import batch_norm, batch_norm_backward
+from .bernoulli import bernoulli
 from .bernoulli_ import bernoulli_
 from .bitwise_and import (
     bitwise_and_scalar,
@@ -108,6 +109,7 @@ from .deg2rad import deg2rad, deg2rad_, deg2rad_out
 from .diag import diag
 from .diag_embed import diag_embed
 from .diagonal import diagonal_backward
+from .digamma import digamma
 from .digamma_ import digamma_
 from .div import (
     div_mode,
@@ -340,6 +342,7 @@ __all__ = [
     "_thnn_fused_lstm_cell_backward_impl",
     "_conv_depthwise2d",
     "_safe_softmax",
+    "digamma",
     "digamma_",
     "soft_margin_loss",
     "soft_margin_loss_out",
@@ -781,4 +784,5 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "bernoulli",
 ]

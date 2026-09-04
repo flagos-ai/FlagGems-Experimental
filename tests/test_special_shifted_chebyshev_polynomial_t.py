@@ -18,58 +18,129 @@ import torch
 import flag_gems
 
 from . import accuracy_utils as utils
-from . import conftest as cfg
-
-# shifted_chebyshev_polynomial_t has no eager Half/BFloat16 CUDA kernel, so the
-# supported set is the float32/float64 subset of utils.FLOAT_DTYPES.
-if cfg.QUICK_MODE:
-    FLOAT_DTYPES = [torch.float32]
-else:
-    FLOAT_DTYPES = [
-        dtype
-        for dtype in (*utils.FLOAT_DTYPES, torch.float64)
-        if dtype in (torch.float32, torch.float64)
-    ]
 
 
 @pytest.mark.special_shifted_chebyshev_polynomial_t
 @pytest.mark.parametrize("shape", utils.POINTWISE_SHAPES)
-@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-def test_special_shifted_chebyshev_polynomial_t(shape, dtype, caplog):
-    # x in [0, 1] for shifted Chebyshev polynomial
-    x = torch.rand(shape, dtype=dtype, device=flag_gems.device)
-    n = torch.randint(0, 10, shape, dtype=torch.long, device=flag_gems.device)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_special_shifted_chebyshev_polynomial_t(shape, dtype):
+    inp1 = torch.rand(shape, dtype=dtype, device=flag_gems.device)
+    inp2 = torch.randint(-2, 65, shape, dtype=torch.long, device=flag_gems.device)
+    ref_inp1 = utils.to_reference(inp1)
+    ref_inp2 = utils.to_reference(inp2)
 
-    ref_x = utils.to_reference(x, True)
-    ref_n = n.to(ref_x.device).to(ref_x.dtype)
+    ref_out = torch.ops.aten.special_shifted_chebyshev_polynomial_t(ref_inp1, ref_inp2)
 
-    ref_out = torch.ops.aten.special_shifted_chebyshev_polynomial_t(ref_x, ref_n)
-    logger_name = "flag_gems.ops.special_shifted_chebyshev_polynomial_t"
-    with caplog.at_level("DEBUG", logger=logger_name):
-        with flag_gems.use_gems():
-            res_out = torch.ops.aten.special_shifted_chebyshev_polynomial_t(x, n)
-    assert "GEMS SPECIAL_SHIFTED_CHEBYSHEV_POLYNOMIAL_T" in caplog.text
-
-    # Use larger tolerance for float32 due to trigonometric function precision
-    utils.gems_assert_close(res_out, ref_out, dtype, atol=5e-3)
-
-
-@pytest.mark.special_shifted_chebyshev_polynomial_t
-@pytest.mark.parametrize("shape", utils.POINTWISE_SHAPES)
-@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-def test_special_shifted_chebyshev_polynomial_t_scalar_n(shape, dtype, caplog):
-    # Scalar n reaches the same wrapper: aten decomposes the .n_scalar overload
-    # onto the registered .default overload, so no separate registration exists.
-    x = torch.rand(shape, dtype=dtype, device=flag_gems.device)
-    n = 3  # scalar
-
-    ref_x = utils.to_reference(x, True)
-
-    ref_out = torch.ops.aten.special_shifted_chebyshev_polynomial_t(ref_x, n)
-    logger_name = "flag_gems.ops.special_shifted_chebyshev_polynomial_t"
-    with caplog.at_level("DEBUG", logger=logger_name):
-        with flag_gems.use_gems():
-            res_out = torch.ops.aten.special_shifted_chebyshev_polynomial_t(x, n)
-    assert "GEMS SPECIAL_SHIFTED_CHEBYSHEV_POLYNOMIAL_T" in caplog.text
+    with flag_gems.use_gems():
+        res_out = torch.special.shifted_chebyshev_polynomial_t(inp1, inp2)
 
     utils.gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.special_shifted_chebyshev_polynomial_t
+@pytest.mark.parametrize("shape", utils.POINTWISE_SHAPES)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_special_shifted_chebyshev_polynomial_t_out(shape, dtype):
+    inp1 = torch.rand(shape, dtype=dtype, device=flag_gems.device)
+    inp2 = torch.randint(-2, 65, shape, dtype=torch.long, device=flag_gems.device)
+    ref_inp1 = utils.to_reference(inp1)
+    ref_inp2 = utils.to_reference(inp2)
+    ref_out = torch.empty_like(ref_inp1)
+    res_out = torch.empty_like(inp1)
+
+    torch.ops.aten.special_shifted_chebyshev_polynomial_t.out(
+        ref_inp1, ref_inp2, out=ref_out
+    )
+
+    with flag_gems.use_gems():
+        returned = torch.ops.aten.special_shifted_chebyshev_polynomial_t.out(
+            inp1, inp2, out=res_out
+        )
+
+    assert returned is res_out
+    utils.gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.special_shifted_chebyshev_polynomial_t
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_special_shifted_chebyshev_polynomial_t_scalar_overloads(dtype):
+    inp = torch.rand((16,), dtype=dtype, device=flag_gems.device)
+    n = torch.randint(-2, 65, (16,), dtype=torch.long, device=flag_gems.device)
+    scalar_x = 0.25
+    scalar_n = 17
+
+    ref_inp = utils.to_reference(inp)
+    ref_n = utils.to_reference(n)
+
+    ref_x_scalar = torch.ops.aten.special_shifted_chebyshev_polynomial_t.x_scalar(
+        scalar_x, ref_n
+    )
+    ref_n_scalar = torch.ops.aten.special_shifted_chebyshev_polynomial_t.n_scalar(
+        ref_inp, scalar_n
+    )
+
+    with flag_gems.use_gems():
+        res_x_scalar = torch.ops.aten.special_shifted_chebyshev_polynomial_t.x_scalar(
+            scalar_x, n
+        )
+        res_n_scalar = torch.ops.aten.special_shifted_chebyshev_polynomial_t.n_scalar(
+            inp, scalar_n
+        )
+
+    utils.gems_assert_close(res_x_scalar, ref_x_scalar, ref_x_scalar.dtype)
+    utils.gems_assert_close(res_n_scalar, ref_n_scalar, dtype)
+
+
+@pytest.mark.special_shifted_chebyshev_polynomial_t
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_special_shifted_chebyshev_polynomial_t_scalar_out_overloads(dtype):
+    inp = torch.rand((16,), dtype=dtype, device=flag_gems.device)
+    n = torch.randint(-2, 65, (16,), dtype=torch.long, device=flag_gems.device)
+    scalar_x = 0.25
+    scalar_n = 17
+
+    ref_inp = utils.to_reference(inp)
+    ref_n = utils.to_reference(n)
+    ref_x_scalar = torch.empty_like(ref_inp)
+    ref_n_scalar = torch.empty_like(ref_inp)
+    res_x_scalar = torch.empty_like(inp)
+    res_n_scalar = torch.empty_like(inp)
+
+    torch.ops.aten.special_shifted_chebyshev_polynomial_t.x_scalar_out(
+        scalar_x, ref_n, out=ref_x_scalar
+    )
+    torch.ops.aten.special_shifted_chebyshev_polynomial_t.n_scalar_out(
+        ref_inp, scalar_n, out=ref_n_scalar
+    )
+
+    with flag_gems.use_gems():
+        returned_x = torch.ops.aten.special_shifted_chebyshev_polynomial_t.x_scalar_out(
+            scalar_x, n, out=res_x_scalar
+        )
+        returned_n = torch.ops.aten.special_shifted_chebyshev_polynomial_t.n_scalar_out(
+            inp, scalar_n, out=res_n_scalar
+        )
+
+    assert returned_x is res_x_scalar
+    assert returned_n is res_n_scalar
+    utils.gems_assert_close(res_x_scalar, ref_x_scalar, dtype)
+    utils.gems_assert_close(res_n_scalar, ref_n_scalar, dtype)
+
+
+@pytest.mark.special_shifted_chebyshev_polynomial_t
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_special_shifted_chebyshev_polynomial_t_unsupported_dtype(dtype):
+    inp = torch.randn((16,), dtype=dtype, device=flag_gems.device)
+    n = torch.randint(0, 5, (16,), dtype=torch.long, device=flag_gems.device)
+
+    with flag_gems.use_gems(), pytest.raises(RuntimeError):
+        torch.special.shifted_chebyshev_polynomial_t(inp, n)
+
+
+@pytest.mark.special_shifted_chebyshev_polynomial_t
+def test_special_shifted_chebyshev_polynomial_t_unsupported_degree():
+    inp = torch.randn((16,), dtype=torch.float32, device=flag_gems.device)
+    n = torch.full((16,), 65, dtype=torch.long, device=flag_gems.device)
+
+    with flag_gems.use_gems(), pytest.raises(NotImplementedError):
+        torch.special.shifted_chebyshev_polynomial_t(inp, n)

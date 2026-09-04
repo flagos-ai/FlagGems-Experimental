@@ -17,10 +17,10 @@ name: linter
 on:
   push:
     branches:
-      - master
+      - infra-ci
   pull_request:
     branches:
-      - master
+      - infra-ci
     types:
       - opened
       - edited
