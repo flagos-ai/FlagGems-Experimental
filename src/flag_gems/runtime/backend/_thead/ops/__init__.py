@@ -17,6 +17,7 @@ from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .addmm_ import addmm_
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
+from .cholesky_inverse import cholesky_inverse
 from .conv_transpose1d import conv_transpose1d, conv_transpose1d_output_size
 from .cudnn_batch_norm_backward import cudnn_batch_norm_backward, make_3d_for_bn
 from .cudnn_convolution import cudnn_convolution
@@ -59,6 +60,7 @@ __all__ = [
     "addmm_",
     "broadcast_tensors",
     "broadcast_to",
+    "cholesky_inverse",
     "conv_transpose1d",
     "conv_transpose1d_output_size",
     "cudnn_batch_norm_backward",
