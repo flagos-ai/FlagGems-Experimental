@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+from ._conv_depthwise2d import _conv_depthwise2d
 from .adaptive_max_pool3d_backward import adaptive_max_pool3d_backward
 from .addmm_ import addmm_
 from .broadcast_tensors import broadcast_tensors
@@ -55,6 +56,7 @@ from .tile import tile
 from .unbind_copy import unbind_copy
 
 __all__ = [
+    "_conv_depthwise2d",
     "adaptive_max_pool3d_backward",
     "addmm_",
     "broadcast_tensors",
