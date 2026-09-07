@@ -71,6 +71,7 @@ from .special_modified_bessel_k1 import (
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
+from .thnn_fused_lstm_cell_backward_impl import _thnn_fused_lstm_cell_backward_impl
 from .tile import tile
 from .var import var, var_correction, var_dim
 
@@ -80,6 +81,7 @@ _pointwise_dynamic.ModuleGenerator = ModuleGenerator
 __all__ = [
     "_conv_depthwise2d",
     "_native_batch_norm_legit_functional",
+    "_thnn_fused_lstm_cell_backward_impl",
     "addmm",
     "addmm_",
     "addmm_out",
@@ -115,8 +117,8 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
