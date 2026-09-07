@@ -27,6 +27,8 @@ from .batch_norm_no_update import run as _batch_norm_no_update
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cholesky_solve import cholesky_solve, cholesky_solve_out
+from .cholesky_solve_helper import run as _cholesky_solve_helper
+from .concatenate import run as concatenate
 from .constant_pad_nd import constant_pad_nd
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
@@ -42,6 +44,7 @@ from .index_select_backward import index_select_backward
 from .kthvalue import kthvalue
 from .lift_out import lift_out
 from .linalg_cholesky import linalg_cholesky
+from .linalg_householder_product import run as linalg_householder_product
 from .linalg_ldl_factor_ex import ldl_factor_ex
 from .linalg_svdvals import linalg_svdvals
 from .linear import linear
@@ -52,6 +55,7 @@ from .matmul_int8 import matmul_int8
 from .max_pool3d_with_indices_backward import max_pool3d_with_indices_backward
 from .median import median
 from .mm import mm, mm_out
+from .mvlgamma import run as mvlgamma
 from .narrow_copy import narrow_copy
 from .nonzero_numpy import nonzero_numpy
 from .permute_copy import permute_copy
@@ -61,6 +65,7 @@ from .resolve_neg import resolve_neg
 from .scatter_add import scatter_add_
 from .softplus import softplus_backward
 from .sparse_sampled_addmm import sparse_sampled_addmm, sparse_sampled_addmm_out
+from .special_bessel_j0 import run as special_bessel_j0
 from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
 from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w,
@@ -75,6 +80,7 @@ from .special_modified_bessel_k1 import (
     special_modified_bessel_k1,
     special_modified_bessel_k1_out,
 )
+from .special_multigammaln import run as special_multigammaln
 from .special_round import special_round
 from .special_round_out import special_round_out
 from .special_shifted_chebyshev_polynomial_w import (
@@ -86,6 +92,7 @@ from .unsafe_masked_index_put_accumulate import _unsafe_masked_index_put_accumul
 from .var import var, var_correction, var_dim
 
 __all__ = [
+    "_cholesky_solve_helper",
     "_batch_norm_no_update",
     "_conv_depthwise2d",
     "_adaptive_avg_pool2d_backward",
@@ -105,6 +112,7 @@ __all__ = [
     "broadcast_to",
     "cholesky_solve",
     "cholesky_solve_out",
+    "concatenate",
     "conv_transpose1d",
     "constant_pad_nd",
     "diagonal_scatter",
@@ -117,6 +125,7 @@ __all__ = [
     "index_copy_",
     "index_select_backward",
     "linalg_cholesky",
+    "linalg_householder_product",
     "ldl_factor_ex",
     "linalg_svdvals",
     "kthvalue",
@@ -130,6 +139,7 @@ __all__ = [
     "mm_out",
     "max_pool3d_with_indices_backward",
     "median",
+    "mvlgamma",
     "narrow_copy",
     "nonzero_numpy",
     "permute_copy",
@@ -144,6 +154,7 @@ __all__ = [
     "sparse_sampled_addmm_out",
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
+    "special_bessel_j0",
     "special_gammainc",
     "special_chebyshev_polynomial_u",
     "special_hermite_polynomial_h",
@@ -152,6 +163,7 @@ __all__ = [
     "special_modified_bessel_k0_out",
     "special_modified_bessel_k1",
     "special_modified_bessel_k1_out",
+    "special_multigammaln",
     "special_shifted_chebyshev_polynomial_w",
     "special_round",
     "special_round_out",
