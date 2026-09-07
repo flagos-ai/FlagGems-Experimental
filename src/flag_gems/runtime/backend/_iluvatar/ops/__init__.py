@@ -64,6 +64,7 @@ from .special_hermite_polynomial_h import (
     special_hermite_polynomial_h,
     special_hermite_polynomial_h_tensor_tensor,
 )
+from .special_legendre_polynomial_p import special_legendre_polynomial_p
 from .special_modified_bessel_k1 import (
     special_modified_bessel_k1,
     special_modified_bessel_k1_out,
@@ -115,8 +116,8 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
@@ -127,6 +128,7 @@ __all__ = [
     "special_gammainc",
     "special_hermite_polynomial_h",
     "special_hermite_polynomial_h_tensor_tensor",
+    "special_legendre_polynomial_p",
     "special_modified_bessel_k1",
     "special_modified_bessel_k1_out",
     "special_shifted_chebyshev_polynomial_w",
