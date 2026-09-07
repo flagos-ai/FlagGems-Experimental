@@ -33,6 +33,7 @@ from .hadamard_transform import hadamard_transform
 from .histc import histc
 from .index_select_backward import index_select_backward
 from .linalg_cholesky import linalg_cholesky
+from .linalg_ldl_factor_ex import ldl_factor_ex
 from .linalg_matrix_norm import linalg_matrix_norm
 from .linalg_qr import linalg_qr, linalg_qr_out
 from .linalg_solve_triangular import (
@@ -97,6 +98,7 @@ __all__ = [
     "hadamard_transform",
     "histc",
     "index_select_backward",
+    "ldl_factor_ex",
     "linalg_cholesky",
     "linalg_matrix_norm",
     "linalg_qr",
@@ -115,8 +117,8 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
