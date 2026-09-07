@@ -44,6 +44,7 @@ from .log_normal import log_normal
 from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
+from .median import median
 from .mm import mm, mm_out
 from .narrow_copy import narrow_copy
 from .nonzero_numpy import nonzero_numpy
@@ -108,6 +109,7 @@ __all__ = [
     "log_normal_",
     "matmul_bf16",
     "matmul_int8",
+    "median",
     "mm",
     "mm_out",
     "narrow_copy",
@@ -115,8 +117,8 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
