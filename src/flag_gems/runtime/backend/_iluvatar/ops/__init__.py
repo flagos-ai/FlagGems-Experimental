@@ -40,6 +40,7 @@ from .linalg_solve_triangular import (
     linalg_solve_triangular_out,
 )
 from .linear import linear
+from .log10_ import log10_
 from .log_normal import log_normal
 from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
@@ -104,6 +105,7 @@ __all__ = [
     "linalg_solve_triangular",
     "linalg_solve_triangular_out",
     "linear",
+    "log10_",
     "log_normal",
     "log_normal_",
     "matmul_bf16",
