@@ -45,6 +45,7 @@ from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .mm import mm, mm_out
+from .mvlgamma import run as mvlgamma
 from .narrow_copy import narrow_copy
 from .nonzero_numpy import nonzero_numpy
 from .permute_copy import permute_copy
@@ -110,13 +111,14 @@ __all__ = [
     "matmul_int8",
     "mm",
     "mm_out",
+    "mvlgamma",
     "narrow_copy",
     "nonzero_numpy",
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
