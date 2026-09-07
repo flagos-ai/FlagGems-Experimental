@@ -28,6 +28,7 @@ from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .diagonal_scatter import diagonal_scatter
 from .div import div_mode, div_mode_
+from .fractional_max_pool2d_backward import fractional_max_pool2d_backward
 from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
@@ -93,6 +94,7 @@ __all__ = [
     "diagonal_scatter",
     "div_mode",
     "div_mode_",
+    "fractional_max_pool2d_backward",
     "gcd_",
     "hadamard_transform",
     "histc",
@@ -115,8 +117,8 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
