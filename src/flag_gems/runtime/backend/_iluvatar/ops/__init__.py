@@ -16,6 +16,7 @@ import importlib
 
 from ..utils.pointwise_dynamic import ModuleGenerator
 from ._native_batch_norm_legit_functional import _native_batch_norm_legit_functional
+from .adaptive_max_pool2d_backward import adaptive_max_pool2d_backward
 from .adaptive_max_pool3d_backward import run
 from .addmm import addmm, addmm_out
 from .addmm_ import addmm_
@@ -80,6 +81,7 @@ _pointwise_dynamic.ModuleGenerator = ModuleGenerator
 __all__ = [
     "_conv_depthwise2d",
     "_native_batch_norm_legit_functional",
+    "adaptive_max_pool2d_backward",
     "addmm",
     "addmm_",
     "addmm_out",
@@ -115,8 +117,8 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
