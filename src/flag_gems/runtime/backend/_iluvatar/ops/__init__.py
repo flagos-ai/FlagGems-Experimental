@@ -40,6 +40,7 @@ from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
 from .igamma_ import igamma_
+from .index_copy_ import index_copy_
 from .index_select_backward import index_select_backward
 from .kthvalue import kthvalue
 from .lift_out import lift_out
@@ -134,6 +135,7 @@ __all__ = [
     "hadamard_transform",
     "histc",
     "igamma_",
+    "index_copy_",
     "index_select_backward",
     "kthvalue",
     "ldl_factor_ex",
