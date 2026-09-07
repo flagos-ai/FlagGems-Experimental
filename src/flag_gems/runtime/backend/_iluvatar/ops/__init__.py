@@ -31,6 +31,7 @@ from .div import div_mode, div_mode_
 from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
+from .igamma_ import igamma_
 from .index_select_backward import index_select_backward
 from .linalg_cholesky import linalg_cholesky
 from .linalg_matrix_norm import linalg_matrix_norm
@@ -96,6 +97,7 @@ __all__ = [
     "gcd_",
     "hadamard_transform",
     "histc",
+    "igamma_",
     "index_select_backward",
     "linalg_cholesky",
     "linalg_matrix_norm",
@@ -115,8 +117,8 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
