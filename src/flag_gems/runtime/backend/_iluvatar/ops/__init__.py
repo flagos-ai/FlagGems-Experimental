@@ -13,28 +13,44 @@
 # limitations under the License.
 
 from ._native_batch_norm_legit_functional import _native_batch_norm_legit_functional
+from .acos_ import acos_
+from .adaptive_avg_pool2d_backward import _adaptive_avg_pool2d_backward
+from .adaptive_max_pool2d_backward import adaptive_max_pool2d_backward
 from .adaptive_max_pool3d_backward import run
 from .addmm import addmm, addmm_out
 from .addmm_ import addmm_
+from .arccos_ import arccos_
 from .arccosh_ import arccosh_
+from .as_strided_scatter import as_strided_scatter
 from .avg_pool3d import avg_pool3d_backward
+from .batch_norm_no_update import run as _batch_norm_no_update
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cholesky_solve import cholesky_solve, cholesky_solve_out
+from .constant_pad_nd import constant_pad_nd
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .diagonal_scatter import diagonal_scatter
 from .div import div_mode, div_mode_
+from .fractional_max_pool2d_backward import fractional_max_pool2d_backward
 from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
+from .igamma_ import igamma_
 from .index_copy_ import index_copy_
 from .index_select_backward import index_select_backward
+from .kthvalue import kthvalue
+from .lift_out import lift_out
 from .linalg_cholesky import linalg_cholesky
+from .linalg_ldl_factor_ex import ldl_factor_ex
+from .linalg_svdvals import linalg_svdvals
 from .linear import linear
+from .log10_ import log10_
 from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
+from .max_pool3d_with_indices_backward import max_pool3d_with_indices_backward
+from .median import median
 from .mm import mm, mm_out
 from .narrow_copy import narrow_copy
 from .nonzero_numpy import nonzero_numpy
@@ -45,54 +61,75 @@ from .resolve_neg import resolve_neg
 from .scatter_add import scatter_add_
 from .softplus import softplus_backward
 from .sparse_sampled_addmm import sparse_sampled_addmm, sparse_sampled_addmm_out
+from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
 from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w,
     special_chebyshev_polynomial_w_out,
 )
 from .special_gammainc import special_gammainc
-from .special_hermite_polynomial_h import (
-    special_hermite_polynomial_h,
-    special_hermite_polynomial_h_tensor_tensor,
-)
+from .special_hermite_polynomial_h import special_hermite_polynomial_h
+from .special_legendre_polynomial_p import special_legendre_polynomial_p
 from .special_modified_bessel_k0 import special_modified_bessel_k0
+from .special_modified_bessel_k0_out import special_modified_bessel_k0_out
 from .special_modified_bessel_k1 import (
     special_modified_bessel_k1,
     special_modified_bessel_k1_out,
 )
+from .special_round import special_round
+from .special_round_out import special_round_out
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
+from .thnn_fused_lstm_cell_backward_impl import _thnn_fused_lstm_cell_backward_impl
 from .tile import tile
+from .unsafe_masked_index_put_accumulate import _unsafe_masked_index_put_accumulate
 from .var import var, var_correction, var_dim
 
 __all__ = [
+    "_batch_norm_no_update",
     "_conv_depthwise2d",
+    "_adaptive_avg_pool2d_backward",
     "_native_batch_norm_legit_functional",
+    "_thnn_fused_lstm_cell_backward_impl",
+    "_unsafe_masked_index_put_accumulate",
+    "acos_",
+    "adaptive_max_pool2d_backward",
     "addmm",
     "addmm_",
     "addmm_out",
     "arccosh_",
+    "arccos_",
+    "as_strided_scatter",
     "avg_pool3d_backward",
     "broadcast_tensors",
     "broadcast_to",
     "cholesky_solve",
     "cholesky_solve_out",
     "conv_transpose1d",
+    "constant_pad_nd",
     "diagonal_scatter",
     "div_mode",
     "div_mode_",
     "gcd_",
     "hadamard_transform",
     "histc",
+    "igamma_",
     "index_copy_",
     "index_select_backward",
     "linalg_cholesky",
+    "ldl_factor_ex",
+    "linalg_svdvals",
+    "kthvalue",
+    "lift_out",
     "linear",
+    "log10_",
     "log_normal_",
     "matmul_bf16",
     "matmul_int8",
     "mm",
     "mm_out",
+    "max_pool3d_with_indices_backward",
+    "median",
     "narrow_copy",
     "nonzero_numpy",
     "permute_copy",
@@ -102,17 +139,22 @@ __all__ = [
     "run",
     "scatter_add_",
     "softplus_backward",
+    "fractional_max_pool2d_backward",
     "sparse_sampled_addmm",
     "sparse_sampled_addmm_out",
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
     "special_gammainc",
+    "special_chebyshev_polynomial_u",
     "special_hermite_polynomial_h",
-    "special_hermite_polynomial_h_tensor_tensor",
+    "special_legendre_polynomial_p",
     "special_modified_bessel_k0",
+    "special_modified_bessel_k0_out",
     "special_modified_bessel_k1",
     "special_modified_bessel_k1_out",
     "special_shifted_chebyshev_polynomial_w",
+    "special_round",
+    "special_round_out",
     "tile",
     "var",
     "var_correction",
