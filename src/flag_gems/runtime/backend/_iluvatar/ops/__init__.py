@@ -55,6 +55,7 @@ from .resolve_neg import resolve_neg
 from .scatter_add import scatter_add_
 from .softplus import softplus_backward
 from .sparse_sampled_addmm import sparse_sampled_addmm, sparse_sampled_addmm_out
+from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
 from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w,
     special_chebyshev_polynomial_w_out,
@@ -115,13 +116,14 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
     "sparse_sampled_addmm",
     "sparse_sampled_addmm_out",
+    "special_chebyshev_polynomial_u",
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
     "special_gammainc",
