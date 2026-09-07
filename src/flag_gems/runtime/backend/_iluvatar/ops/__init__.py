@@ -21,6 +21,7 @@ from .addmm import addmm, addmm_out
 from .addmm_ import addmm_
 from .arccosh_ import arccosh_
 from .avg_pool3d import avg_pool3d_backward
+from .batch_norm_no_update import run as _batch_norm_no_update
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cholesky_solve import cholesky_solve, cholesky_solve_out
@@ -78,6 +79,7 @@ _pointwise_dynamic = importlib.import_module("flag_gems.utils.pointwise_dynamic"
 _pointwise_dynamic.ModuleGenerator = ModuleGenerator
 
 __all__ = [
+    "_batch_norm_no_update",
     "_conv_depthwise2d",
     "_native_batch_norm_legit_functional",
     "addmm",
@@ -115,8 +117,8 @@ __all__ = [
     "permute_copy",
     "renorm_",
     "repeat",
-    "resolve_neg",
     "repeat_interleave_self_int",
+    "resolve_neg",
     "run",
     "scatter_add_",
     "softplus_backward",
