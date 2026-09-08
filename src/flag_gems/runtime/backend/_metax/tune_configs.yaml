@@ -1687,19 +1687,6 @@ alpha_dropout:
     BLOCK: 512
   num_warps: 8
   num_stages: 3
-lgamma:
-  - META:
-      BLOCK_SIZE: 256
-    num_warps: 4
-    num_stages: 2
-  - META:
-      BLOCK_SIZE: 512
-    num_warps: 4
-    num_stages: 2
-  - META:
-      BLOCK_SIZE: 1024
-    num_warps: 4
-    num_stages: 2
 special_chebyshev_polynomial_u:
   - META:
       BLOCK_SIZE: 256
