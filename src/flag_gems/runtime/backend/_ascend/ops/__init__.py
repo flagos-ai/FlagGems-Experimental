@@ -116,6 +116,7 @@ from .threshold import threshold, threshold_backward
 from .triu import triu
 from .unique import _unique2
 from .unsafe_index import unsafe_index
+from .unsafe_masked_index import unsafe_masked_index
 from .upsample_bicubic2d_aa import _upsample_bicubic2d_aa
 from .upsample_linear1d_backward import upsample_linear1d_backward
 from .upsample_nearest2d import upsample_nearest2d
@@ -127,6 +128,7 @@ from .zeros import zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "ScaleDotProductAttention",
     "_unique2",
     "_upsample_bicubic2d_aa",
     "addmm",
@@ -188,7 +190,6 @@ __all__ = [
     "index_select",
     "isin",
     "layer_norm",
-    "native_layer_norm",
     "linalg_cross",
     "linalg_cross_out",
     "linalg_det",
@@ -227,6 +228,7 @@ __all__ = [
     "multinomial",
     "nansum",
     "nansum_out",
+    "native_layer_norm",
     "nonzero_static",
     "nonzero_static_out",
     "normed_cumsum",
@@ -247,13 +249,12 @@ __all__ = [
     "replication_pad2d_backward_grad_input",
     "resolve_neg",
     "rms_norm",
-    "scatter",
-    "scatter_",
-    "scatter_add_",
-    "ScaleDotProductAttention",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
+    "scatter",
+    "scatter_",
+    "scatter_add_",
     "select_backward",
     "select_scatter",
     "slice_scatter",
@@ -269,6 +270,7 @@ __all__ = [
     "threshold_backward",
     "triu",
     "unsafe_index",
+    "unsafe_masked_index",
     "upsample_linear1d_backward",
     "upsample_nearest2d",
     "var_mean",
