@@ -111,6 +111,7 @@ from .slice_scatter import slice_scatter
 from .softmax import softmax, softmax_backward, softmax_backward_out, softmax_out
 from .sort import sort
 from .sparse_sampled_addmm import sparse_sampled_addmm, sparse_sampled_addmm_out
+from .special_erfinv import special_erfinv
 from .stack import stack
 from .threshold import threshold, threshold_backward
 from .triu import triu
@@ -127,6 +128,7 @@ from .zeros import zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "ScaleDotProductAttention",
     "_unique2",
     "_upsample_bicubic2d_aa",
     "addmm",
@@ -188,7 +190,6 @@ __all__ = [
     "index_select",
     "isin",
     "layer_norm",
-    "native_layer_norm",
     "linalg_cross",
     "linalg_cross_out",
     "linalg_det",
@@ -227,6 +228,7 @@ __all__ = [
     "multinomial",
     "nansum",
     "nansum_out",
+    "native_layer_norm",
     "nonzero_static",
     "nonzero_static_out",
     "normed_cumsum",
@@ -247,13 +249,12 @@ __all__ = [
     "replication_pad2d_backward_grad_input",
     "resolve_neg",
     "rms_norm",
-    "scatter",
-    "scatter_",
-    "scatter_add_",
-    "ScaleDotProductAttention",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
+    "scatter",
+    "scatter_",
+    "scatter_add_",
     "select_backward",
     "select_scatter",
     "slice_scatter",
@@ -264,6 +265,7 @@ __all__ = [
     "sort",
     "sparse_sampled_addmm",
     "sparse_sampled_addmm_out",
+    "special_erfinv",
     "stack",
     "threshold",
     "threshold_backward",
