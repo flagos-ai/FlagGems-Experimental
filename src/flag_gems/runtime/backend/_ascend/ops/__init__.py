@@ -123,10 +123,12 @@ from .var_mean import var_mean
 from .vector_norm import vector_norm
 from .vstack import vstack
 from .where import where_scalar_other, where_scalar_self, where_self, where_self_out
+from .zero import zero
 from .zeros import zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "ScaleDotProductAttention",
     "_unique2",
     "_upsample_bicubic2d_aa",
     "addmm",
@@ -188,7 +190,6 @@ __all__ = [
     "index_select",
     "isin",
     "layer_norm",
-    "native_layer_norm",
     "linalg_cross",
     "linalg_cross_out",
     "linalg_det",
@@ -227,6 +228,7 @@ __all__ = [
     "multinomial",
     "nansum",
     "nansum_out",
+    "native_layer_norm",
     "nonzero_static",
     "nonzero_static_out",
     "normed_cumsum",
@@ -247,13 +249,12 @@ __all__ = [
     "replication_pad2d_backward_grad_input",
     "resolve_neg",
     "rms_norm",
-    "scatter",
-    "scatter_",
-    "scatter_add_",
-    "ScaleDotProductAttention",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
+    "scatter",
+    "scatter_",
+    "scatter_add_",
     "select_backward",
     "select_scatter",
     "slice_scatter",
@@ -278,6 +279,7 @@ __all__ = [
     "where_scalar_self",
     "where_self",
     "where_self_out",
+    "zero",
     "zeros",
     "zeros_like",
 ]
