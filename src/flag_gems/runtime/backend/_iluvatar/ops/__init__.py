@@ -17,6 +17,7 @@ import importlib
 from ..utils.pointwise_dynamic import ModuleGenerator
 from ._native_batch_norm_legit_functional import _native_batch_norm_legit_functional
 from .adaptive_avg_pool2d_backward import _adaptive_avg_pool2d_backward
+from .adaptive_max_pool2d_backward import adaptive_max_pool2d_backward
 from .adaptive_max_pool3d_backward import run
 from .addmm import addmm, addmm_out
 from .addmm_ import addmm_
@@ -26,6 +27,7 @@ from .avg_pool3d import avg_pool3d_backward
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cholesky_solve import cholesky_solve, cholesky_solve_out
+from .cholesky_solve_helper import run as _cholesky_solve_helper
 from .constant_pad_nd import constant_pad_nd
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
@@ -37,6 +39,7 @@ from .hadamard_transform import hadamard_transform
 from .histc import histc
 from .igamma_ import igamma_
 from .index_select_backward import index_select_backward
+from .kthvalue import kthvalue
 from .linalg_cholesky import linalg_cholesky
 from .linalg_ldl_factor_ex import ldl_factor_ex
 from .linalg_matrix_norm import linalg_matrix_norm
@@ -51,6 +54,7 @@ from .log_normal import log_normal
 from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
+from .max_pool3d_with_indices_backward import max_pool3d_with_indices_backward
 from .median import median
 from .mm import mm, mm_out
 from .mvlgamma import run as mvlgamma
@@ -65,12 +69,17 @@ from .scatter_add import scatter_add_
 from .softplus import softplus_backward
 from .sparse_sampled_addmm import sparse_sampled_addmm, sparse_sampled_addmm_out
 from .special_bessel_j0 import run as special_bessel_j0
+from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
 from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w,
     special_chebyshev_polynomial_w_out,
 )
 from .special_gammainc import special_gammainc
-from .special_hermite_polynomial_h import special_hermite_polynomial_h
+from .special_hermite_polynomial_h import (
+    special_hermite_polynomial_h,
+    special_hermite_polynomial_h_tensor_tensor,
+)
+from .special_legendre_polynomial_p import special_legendre_polynomial_p
 from .special_modified_bessel_k0_out import special_modified_bessel_k0_out
 from .special_modified_bessel_k1 import (
     special_modified_bessel_k1,
@@ -82,6 +91,7 @@ from .special_round_out import special_round_out
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
+from .thnn_fused_lstm_cell_backward_impl import _thnn_fused_lstm_cell_backward_impl
 from .tile import tile
 from .unsafe_masked_index_put_accumulate import _unsafe_masked_index_put_accumulate
 from .var import var, var_correction, var_dim
@@ -91,9 +101,12 @@ _pointwise_dynamic.ModuleGenerator = ModuleGenerator
 
 __all__ = [
     "_adaptive_avg_pool2d_backward",
+    "_cholesky_solve_helper",
     "_conv_depthwise2d",
     "_native_batch_norm_legit_functional",
+    "_thnn_fused_lstm_cell_backward_impl",
     "_unsafe_masked_index_put_accumulate",
+    "adaptive_max_pool2d_backward",
     "addmm",
     "addmm_",
     "addmm_out",
@@ -115,6 +128,7 @@ __all__ = [
     "histc",
     "igamma_",
     "index_select_backward",
+    "kthvalue",
     "ldl_factor_ex",
     "linalg_cholesky",
     "linalg_matrix_norm",
@@ -128,6 +142,7 @@ __all__ = [
     "log_normal_",
     "matmul_bf16",
     "matmul_int8",
+    "max_pool3d_with_indices_backward",
     "median",
     "mm",
     "mm_out",
@@ -145,10 +160,13 @@ __all__ = [
     "sparse_sampled_addmm",
     "sparse_sampled_addmm_out",
     "special_bessel_j0",
+    "special_chebyshev_polynomial_u",
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
     "special_gammainc",
     "special_hermite_polynomial_h",
+    "special_hermite_polynomial_h_tensor_tensor",
+    "special_legendre_polynomial_p",
     "special_modified_bessel_k0_out",
     "special_modified_bessel_k1",
     "special_modified_bessel_k1_out",
