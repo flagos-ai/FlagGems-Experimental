@@ -30,6 +30,9 @@ on:
 jobs:
   preprocess:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     outputs:
       changed_files: ${{ steps.changed-files.outputs.all_changed_files }}
       pr_id: ${{ steps.get-pr-id.outputs.PR_ID }}
