@@ -111,11 +111,13 @@ from .slice_scatter import slice_scatter
 from .softmax import softmax, softmax_backward, softmax_backward_out, softmax_out
 from .sort import sort
 from .sparse_sampled_addmm import sparse_sampled_addmm, sparse_sampled_addmm_out
+from .special_erfinv import special_erfinv
 from .stack import stack
 from .threshold import threshold, threshold_backward
 from .triu import triu
 from .unique import _unique2
 from .unsafe_index import unsafe_index
+from .unsafe_masked_index import unsafe_masked_index
 from .upsample_bicubic2d_aa import _upsample_bicubic2d_aa
 from .upsample_linear1d_backward import upsample_linear1d_backward
 from .upsample_nearest2d import upsample_nearest2d
@@ -123,10 +125,12 @@ from .var_mean import var_mean
 from .vector_norm import vector_norm
 from .vstack import vstack
 from .where import where_scalar_other, where_scalar_self, where_self, where_self_out
+from .zero import zero
 from .zeros import zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "ScaleDotProductAttention",
     "_unique2",
     "_upsample_bicubic2d_aa",
     "addmm",
@@ -188,7 +192,6 @@ __all__ = [
     "index_select",
     "isin",
     "layer_norm",
-    "native_layer_norm",
     "linalg_cross",
     "linalg_cross_out",
     "linalg_det",
@@ -227,6 +230,7 @@ __all__ = [
     "multinomial",
     "nansum",
     "nansum_out",
+    "native_layer_norm",
     "nonzero_static",
     "nonzero_static_out",
     "normed_cumsum",
@@ -247,13 +251,12 @@ __all__ = [
     "replication_pad2d_backward_grad_input",
     "resolve_neg",
     "rms_norm",
-    "scatter",
-    "scatter_",
-    "scatter_add_",
-    "ScaleDotProductAttention",
     "scaled_dot_product_attention",
     "scaled_dot_product_attention_backward",
     "scaled_dot_product_attention_forward",
+    "scatter",
+    "scatter_",
+    "scatter_add_",
     "select_backward",
     "select_scatter",
     "slice_scatter",
@@ -264,11 +267,13 @@ __all__ = [
     "sort",
     "sparse_sampled_addmm",
     "sparse_sampled_addmm_out",
+    "special_erfinv",
     "stack",
     "threshold",
     "threshold_backward",
     "triu",
     "unsafe_index",
+    "unsafe_masked_index",
     "upsample_linear1d_backward",
     "upsample_nearest2d",
     "var_mean",
@@ -278,6 +283,7 @@ __all__ = [
     "where_scalar_self",
     "where_self",
     "where_self_out",
+    "zero",
     "zeros",
     "zeros_like",
 ]
