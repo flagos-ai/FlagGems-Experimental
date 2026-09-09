@@ -24,6 +24,7 @@ from .avg_pool3d import avg_pool3d_backward
 from .broadcast_tensors import broadcast_tensors
 from .broadcast_to import broadcast_to
 from .cholesky_solve import cholesky_solve, cholesky_solve_out
+from .constant_pad_nd import constant_pad_nd
 from .conv_depthwise2d import _conv_depthwise2d
 from .conv_transpose1d import conv_transpose1d
 from .diagonal_scatter import diagonal_scatter
@@ -31,8 +32,10 @@ from .div import div_mode, div_mode_
 from .gcd_ import gcd_
 from .hadamard_transform import hadamard_transform
 from .histc import histc
+from .igamma_ import igamma_
 from .index_select_backward import index_select_backward
 from .linalg_cholesky import linalg_cholesky
+from .linalg_ldl_factor_ex import ldl_factor_ex
 from .linalg_matrix_norm import linalg_matrix_norm
 from .linalg_qr import linalg_qr, linalg_qr_out
 from .linalg_solve_triangular import (
@@ -45,6 +48,7 @@ from .log_normal_ import log_normal_
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
 from .mm import mm, mm_out
+from .mvlgamma import run as mvlgamma
 from .narrow_copy import narrow_copy
 from .nonzero_numpy import nonzero_numpy
 from .permute_copy import permute_copy
@@ -69,10 +73,14 @@ from .special_modified_bessel_k1 import (
     special_modified_bessel_k1,
     special_modified_bessel_k1_out,
 )
+from .special_multigammaln import run as special_multigammaln
+from .special_round import special_round
+from .special_round_out import special_round_out
 from .special_shifted_chebyshev_polynomial_w import (
     special_shifted_chebyshev_polynomial_w,
 )
 from .tile import tile
+from .unsafe_masked_index_put_accumulate import _unsafe_masked_index_put_accumulate
 from .var import var, var_correction, var_dim
 
 _pointwise_dynamic = importlib.import_module("flag_gems.utils.pointwise_dynamic")
@@ -81,6 +89,7 @@ _pointwise_dynamic.ModuleGenerator = ModuleGenerator
 __all__ = [
     "_conv_depthwise2d",
     "_native_batch_norm_legit_functional",
+    "_unsafe_masked_index_put_accumulate",
     "addmm",
     "addmm_",
     "addmm_out",
@@ -90,6 +99,7 @@ __all__ = [
     "broadcast_to",
     "cholesky_solve",
     "cholesky_solve_out",
+    "constant_pad_nd",
     "conv_transpose1d",
     "diagonal_scatter",
     "div_mode",
@@ -97,7 +107,9 @@ __all__ = [
     "gcd_",
     "hadamard_transform",
     "histc",
+    "igamma_",
     "index_select_backward",
+    "ldl_factor_ex",
     "linalg_cholesky",
     "linalg_matrix_norm",
     "linalg_qr",
@@ -111,6 +123,7 @@ __all__ = [
     "matmul_int8",
     "mm",
     "mm_out",
+    "mvlgamma",
     "narrow_copy",
     "nonzero_numpy",
     "permute_copy",
@@ -131,6 +144,9 @@ __all__ = [
     "special_legendre_polynomial_p",
     "special_modified_bessel_k1",
     "special_modified_bessel_k1_out",
+    "special_multigammaln",
+    "special_round",
+    "special_round_out",
     "special_shifted_chebyshev_polynomial_w",
     "tile",
     "var",
