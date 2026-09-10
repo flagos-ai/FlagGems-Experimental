@@ -113,6 +113,7 @@ from .sort import sort
 from .sparse_sampled_addmm import sparse_sampled_addmm, sparse_sampled_addmm_out
 from .special_erfinv import special_erfinv
 from .stack import stack
+from .thnn_fused_lstm_cell import thnn_fused_lstm_cell
 from .threshold import threshold, threshold_backward
 from .triu import triu
 from .unique import _unique2
@@ -269,6 +270,7 @@ __all__ = [
     "sparse_sampled_addmm_out",
     "special_erfinv",
     "stack",
+    "thnn_fused_lstm_cell",
     "threshold",
     "threshold_backward",
     "triu",
