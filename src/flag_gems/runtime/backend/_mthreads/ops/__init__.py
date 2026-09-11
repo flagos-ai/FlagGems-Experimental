@@ -63,6 +63,7 @@ from .lcm_ import lcm_
 from .lift_out import lift_out
 from .linalg_cholesky import linalg_cholesky
 from .linalg_ldl_factor_ex import ldl_factor_ex
+from .linalg_ldl_solve import linalg_ldl_solve
 from .linear import linear
 from .log import log
 from .log10 import log10, log10_, log10_out
@@ -179,6 +180,7 @@ __all__ = [
     "ldl_factor_ex",
     "lift_out",
     "linalg_cholesky",
+    "linalg_ldl_solve",
     "linear",
     "log",
     "log10",
