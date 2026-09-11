@@ -202,6 +202,7 @@ from .mul import mul, mul_
 from .multinomial import multinomial
 from .multiply_ import multiply_
 from .mv import mv, mv_cluster
+from .mvlgamma import mvlgamma
 from .nan_to_num import nan_to_num
 from .nanmedian import nanmedian, nanmedian_dim, nanmedian_dim_values, nanmedian_out
 from .narrow_copy import narrow_copy
@@ -604,6 +605,7 @@ __all__ = [
     "multiply_",
     "mv",
     "mv_cluster",
+    "mvlgamma",
     "nan_to_num",
     "narrow_copy",
     "nanmedian",
