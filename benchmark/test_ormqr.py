@@ -1,6 +1,8 @@
 import pytest
 import torch
 
+import flag_gems
+
 from . import base
 
 
@@ -50,6 +52,7 @@ def test_ormqr():
         op_name="ormqr",
         torch_op=torch.ormqr,
         # ormqr only supports float32 and float64 (LAPACK limitation, no half/bfloat16)
-        dtypes=[torch.float32, torch.float64],
+        dtypes=[torch.float32]
+        + ([torch.float64] if flag_gems.runtime.device.support_fp64 else []),
     )
     bench.run()

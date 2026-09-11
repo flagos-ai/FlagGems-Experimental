@@ -14,7 +14,7 @@ ORMQR_SHAPES = [
 ]
 
 # ormqr only supports float32 and float64 (LAPACK limitation, no half/bfloat16)
-ORMQR_DTYPES = [torch.float32, torch.float64]
+ORMQR_DTYPES = [torch.float32] + ([torch.float64] if utils.fp64_is_supported else [])
 
 
 @pytest.mark.ormqr
