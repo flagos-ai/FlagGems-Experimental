@@ -71,6 +71,7 @@ from .linalg_solve_triangular import (
     linalg_solve_triangular_out,
 )
 from .log_normal_ import log_normal_
+from .masked_scale import masked_scale
 from .masked_scatter_backward import masked_scatter_backward
 from .matmul_bf16 import matmul_bf16
 from .matmul_int8 import matmul_int8
@@ -131,21 +132,21 @@ from .weight_norm import (
 )
 
 __all__ = [
+    "SUPPORTED_FP8_DTYPE",
+    "ScaleDotProductAttention",
     "_flash_attention_forward",
     "_scaled_dot_product_flash_attention",
     "_unique2",
     "adaptive_avg_pool2d_backward",
     "adaptive_max_pool3d_backward",
-    "avg_pool3d_backward",
-    "broadcast_tensors",
-    "broadcast_to",
-    "conj_physical",
-    "ScaleDotProductAttention",
-    "SUPPORTED_FP8_DTYPE",
     "addr",
     "any",
     "any_dim",
     "any_dims",
+    "avg_pool3d_backward",
+    "broadcast_tensors",
+    "broadcast_to",
+    "conj_physical",
     "cudnn_convolution",
     "diff",
     "div_mode",
@@ -173,13 +174,14 @@ __all__ = [
     "index_copy_",
     "index_select_backward",
     "isin",
-    "ldl_factor",
     "lcm",
     "lcm_",
+    "ldl_factor",
     "linalg_matrix_norm",
     "linalg_solve_triangular",
     "linalg_solve_triangular_out",
     "log_normal_",
+    "masked_scale",
     "masked_scatter_backward",
     "matmul_bf16",
     "matmul_int8",
@@ -188,9 +190,9 @@ __all__ = [
     "max_unpool2d",
     "median_dim",
     "median_dim_values",
+    "mm",
     "mul",
     "mul_",
-    "mm",
     "nansum",
     "nansum_out",
     "nll_loss_backward",
@@ -236,9 +238,9 @@ __all__ = [
     "trunc_divide",
     "trunc_divide_",
     "unique_dim",
-    "upsample_nearest2d",
     "unsqueeze",
     "unsqueeze_",
+    "upsample_nearest2d",
     "weight_norm",
     "weight_norm_except_dim",
     "weight_norm_except_dim_backward",
