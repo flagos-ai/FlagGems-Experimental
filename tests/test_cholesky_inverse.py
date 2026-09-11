@@ -34,7 +34,10 @@ def _make_positive_definite(shape, dtype, device):
 @pytest.mark.cholesky_inverse
 @pytest.mark.parametrize("shape", CHOLESKY_INVERSE_SHAPES)
 # cholesky_inverse only supports float32/float64
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float32] + ([torch.float64] if utils.fp64_is_supported else []),
+)
 def test_cholesky_inverse(shape, dtype):
     L = _make_positive_definite(shape, dtype, flag_gems.device)
     ref_L = utils.to_reference(L)
@@ -49,7 +52,10 @@ def test_cholesky_inverse(shape, dtype):
 
 @pytest.mark.cholesky_inverse
 @pytest.mark.parametrize("shape", CHOLESKY_INVERSE_SHAPES[:3])
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float32] + ([torch.float64] if utils.fp64_is_supported else []),
+)
 def test_cholesky_inverse_upper(shape, dtype):
     L = _make_positive_definite(shape, dtype, flag_gems.device)
     U = L.transpose(-2, -1).contiguous()
@@ -65,7 +71,10 @@ def test_cholesky_inverse_upper(shape, dtype):
 
 @pytest.mark.cholesky_inverse
 @pytest.mark.parametrize("shape", CHOLESKY_INVERSE_BATCH_SHAPES)
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float32] + ([torch.float64] if utils.fp64_is_supported else []),
+)
 def test_cholesky_inverse_batch(shape, dtype):
     L = _make_positive_definite(shape, dtype, flag_gems.device)
     ref_L = utils.to_reference(L)

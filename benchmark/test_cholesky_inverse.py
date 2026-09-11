@@ -1,6 +1,8 @@
 import pytest
 import torch
 
+import flag_gems
+
 from . import base
 
 # Square matrices from 2x2 to 256x256 covering small to medium-large use cases
@@ -39,6 +41,7 @@ def test_cholesky_inverse():
         op_name="cholesky_inverse",
         torch_op=torch.cholesky_inverse,
         # cholesky_inverse only supports float32/float64
-        dtypes=[torch.float32, torch.float64],
+        dtypes=[torch.float32]
+        + ([torch.float64] if flag_gems.runtime.device.support_fp64 else []),
     )
     bench.run()
