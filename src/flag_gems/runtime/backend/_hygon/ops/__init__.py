@@ -117,6 +117,7 @@ from .special_chebyshev_polynomial_w import (
     special_chebyshev_polynomial_w_out,
 )
 from .split_with_sizes_copy import split_with_sizes_copy
+from .thnn_fused_lstm_cell import thnn_fused_lstm_cell
 from .tile import tile
 from .unique import _unique2
 from .unique_dim import unique_dim
@@ -131,21 +132,21 @@ from .weight_norm import (
 )
 
 __all__ = [
+    "SUPPORTED_FP8_DTYPE",
+    "ScaleDotProductAttention",
     "_flash_attention_forward",
     "_scaled_dot_product_flash_attention",
     "_unique2",
     "adaptive_avg_pool2d_backward",
     "adaptive_max_pool3d_backward",
-    "avg_pool3d_backward",
-    "broadcast_tensors",
-    "broadcast_to",
-    "conj_physical",
-    "ScaleDotProductAttention",
-    "SUPPORTED_FP8_DTYPE",
     "addr",
     "any",
     "any_dim",
     "any_dims",
+    "avg_pool3d_backward",
+    "broadcast_tensors",
+    "broadcast_to",
+    "conj_physical",
     "cudnn_convolution",
     "diff",
     "div_mode",
@@ -173,9 +174,9 @@ __all__ = [
     "index_copy_",
     "index_select_backward",
     "isin",
-    "ldl_factor",
     "lcm",
     "lcm_",
+    "ldl_factor",
     "linalg_matrix_norm",
     "linalg_solve_triangular",
     "linalg_solve_triangular_out",
@@ -188,9 +189,9 @@ __all__ = [
     "max_unpool2d",
     "median_dim",
     "median_dim_values",
+    "mm",
     "mul",
     "mul_",
-    "mm",
     "nansum",
     "nansum_out",
     "nll_loss_backward",
@@ -229,6 +230,7 @@ __all__ = [
     "special_chebyshev_polynomial_w",
     "special_chebyshev_polynomial_w_out",
     "split_with_sizes_copy",
+    "thnn_fused_lstm_cell",
     "tile",
     "true_divide",
     "true_divide_",
@@ -236,9 +238,9 @@ __all__ = [
     "trunc_divide",
     "trunc_divide_",
     "unique_dim",
-    "upsample_nearest2d",
     "unsqueeze",
     "unsqueeze_",
+    "upsample_nearest2d",
     "weight_norm",
     "weight_norm_except_dim",
     "weight_norm_except_dim_backward",
