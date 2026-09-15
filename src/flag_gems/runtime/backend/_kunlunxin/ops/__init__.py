@@ -253,6 +253,7 @@ from .randperm import randperm
 from .reciprocal import reciprocal, reciprocal_
 from .reflection_pad1d import reflection_pad1d, reflection_pad1d_out
 from .reflection_pad2d import reflection_pad2d, reflection_pad2d_out
+from .reflection_pad3d_backward_kernelgen import reflection_pad3d_backward
 from .relu import relu, relu_
 from .repeat import repeat
 from .repeat_interleave import (
@@ -783,4 +784,5 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "reflection_pad3d_backward",
 ]
