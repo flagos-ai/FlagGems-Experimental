@@ -165,6 +165,10 @@ from .isfinite import isfinite
 from .isin import isin
 from .isinf import isinf
 from .isnan import isnan
+from .jagged_to_padded_dense_forward import (
+    _jagged_to_padded_dense_forward,
+    jagged_to_padded_dense_forward,
+)
 from .kron import kron
 from .layernorm import layer_norm, layer_norm_backward
 from .le import le, le_scalar
@@ -783,4 +787,6 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "jagged_to_padded_dense_forward",
+    "_jagged_to_padded_dense_forward",
 ]
