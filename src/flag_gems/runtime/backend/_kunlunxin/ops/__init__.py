@@ -172,6 +172,7 @@ from .leaky_relu import leaky_relu, leaky_relu_, leaky_relu_out
 from .lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
 from .less_equal import less_equal, less_equal_scalar
 from .lift_fresh_copy import lift_fresh_copy
+from .linalg_slogdet_kernelgen import linalg_slogdet
 from .linspace import linspace
 from .log import log
 from .log1p import log1p, log1p_
@@ -783,4 +784,5 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "linalg_slogdet",
 ]
