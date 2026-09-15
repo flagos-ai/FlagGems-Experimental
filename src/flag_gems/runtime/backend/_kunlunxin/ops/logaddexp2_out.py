@@ -180,6 +180,7 @@ def logaddexp2_out(self, other, out):
             and x.is_contiguous()
             and y.shape == out.shape
             and y.is_contiguous()
+            and out.is_contiguous()
         )
 
         block, warps = _config(out.dtype, n)
