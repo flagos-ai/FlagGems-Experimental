@@ -20,7 +20,7 @@ from _pytest.mark.structures import Mark, MarkDecorator
 
 import flag_gems
 
-from . import base
+from . import base, consts, utils
 
 # ``_dim_arange`` starts with an underscore, and ``pytest.mark`` refuses to
 # generate a marker via attribute access for such names. Register it directly
@@ -53,7 +53,7 @@ class DimArangeBenchmark(base.Benchmark):
         # follows the benchmark dtype sweep, the output stays int64.
         for shape in self.shapes:
             dim = -1
-            like = torch.randn(shape, dtype=cur_dtype, device=self.device)
+            like = utils.generate_tensor_input(shape, cur_dtype, self.device)
             yield like, dim
 
 
@@ -63,6 +63,6 @@ def test__dim_arange():
         op_name="_dim_arange",
         torch_op=torch.ops.aten._dim_arange,
         gems_op=flag_gems._dim_arange,
-        dtypes=[torch.float32],
+        dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
     )
     bench.run()
