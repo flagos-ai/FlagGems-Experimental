@@ -171,6 +171,7 @@ from .le import le, le_scalar
 from .leaky_relu import leaky_relu, leaky_relu_, leaky_relu_out
 from .lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
 from .less_equal import less_equal, less_equal_scalar
+from .lgamma import lgamma
 from .lift_fresh_copy import lift_fresh_copy
 from .linspace import linspace
 from .log import log
@@ -783,4 +784,5 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "lgamma",
 ]
