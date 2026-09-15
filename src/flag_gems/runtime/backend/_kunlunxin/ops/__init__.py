@@ -313,6 +313,10 @@ from .upsample_bicubic2d_aa import _upsample_bicubic2d_aa
 from .upsample_linear1d import upsample_linear1d
 from .upsample_nearest1d import upsample_nearest1d
 from .upsample_nearest2d import upsample_nearest2d
+from .upsample_nearest_exact1d import (
+    _upsample_nearest_exact1d,
+    upsample_nearest_exact1d,
+)
 from .upsample_trilinear3d import upsample_trilinear3d
 from .var_mean import var_mean
 from .vdot import vdot
@@ -783,4 +787,6 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "upsample_nearest_exact1d",
+    "_upsample_nearest_exact1d",
 ]
