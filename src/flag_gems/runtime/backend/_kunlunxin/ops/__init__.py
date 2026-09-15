@@ -165,6 +165,7 @@ from .isfinite import isfinite
 from .isin import isin
 from .isinf import isinf
 from .isnan import isnan
+from .ixor import ixor, xor_, xor_scalar_
 from .kron import kron
 from .layernorm import layer_norm, layer_norm_backward
 from .le import le, le_scalar
@@ -783,4 +784,7 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "ixor",
+    "xor_",
+    "xor_scalar_",
 ]
