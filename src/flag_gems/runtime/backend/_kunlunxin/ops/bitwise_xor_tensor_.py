@@ -125,8 +125,8 @@ def _launch(A, B, n, cast, block_main):
         off = nb * block_main
     rem = n - off
     if rem:
-        At = A if off == 0 else A[off:]
-        Bt = B if off == 0 else B[off:]
+        At = A if off == 0 else A.as_strided((rem,), (1,), A.storage_offset() + off)
+        Bt = B if off == 0 else B.as_strided((rem,), (1,), B.storage_offset() + off)
         _xor_flat_masked_kernel[(triton.cdiv(rem, 1024),)](
             At, Bt, rem, BLOCK=1024, NEED_CAST=cast, num_warps=4
         )
@@ -150,7 +150,7 @@ def bitwise_xor_tensor_(A, B):
             # XOR is lane independent: pack 1-byte (x4) / 2-byte (x2) elements
             # into int32 through zero-copy views of the same storage.
             factor = 4 // itemsize
-            if n % factor == 0:
+            if n % factor == 0 and A.data_ptr() % 4 == 0 and B.data_ptr() % 4 == 0:
                 Ap = A.reshape(-1).view(torch.int32)
                 Bp = B.reshape(-1).view(torch.int32)
                 block = _BLOCK_BOOL if itemsize == 1 else _BLOCK_WIDE
