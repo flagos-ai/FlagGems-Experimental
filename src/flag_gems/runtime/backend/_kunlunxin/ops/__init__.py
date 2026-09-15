@@ -205,7 +205,7 @@ from .mv import mv, mv_cluster
 from .mvlgamma import mvlgamma
 from .nan_to_num import nan_to_num
 from .nanmedian import nanmedian, nanmedian_dim, nanmedian_dim_values, nanmedian_out
-from .narrow_copy import narrow_copy
+from .narrow_copy_kernelgen import narrow_copy
 from .ne import ne, ne_scalar
 from .neg import neg, neg_
 from .negative import negative
