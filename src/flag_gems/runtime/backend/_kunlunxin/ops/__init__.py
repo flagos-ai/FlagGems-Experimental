@@ -206,6 +206,10 @@ from .mvlgamma import mvlgamma
 from .nan_to_num import nan_to_num
 from .nanmedian import nanmedian, nanmedian_dim, nanmedian_dim_values, nanmedian_out
 from .narrow_copy import narrow_copy
+from .native_batch_norm_legit_no_training import (
+    _native_batch_norm_legit_no_training,
+    native_batch_norm_legit_no_training,
+)
 from .ne import ne, ne_scalar
 from .neg import neg, neg_
 from .negative import negative
@@ -783,4 +787,6 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "native_batch_norm_legit_no_training",
+    "_native_batch_norm_legit_no_training",
 ]
