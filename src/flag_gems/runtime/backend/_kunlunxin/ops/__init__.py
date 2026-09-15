@@ -74,6 +74,7 @@ from .bitwise_or import (
     bitwise_or_tensor_,
 )
 from .bitwise_right_shift import bitwise_right_shift
+from .bitwise_xor_tensor_ import bitwise_xor_tensor_
 from .bmm import bmm, bmm_out
 from .broadcast_to import broadcast_to
 from .cat import cat, cat_out
@@ -783,4 +784,5 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "bitwise_xor_tensor_",
 ]
