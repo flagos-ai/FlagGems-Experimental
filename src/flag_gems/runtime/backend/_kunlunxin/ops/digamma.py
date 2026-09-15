@@ -72,11 +72,11 @@ def _digamma_kernel(X, Y, N, BLOCK: tl.constexpr):
 
 def digamma(A):
     with torch_device_fn.device(A.device):
-        out = torch.empty_like(A)
+        out = torch.empty_like(A, memory_format=torch.contiguous_format)
         N = A.numel()
         if N == 0:
             return out
-        X = A.reshape(-1)
+        X = A.contiguous().view(-1)
         Y = out.reshape(-1)
         BLOCK = 1024
         grid = (triton.cdiv(N, BLOCK),)
