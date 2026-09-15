@@ -291,6 +291,7 @@ from .softshrink import softshrink, softshrink_out
 from .sort import sort, sort_stable
 from .special_log_softmax import special_log_softmax
 from .special_logsumexp import special_logsumexp
+from .special_xlog1py import special_xlog1py
 from .sqrt import sqrt, sqrt_
 from .stack import stack
 from .std import std
@@ -783,4 +784,5 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "special_xlog1py",
 ]
