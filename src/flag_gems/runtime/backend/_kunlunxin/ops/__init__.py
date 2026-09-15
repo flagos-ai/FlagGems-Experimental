@@ -229,6 +229,7 @@ from .not_equal import not_equal, not_equal_scalar
 from .ones import ones
 from .ones_like import ones_like
 from .pad import constant_pad_nd, pad
+from .pdist_forward import _pdist_forward, pdist_forward
 from .per_token_group_quant_fp8 import SUPPORTED_FP8_DTYPE, per_token_group_quant_fp8
 from .permute_copy import permute_copy
 from .pixel_unshuffle import pixel_unshuffle, pixel_unshuffle_out
@@ -783,4 +784,6 @@ __all__ = [
     "zero_out",
     "zeros",
     "zeros_like",
+    "pdist_forward",
+    "_pdist_forward",
 ]
