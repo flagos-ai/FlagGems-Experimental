@@ -84,11 +84,11 @@ def _lgamma_kernel(A_ptr, O_ptr, n_elements, BLOCK: tl.constexpr):
 
 def lgamma(A):
     with torch_device_fn.device(A.device):
-        out = torch.empty_like(A)
+        out = torch.empty_like(A, memory_format=torch.contiguous_format)
         n = A.numel()
         if n == 0:
             return out
-        a = A.reshape(-1)
+        a = A.contiguous().view(-1)
         o = out.reshape(-1)
         BLOCK = 1024
         grid = (triton.cdiv(n, BLOCK),)
