@@ -70,6 +70,7 @@ def _erfc_kernel(
 
 def erfc(x):
     with torch_device_fn.device(x.device):
+        x = x.contiguous()
         out = torch.empty_like(x)
         n = x.numel()
         if n < 65536:
