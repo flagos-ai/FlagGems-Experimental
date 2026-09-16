@@ -54,7 +54,6 @@ from flag_gems.ops._convolution_double_backward import _convolution_double_backw
 from flag_gems.ops._convolution_mode import _convolution_mode
 from flag_gems.ops._cummin_helper import _cummin_helper
 from flag_gems.ops._dim_arange import _dim_arange
-from flag_gems.ops.dense_dim import dense_dim
 from flag_gems.ops._dyn_quant_pack_4bit_weight import _dyn_quant_pack_4bit_weight
 from flag_gems.ops._embedding_bag_dense_backward import _embedding_bag_dense_backward
 from flag_gems.ops._embedding_bag_per_sample_weights_backward import (
@@ -329,6 +328,7 @@ from flag_gems.ops.cumprod import cumprod, cumprod_
 from flag_gems.ops.cumsum import cumsum, cumsum_out, normed_cumsum
 from flag_gems.ops.cumsum_ import cumsum_
 from flag_gems.ops.deg2rad import deg2rad, deg2rad_, deg2rad_out
+from flag_gems.ops.dense_dim import dense_dim
 from flag_gems.ops.dequantize import dequantize
 from flag_gems.ops.diag import diag
 from flag_gems.ops.diag_embed import diag_embed

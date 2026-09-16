@@ -64,16 +64,24 @@ def test_dense_dim_strided(shape):
 def test_dense_dim_sparse_coo():
     for name, sparse in [
         ("plain", _make_coo(2, 3, (2, 3), seed=1)),
-        ("hybrid", _make_coo(1, 2, (2,), seed=2).to_dense()
-         if False else
-         torch.sparse_coo_tensor(
-             torch.tensor([[0, 1]]), torch.randn(2, 3), (2, 3)
-         )),
-        ("zero-nnz", torch.sparse_coo_tensor(
-            torch.zeros(2, 0, dtype=torch.int64),
-            torch.zeros(0),
-            (2, 3),
-        )),
+        (
+            "hybrid",
+            (
+                _make_coo(1, 2, (2,), seed=2).to_dense()
+                if False
+                else torch.sparse_coo_tensor(
+                    torch.tensor([[0, 1]]), torch.randn(2, 3), (2, 3)
+                )
+            ),
+        ),
+        (
+            "zero-nnz",
+            torch.sparse_coo_tensor(
+                torch.zeros(2, 0, dtype=torch.int64),
+                torch.zeros(0),
+                (2, 3),
+            ),
+        ),
         ("uncoalesced", _make_coo(2, 4, (2, 3), seed=3)),
     ]:
         ref_sparse = utils.to_reference(sparse)
@@ -116,7 +124,5 @@ def test_dense_dim_matches_reference_table():
     assert flag_gems.dense_dim(torch.randn(2, 3, device=flag_gems.device)) == 2
     s = _make_coo(2, 2, (2, 3), seed=5)
     assert flag_gems.dense_dim(s) == table["coo-2d"]
-    h = torch.sparse_coo_tensor(
-        torch.tensor([[0, 1]]), torch.randn(2, 3), (2, 3)
-    )
+    h = torch.sparse_coo_tensor(torch.tensor([[0, 1]]), torch.randn(2, 3), (2, 3))
     assert flag_gems.dense_dim(h) == table["coo-hybrid"]
