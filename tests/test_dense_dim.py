@@ -126,3 +126,29 @@ def test_dense_dim_matches_reference_table():
     assert flag_gems.dense_dim(s) == table["coo-2d"]
     h = torch.sparse_coo_tensor(torch.tensor([[0, 1]]), torch.randn(2, 3), (2, 3))
     assert flag_gems.dense_dim(h) == table["coo-hybrid"]
+
+
+@pytest.mark.dense_dim
+def test_dense_dim_disjoint_from_native_neighbors():
+    # The implementation must not re-dispatch the operator it implements
+    # (registering on the CUDA key makes an internal `self.dense_dim()` call
+    # recurse into this very kernel), and it must not depend on related
+    # accessors being overridden: `_indices` is left native here, and a plain
+    # metadata read on both layouts must keep working with unrelated ops
+    # (e.g. `_nnz`) dispatched around it.
+    t = torch.randn(3, 4, device=flag_gems.device)
+    sparse = _make_coo(2, 5, (2, 3), seed=7).to(flag_gems.device)
+    csr = sparse.to_sparse_csr()
+
+    # Exercise the dispatcher path repeatedly: a recursion bug shows up here.
+    for _ in range(3):
+        assert flag_gems.dense_dim(t) == 2
+        assert flag_gems.dense_dim(sparse) == 0
+        assert flag_gems.dense_dim(csr) == 0
+
+    # Cross-op sanity: dispatching a related metadata op afterwards must not
+    # corrupt or re-route dense_dim (no shared mutable state in the impl).
+    nnz = torch.ops.aten._nnz(sparse)
+    assert nnz == 5
+    assert flag_gems.dense_dim(sparse) == 0
+    assert flag_gems.dense_dim(t) == 2
