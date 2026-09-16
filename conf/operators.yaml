@@ -53,6 +53,19 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.4'
+- id: _nnz
+  description: 'Returns the number of stored elements (nnz) of a sparse tensor.
+
+    '
+  for:
+  - _nnz
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _reshape_alias
   description: 'Creates a view of the input tensor with the given size and stride,
 
