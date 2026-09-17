@@ -111,10 +111,20 @@ def test_sparse_coo_tensor_indices_size(nnz, size, seed, index_dtype):
     indices, values = _make_coo(
         nnz, size, seed, flag_gems.device, index_dtype=index_dtype
     )
-    # The Python builtin promotes int32 indices to int64 (measured native
-    # behaviour); the packet overload does not, so mirror the builtin by
-    # promoting here and compare against the promoted reference.
-    ref_indices = utils.to_reference(indices.to(torch.int64))
+    if index_dtype != torch.int64:
+        # The packet overload has no promotion step, so a non-int64 index
+        # matrix is rejected with the native message; the promotion belongs to
+        # the Python builtin. Pin the packet contract here, then exercise the
+        # constructor body through the promoted components.
+        with pytest.raises(RuntimeError, match="indices must be an int64 tensor"):
+            flag_gems.sparse_coo_tensor_indices_size(indices, values, list(size))
+        with pytest.raises(RuntimeError, match="indices must be an int64 tensor"):
+            torch.ops.aten.sparse_coo_tensor.indices_size(
+                utils.to_reference(indices), utils.to_reference(values), list(size)
+            )
+        indices = indices.to(torch.int64)
+
+    ref_indices = utils.to_reference(indices)
     ref_values = utils.to_reference(values)
 
     ref = torch.ops.aten.sparse_coo_tensor.indices_size(
