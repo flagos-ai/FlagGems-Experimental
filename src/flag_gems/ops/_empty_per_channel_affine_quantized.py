@@ -61,15 +61,21 @@ def _empty_per_channel_affine_quantized(
     ``QuantizedCUDA``/``Autograd`` -- there is no plain ``CUDA`` kernel. A
     sentinel probe confirms the consequence: a dispatched quantized call
     never selects the ``CUDA`` key, while the ``Autograd`` key is reached.
-    Hence the extra ``Autograd`` key in ``_FULL_CONFIG`` is what makes the
-    dispatched paths execute this implementation, and
-    ``_AutoDispatchBelowAutograd()`` then redispatches past our own override
-    into the native ``QuantizedCUDA``/``CPU``/``QuantizedCPU`` kernel. Every
-    allocation and every scale/zero-point coercion rule therefore stays
-    native: for example ``float16``/``float32`` ``zero_points`` select
-    ``per_channel_affine_float_qparams`` with float qparams, while integral
-    ``zero_points`` select ``per_channel_affine`` with ``float64`` scales and
-    ``int64`` zero points.
+    Hence the extra ``Autograd`` key in ``_FULL_CONFIG`` is what makes
+    ``torch.ops.aten._empty_per_channel_affine_quantized`` execute this
+    implementation, and ``_AutoDispatchBelowAutograd()`` then redispatches
+    past our own override into the native ``QuantizedCUDA``/``CPU``/
+    ``QuantizedCPU`` kernel. Every allocation and every scale/zero-point
+    coercion rule therefore stays native: for example ``float16``/``float32``
+    ``zero_points`` select ``per_channel_affine_float_qparams`` with float
+    qparams, while integral ``zero_points`` select ``per_channel_affine``
+    with ``float64`` scales and ``int64`` zero points.
+
+    Note for callers: the ``torch._empty_per_channel_affine_quantized``
+    builtin does NOT go through the dispatcher's Autograd key (measured:
+    zero calls reach an Autograd-key sentinel), so it keeps running the
+    native kernel directly and is unaffected by this registration. Only the
+    ``torch.ops.aten`` packet is routed.
 
     The device-key entry is unavoidably installed by the registrar
     (``GeneralOpRegistrar.register_impl`` always registers on the device key
