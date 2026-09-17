@@ -78,11 +78,18 @@ def _values_input(shape, dtype, device, strided=False):
     Integer and bool element types cannot be sampled with ``randn`` (there is
     no normal kernel for them), so they are built on the CPU and moved; the
     ``strided`` views are transposes (dense non-overlapping), which is the
-    layout the ND kernel is written for.
+    layout the ND kernel is written for. The dtype dispatch is on
+    ``dtype.is_floating_point``/``dtype == torch.bool`` rather than on the
+    ``utils`` dtype lists, which narrow under ``QUICK_MODE`` and would silently
+    classify e.g. float32 as bool in the quick-cpu phase.
     """
-    if dtype in utils.FLOAT_DTYPES:
+    if dtype.is_floating_point or dtype.is_complex:
         values = torch.randn(shape, dtype=dtype, device=device)
-    elif dtype in utils.INT_DTYPES:
+    elif dtype == torch.bool:
+        values = torch.randint(0, 2, size=shape, dtype=torch.bool, device="cpu").to(
+            device
+        )
+    else:
         values = torch.randint(
             torch.iinfo(dtype).min,
             torch.iinfo(dtype).max,
@@ -90,10 +97,6 @@ def _values_input(shape, dtype, device, strided=False):
             dtype=dtype,
             device="cpu",
         ).to(device)
-    else:
-        values = torch.randint(0, 2, size=shape, dtype=torch.bool, device="cpu").to(
-            device
-        )
     if strided:
         # ``transpose`` covers 3-D+ where ``t()`` (<= 2-D) does not; both
         # produce the same dense non-overlapping non-contiguous layout.
@@ -263,10 +266,13 @@ def test_accuracy_values_copy_input_not_mutated(name, make):
     before = inp._values().clone()
 
     res_out = flag_gems._values_copy(inp)
-    # Writing to the copy must not reach the input values: the op allocates.
+    assert res_out.data_ptr() != inp._values().data_ptr()
+    # Writing to the copy must not reach the input values, and the copy must
+    # carry the input's values before the write (a fill on an aliasing result
+    # would also change ``inp._values()``).
+    assert _same_values(res_out, before)
     res_out.fill_(123.0)
     assert _same_values(inp._values(), before)
-    assert not _same_values(inp._values(), res_out)
 
 
 @pytest.mark._values_copy
