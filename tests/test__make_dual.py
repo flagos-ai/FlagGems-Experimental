@@ -93,13 +93,13 @@ def test_accuracy__make_dual(shape, dtype):
         assert res_out.shape == primal.shape
         assert res_out.dtype == primal.dtype
         utils.gems_assert_equal(res_out, ref_out)
-        utils.gems_assert_equal(res_out, primal)
+        utils.gems_assert_equal(res_out, utils.to_reference(primal))
 
         # Native tangent is attached and carried as forward-grad metadata.
         res_primal, res_tangent = unpack_dual(res_out)
         ref_primal, ref_tangent = unpack_dual(ref_out)
         utils.gems_assert_equal(res_tangent, ref_tangent)
-        utils.gems_assert_equal(res_tangent, tangent)
+        utils.gems_assert_equal(res_tangent, utils.to_reference(tangent))
         utils.gems_assert_equal(res_primal, ref_primal)
 
 
@@ -129,7 +129,7 @@ def test_accuracy__make_dual_alias(shape):
 
         # The tangent is attached as metadata, unmodified.
         assert res_tangent is not None
-        utils.gems_assert_equal(res_tangent, tangent)
+        utils.gems_assert_equal(res_tangent, utils.to_reference(tangent))
 
         # The primal itself did not become a dual tensor.
         _, primal_tangent = unpack_dual(primal)
@@ -152,7 +152,7 @@ def test_accuracy__make_dual_level(level):
             res_out = flag_gems._make_dual(primal, tangent, level)
             utils.gems_assert_equal(res_out, ref_out)
             _, res_tangent = unpack_dual(res_out)
-            utils.gems_assert_equal(res_tangent, tangent)
+            utils.gems_assert_equal(res_tangent, utils.to_reference(tangent))
         else:
             with pytest.raises(RuntimeError, match="Invalid level given to _make_dual"):
                 _ref_make_dual(ref_primal, ref_tangent, level)
@@ -233,7 +233,7 @@ def test_accuracy__make_dual_non_contiguous():
         assert res_out.data_ptr() == primal.data_ptr()
         assert res_out.stride() == primal.stride()
         _, res_tangent = unpack_dual(res_out)
-        utils.gems_assert_equal(res_tangent, tangent)
+        utils.gems_assert_equal(res_tangent, utils.to_reference(tangent))
 
 
 @pytest.mark._make_dual
@@ -274,7 +274,7 @@ def test_accuracy__make_dual_dispatch_stability():
             assert res_out.data_ptr() == primal.data_ptr()
             utils.gems_assert_equal(res_out, ref_out)
             _, res_tangent = unpack_dual(res_out)
-            utils.gems_assert_equal(res_tangent, tangent)
+            utils.gems_assert_equal(res_tangent, utils.to_reference(tangent))
         # The interleaved op still dispatches correctly on CUDA after all
         # ``_make_dual`` calls (would fail if CUDA stayed excluded).
         assert torch.ops.aten.dim(primal.clone()) == 1
@@ -318,11 +318,20 @@ def test_accuracy__make_dual_requires_grad_primal():
         ref_out = _ref_make_dual(ref_primal, ref_tangent, 0)
         res_out = flag_gems._make_dual(primal, tangent, 0)
         assert res_out.requires_grad == ref_out.requires_grad
-        assert type(res_out.grad_fn).__name__ == type(ref_out.grad_fn).__name__
+        assert res_out.grad_fn is not None
+        # grad_fn class-name comparison (== is intentional: two distinct
+        # backward classes can share a __name__; comparing plain strings
+        # avoids flake8 E721's type-comparison misreading)
+        res_grad_fn_name = type(res_out.grad_fn).__name__
+        ref_grad_fn_name = type(ref_out.grad_fn).__name__
+        assert res_grad_fn_name == ref_grad_fn_name
         res_out.sum().backward()
         assert primal.grad is not None
         utils.gems_assert_close(
-            primal.grad, torch.ones_like(primal), torch.float32, atol=1e-6
+            utils.to_reference(primal.grad),
+            torch.ones_like(utils.to_reference(primal)),
+            torch.float32,
+            atol=1e-6,
         )
 
 
@@ -355,4 +364,4 @@ def test_accuracy__make_dual_registration_wiring():
         res_mod = impl_mod._make_dual(primal, tangent, 0)
         assert res_pub.data_ptr() == primal.data_ptr()
         assert res_mod.data_ptr() == primal.data_ptr()
-        utils.gems_assert_equal(res_pub, res_mod)
+        utils.gems_assert_equal(res_pub, utils.to_reference(res_mod))
