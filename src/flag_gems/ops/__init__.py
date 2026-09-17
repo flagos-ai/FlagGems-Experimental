@@ -95,6 +95,10 @@ from flag_gems.ops._jagged_to_padded_dense_forward import (
 from flag_gems.ops._linalg_eigvals import _linalg_eigvals
 from flag_gems.ops._list_to_tensor import _list_to_tensor
 from flag_gems.ops._make_dep_token import _make_dep_token
+from flag_gems.ops._make_per_tensor_quantized_tensor import (
+    _make_per_tensor_quantized_tensor,
+    _make_per_tensor_quantized_tensor_out,
+)
 from flag_gems.ops._masked_scale import _masked_scale
 from flag_gems.ops._native_batch_norm_legit import (
     _native_batch_norm_legit,
@@ -1051,6 +1055,8 @@ __all__ = [
     "_linalg_eigvals",
     "_list_to_tensor",
     "_make_dep_token",
+    "_make_per_tensor_quantized_tensor",
+    "_make_per_tensor_quantized_tensor_out",
     "_masked_scale",
     "_native_batch_norm_legit",
     "_native_batch_norm_legit_functional",
