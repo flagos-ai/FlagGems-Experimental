@@ -221,6 +221,12 @@ _FULL_CONFIG = (
     ),
     ("_nested_sum_backward", _nested_sum_backward),
     (
+        "_nested_tensor_size",
+        _nested_tensor_size,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
         "_nested_tensor_strides",
         _nested_tensor_strides,
         None,
