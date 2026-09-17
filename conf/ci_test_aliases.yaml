@@ -34,6 +34,7 @@ scaled_mm_out: test_scaled_mm
 searchsorted_out: test_searchsorted
 searchsorted_scalar_out: test_searchsorted
 segment_reduce_out: test_segment_reduce
+_make_per_tensor_quantized_tensor_out: test__make_per_tensor_quantized_tensor
 
 # Compound / alternative names
 arange_start_step: test_arange
