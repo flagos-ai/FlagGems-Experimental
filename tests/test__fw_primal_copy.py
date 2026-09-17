@@ -128,8 +128,11 @@ def test_accuracy__fw_primal_copy_contiguous(shape, dtype):
     assert res_out.is_contiguous() == ref_out.is_contiguous()
     assert res_out.stride() == ref_out.stride()
     utils.gems_assert_equal(res_out, ref_out)
+    # ``ref_inp`` is the single conversion of ``inp``, so this is the
+    # "result equals the input" assertion in a form that also holds under
+    # ``--ref=cpu`` (where the helper needs a CPU reference and a second
+    # ``to_reference`` call would allocate a different buffer).
     utils.gems_assert_equal(res_out, ref_inp)
-    utils.gems_assert_equal(res_out, inp)
 
 
 @pytest.mark._fw_primal_copy
@@ -162,7 +165,10 @@ def test_accuracy__fw_primal_copy_non_contiguous(slicer):
     assert res_out.is_contiguous()
     assert res_out.stride() == ref_out.stride()
     utils.gems_assert_equal(res_out, ref_out)
-    utils.gems_assert_equal(res_out, inp)
+    # ``ref_inp`` is the single conversion of ``inp`` (a strided slice of the
+    # once-converted base, so its values are the input's); comparing against
+    # it keeps the assertion valid under ``--ref=cpu``.
+    utils.gems_assert_equal(res_out, ref_inp)
 
 
 @pytest.mark._fw_primal_copy
@@ -192,7 +198,7 @@ def test_accuracy__fw_primal_copy_strided_layouts(make_input):
     assert ref_out.is_contiguous()
     assert res_out.stride() == ref_out.stride()
     utils.gems_assert_equal(res_out, ref_out)
-    utils.gems_assert_equal(res_out, inp)
+    utils.gems_assert_equal(res_out, ref_inp)
 
 
 @pytest.mark._fw_primal_copy
@@ -271,7 +277,7 @@ def test_accuracy__fw_primal_copy_zero_dim():
     assert res_out.numel() == 1
     _assert_copy_contract(res_out, inp)
     utils.gems_assert_equal(res_out, ref_out)
-    utils.gems_assert_equal(res_out, inp)
+    utils.gems_assert_equal(res_out, ref_inp)
 
 
 @pytest.mark._fw_primal_copy
@@ -376,7 +382,7 @@ def test_accuracy__fw_primal_copy_dtype_dispatch(dtype):
 
     assert res_out.dtype == ref_inp.dtype == ref_out.dtype
     _assert_copy_contract(res_out, inp)
-    utils.gems_assert_equal(res_out, inp)
+    utils.gems_assert_equal(res_out, ref_inp)
 
 
 @pytest.mark._fw_primal_copy
@@ -385,18 +391,20 @@ def test_accuracy__fw_primal_copy_matches_primed_clone():
     # for a non-dual input the first hop is an aliasing view, so the whole op
     # is equivalent to a contiguous clone of the input. Verify the submitted
     # implementation against that independent formulation of the contract.
+    # Each input is converted once and re-sliced, so the reference stays a
+    # single conversion per logical tensor under ``--ref=cpu``.
     inp = torch.randn(4, 7, device=flag_gems.device)
-    assert flag_gems._fw_primal_copy(inp, 0).data_ptr() != inp.data_ptr()
-    utils.gems_assert_equal(
-        flag_gems._fw_primal_copy(inp, 0),
-        inp.clone(memory_format=torch.contiguous_format),
-    )
+    ref_inp = utils.to_reference(inp)
+    res_inp = flag_gems._fw_primal_copy(inp, 0)
+    assert res_inp.data_ptr() != inp.data_ptr()
+    utils.gems_assert_equal(res_inp, ref_inp)
 
-    strided = torch.randn(4, 8, device=flag_gems.device)[:, ::2]
+    base = torch.randn(4, 8, device=flag_gems.device)
+    strided = base[:, ::2]
+    ref_strided = utils.to_reference(base)[:, ::2]
     res_strided = flag_gems._fw_primal_copy(strided, 1)
-    utils.gems_assert_equal(
-        res_strided, strided.clone(memory_format=torch.contiguous_format)
-    )
+    assert res_strided.is_contiguous()
+    utils.gems_assert_equal(res_strided, ref_strided)
 
 
 # ---------------------------------------------------------------------------
@@ -415,9 +423,13 @@ def test_accuracy__fw_primal_copy_out_writes_and_returns_out():
 
     # Identity: the caller's buffer itself is returned, not a fresh tensor.
     assert res is out
-    # The buffer really was written (it started as zeros).
+    # The buffer really was written (it started as zeros). Both sides are
+    # device tensors here, so this comparison is phase-independent.
     assert torch.equal(out, inp)
+    # ``ref_inp`` is the single conversion of ``inp``: the same assertion as
+    # ``out == inp``, in the form the helper needs under ``--ref=cpu``.
     utils.gems_assert_equal(out, ref_out)
+    utils.gems_assert_equal(out, ref_inp)
     # A distinct allocation from the input.
     assert out.data_ptr() != inp.data_ptr()
     assert ref_out.data_ptr() != ref_inp.data_ptr()
@@ -437,7 +449,9 @@ def test_accuracy__fw_primal_copy_out_from_non_contiguous_input():
     assert res is out
     assert out.is_contiguous()
     utils.gems_assert_equal(out, ref_out)
-    utils.gems_assert_equal(out, inp)
+    # ``ref_inp`` is the single conversion of the base, re-sliced, so it holds
+    # the strided input's values.
+    utils.gems_assert_equal(out, ref_inp)
 
 
 @pytest.mark._fw_primal_copy_out
@@ -460,7 +474,7 @@ def test_accuracy__fw_primal_copy_out_non_contiguous_buffer():
     assert out.stride() == original_stride
     assert not out.is_contiguous()
     utils.gems_assert_equal(out, ref_out)
-    utils.gems_assert_equal(out, inp)
+    utils.gems_assert_equal(out, ref_inp)
 
 
 @pytest.mark._fw_primal_copy_out
