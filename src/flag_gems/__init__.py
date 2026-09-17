@@ -80,6 +80,11 @@ SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
     torch._C.DispatchKey.CompositeImplicitAutograd.name
 )
+# Quantized tensors carry their own backend key. The generated `.out` overloads
+# of quantized-producing ops are CompositeExplicitAutograd and only surface at
+# the quantized key, so a plain backend-key registration would never be reached
+# for them (same trap as the sparse keys above).
+QUANTIZED_DISPATCH_KEY = "Quantized" + backend_info.dispatch_key
 
 
 def torch_ge(v):
@@ -200,6 +205,16 @@ _FULL_CONFIG = (
     ("_log_softmax_backward_data.out", log_softmax_backward_out),
     ("_make_dep_token", _make_dep_token),
     ("_make_dual", _make_dual),
+    (
+        "_make_per_tensor_quantized_tensor",
+        _make_per_tensor_quantized_tensor,
+    ),
+    (
+        "_make_per_tensor_quantized_tensor.out",
+        _make_per_tensor_quantized_tensor_out,
+        None,
+        (QUANTIZED_DISPATCH_KEY,),
+    ),
     ("_masked_scale", _masked_scale),
     ("_native_batch_norm_legit", _native_batch_norm_legit),
     ("_native_batch_norm_legit.no_stats", _native_batch_norm_legit_no_stats),
