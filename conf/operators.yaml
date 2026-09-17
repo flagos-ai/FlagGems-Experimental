@@ -157,6 +157,30 @@ ops:
   - Tensor
   stages:
   - alpha: '5.5'
+- id: _indices_copy
+  description: Returns a copy of the index matrix of a sparse COO tensor in freshly
+    allocated memory.
+  for:
+  - _indices_copy
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
+- id: _indices_copy_out
+  description: A variant of `_indices_copy()` that allows the output to be assigned
+    to the `out` tensor.
+  for:
+  - _indices_copy.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _make_dual
   description: 'Creates a dual tensor for forward-mode AD by attaching the tangent
     to the primal at the given level.
