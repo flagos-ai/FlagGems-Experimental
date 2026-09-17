@@ -82,14 +82,18 @@ def _assert_view_metadata(res, x):
 @pytest.mark.parametrize("shape", FW_PRIMAL_SHAPES)
 def test_accuracy__fw_primal_contiguous(shape, dtype):
     x = _gen(shape, dtype, flag_gems.device)
-    ref_out = torch.ops.aten._fw_primal(utils.to_reference(x), 0)
+    # One conversion, reused: under --ref=cpu every to_reference call
+    # allocates a fresh buffer, so an aliasing assert must compare against
+    # the SAME converted tensor that was fed to the reference op.
+    ref_x = utils.to_reference(x)
+    ref_out = torch.ops.aten._fw_primal(ref_x, 0)
     res_out = flag_gems._fw_primal(x, 0)
 
     # Native first: the expectation is verified, not assumed.
-    assert ref_out.data_ptr() == utils.to_reference(x).data_ptr()
+    assert ref_out.data_ptr() == ref_x.data_ptr()
     _assert_view_metadata(res_out, x)
     utils.gems_assert_equal(res_out, ref_out)
-    utils.gems_assert_equal(res_out, x)
+    utils.gems_assert_equal(res_out, ref_x)
 
 
 @pytest.mark._fw_primal
@@ -104,7 +108,12 @@ def test_accuracy__fw_primal_non_contiguous(slicer):
     x = base[slicer]
     assert not x.is_contiguous()
 
-    ref_out = torch.ops.aten._fw_primal(utils.to_reference(x), 0)
+    # Convert the base once and re-derive the view from it: converting the
+    # strided view itself would materialize a contiguous copy on CPU and lose
+    # the strides/storage-offset this test asserts on.
+    ref_base = utils.to_reference(base)
+    ref_x = ref_base[slicer]
+    ref_out = torch.ops.aten._fw_primal(ref_x, 0)
     res_out = flag_gems._fw_primal(x, 0)
 
     assert res_out.stride() == x.stride()
@@ -125,16 +134,20 @@ def test_accuracy__fw_primal_transposed_and_expanded():
     assert res_out.stride() == x.stride()
     assert res_out.storage_offset() == x.storage_offset()
     assert res_out.data_ptr() == x.data_ptr()
-    utils.gems_assert_equal(
-        res_out, torch.ops.aten._fw_primal(utils.to_reference(x), 0)
-    )
+    # A transposed view keeps its strides under to("cpu"), but convert once
+    # and compare against that same conversion.
+    ref_x = utils.to_reference(x)
+    utils.gems_assert_equal(res_out, torch.ops.aten._fw_primal(ref_x, 0))
 
     e = torch.randn(1, 4, device=flag_gems.device).expand(3, 4)
     assert e.stride() == (0, 1)
     res_e = flag_gems._fw_primal(e, 0)
     assert res_e.stride() == (0, 1)
     assert res_e.data_ptr() == e.data_ptr()
-    utils.gems_assert_equal(res_e, torch.ops.aten._fw_primal(utils.to_reference(e), 0))
+    # Single conversion reused: metadata asserts above stay on `e` (same
+    # device); the reference only needs value equality on the aliasing view.
+    ref_e = utils.to_reference(e)
+    utils.gems_assert_equal(res_e, torch.ops.aten._fw_primal(ref_e, 0))
 
 
 @pytest.mark._fw_primal
@@ -144,10 +157,12 @@ def test_accuracy__fw_primal_levels(level):
     # inputs; mirror exactly what it does for the two levels the AD machinery
     # actually uses.
     x = torch.randn(3, 4, device=flag_gems.device)
-    ref_out = torch.ops.aten._fw_primal(utils.to_reference(x), level)
+    # One conversion, reused for both the reference op and the aliasing assert.
+    ref_x = utils.to_reference(x)
+    ref_out = torch.ops.aten._fw_primal(ref_x, level)
     res_out = flag_gems._fw_primal(x, level)
 
-    assert ref_out.data_ptr() == utils.to_reference(x).data_ptr()
+    assert ref_out.data_ptr() == ref_x.data_ptr()
     _assert_view_metadata(res_out, x)
     utils.gems_assert_equal(res_out, ref_out)
 
@@ -186,6 +201,9 @@ def test_accuracy__fw_primal_dispatch_stability():
     # Repeated calls plus unrelated aten ops in between must keep routing to
     # the same view semantics (no shared mutable state, no dispatch drift).
     x = torch.randn(3, 4, device=flag_gems.device)
+    # Convert once: gems_assert_equal moves `res` to CPU and requires a CPU
+    # reference, so a bare CUDA `x` would fail the helper's device assert.
+    ref_x = utils.to_reference(x)
     for _ in range(3):
         # An unrelated aten op dispatched between calls must not disturb the
         # routing or the aliasing contract.
@@ -194,7 +212,7 @@ def test_accuracy__fw_primal_dispatch_stability():
         res_out = flag_gems._fw_primal(x, 0)
         assert res_out.data_ptr() == x.data_ptr()
         assert res_out.stride() == x.stride()
-    utils.gems_assert_equal(res_out, x)
+    utils.gems_assert_equal(res_out, ref_x)
 
 
 @pytest.mark._fw_primal
@@ -210,7 +228,9 @@ def test_accuracy__fw_primal_inference_tensor():
     assert ref_out.is_inference()
     _assert_view_metadata(res_out, x)
     assert res_out.is_inference()
-    utils.gems_assert_equal(res_out, ref_out)
+    # gems_assert_equal requires a CPU reference under --ref=cpu; convert the
+    # already-computed native result instead of re-deriving it.
+    utils.gems_assert_equal(res_out, utils.to_reference(ref_out))
 
     with torch.inference_mode():
         base = torch.randn(4, 8, device=flag_gems.device)
@@ -231,7 +251,9 @@ def test_accuracy__fw_primal_scalar_and_empty():
     e = torch.randn(0, 4, device=flag_gems.device)
     res_e = flag_gems._fw_primal(e, 0)
     _assert_view_metadata(res_e, e)
-    utils.gems_assert_equal(res_e, torch.ops.aten._fw_primal(utils.to_reference(e), 0))
+    # Single conversion reused for the reference op and the comparison.
+    ref_e = utils.to_reference(e)
+    utils.gems_assert_equal(res_e, torch.ops.aten._fw_primal(ref_e, 0))
 
 
 @pytest.mark._fw_primal
@@ -241,8 +263,11 @@ def test_accuracy__fw_primal_dtype_dispatch(dtype):
     # promotion, no cast. Verify through the registered dispatcher path by
     # calling the public aten entry point after flag_gems has registered.
     x = _gen((1024,), dtype, flag_gems.device)
-    ref_out = torch.ops.aten._fw_primal(utils.to_reference(x), 0)
+    # One conversion, reused: metadata compares against the same converted
+    # tensor the reference op consumed.
+    ref_x = utils.to_reference(x)
+    ref_out = torch.ops.aten._fw_primal(ref_x, 0)
     res_out = flag_gems._fw_primal(x, 0)
-    assert res_out.dtype == x.dtype == ref_out.dtype
+    assert res_out.dtype == ref_x.dtype == ref_out.dtype
     assert res_out.data_ptr() == x.data_ptr()
     utils.gems_assert_equal(res_out, ref_out)
