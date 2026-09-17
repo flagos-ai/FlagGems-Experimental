@@ -269,7 +269,14 @@ def test_accuracy_new_zeros_same_feature_meta_disclosed_layout_difference():
     assert other.storage_offset() == 10
     self_t = _gen_input((2, 3), torch.float32)
     ref_self = utils.to_reference(self_t)
-    ref_other = utils.to_reference(other)
+    # Derive the reference view from the CONVERTED base, never by converting
+    # the view: to_reference materializes a strided slice to contiguous, so
+    # converting ``other`` directly would hand the reference a contiguous
+    # tensor with offset 0 and destroy exactly the layout this case pins.
+    ref_base = utils.to_reference(base)
+    ref_other = ref_base[10:40:3]
+    assert ref_other.stride() == (3,)
+    assert ref_other.storage_offset() == 10
 
     ref_out = _native(ref_self, ref_other, 0)
     res_out = flag_gems._new_zeros_with_same_feature_meta(self_t, other)
@@ -349,7 +356,9 @@ def test_accuracy_new_zeros_same_feature_meta_empty(self_shape, other_shape, d):
     assert ref_out.data_ptr() == 0
     # The result is a plain torch.empty allocation, so it carries the ATen
     # empty-tensor stride for its shape (checked on the result's own device).
-    assert res_out.stride() == torch.empty(res_out.shape, device=res_out.device).stride()
+    assert (
+        res_out.stride() == torch.empty(res_out.shape, device=res_out.device).stride()
+    )
 
 
 @pytest.mark._new_zeros_with_same_feature_meta
@@ -508,15 +517,17 @@ def test_accuracy_new_zeros_same_feature_meta_registry_wiring():
 @pytest.mark._new_zeros_with_same_feature_meta_out
 def test_accuracy_new_zeros_same_feature_meta_out_writes_and_returns():
     # .out overload: the buffer is zero-filled and the SAME object is returned.
-    # The buffer is device-bound (native rejects a cross-device out tensor), so
-    # the comparison is device-explicit rather than through gems_assert_equal.
+    # The out buffer is device-bound -- native rejects a cross-device buffer
+    # with "Expected out tensor to have device cuda:0, but got cpu instead",
+    # so the reference buffer cannot be the converted (CPU) tensor and the
+    # comparison is device-explicit instead of through gems_assert_equal.
     other = _gen_input((4, 5), torch.float32)
     self_t = _gen_input((4, 5), torch.float32)
     ref_self = utils.to_reference(self_t)
     ref_other = utils.to_reference(other)
 
     out = torch.full((4, 5), 7.0, dtype=torch.float32, device=flag_gems.device)
-    ref_out = torch.full((4, 5), 7.0, dtype=torch.float32, device=flag_gems.device)
+    ref_out = torch.full((4, 5), 7.0, dtype=torch.float32, device=ref_self.device)
     ret = flag_gems._new_zeros_with_same_feature_meta_out(self_t, other, out=out)
     torch.ops.aten._new_zeros_with_same_feature_meta.out(
         ref_self, ref_other, self_num_batch_dims=0, out=ref_out
@@ -524,6 +535,7 @@ def test_accuracy_new_zeros_same_feature_meta_out_writes_and_returns():
 
     assert ret is out
     assert bool((out == 0).all())
+    assert bool((ref_out == 0).all())
     assert torch.equal(ret.detach().cpu(), ref_out.detach().cpu())
     assert ret.shape == ref_out.shape
     assert ret.stride() == ref_out.stride()
