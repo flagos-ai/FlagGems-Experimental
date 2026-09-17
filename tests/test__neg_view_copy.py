@@ -124,16 +124,18 @@ def test_accuracy_neg_view_copy_contiguous_tuning_branches(shape, dtype):
 def test_accuracy_neg_view_copy_contiguous_tuning_write_out(dtype):
     # Same size/dtype pairs, written through the .out overload: lets the same
     # tuning branches be exercised without a second allocation of the output.
+    # The reference shares the input's device (native rejects a cross-device
+    # out buffer), so values are compared, not devices.
     shape = TUNING_SHAPE_LARGE
     inp = _gen_input(shape, dtype)
     out = torch.empty(shape, dtype=dtype, device=flag_gems.device)
-    ref_inp = utils.to_reference(inp)
-    ref_out = torch.empty(shape, dtype=dtype, device="cpu")
+    ref_out = torch.empty(shape, dtype=dtype, device=flag_gems.device)
 
-    torch.ops.aten._neg_view_copy.out(ref_inp, out=ref_out)
+    torch.ops.aten._neg_view_copy.out(inp, out=ref_out)
     ret = flag_gems._neg_view_copy_out(inp, out=out)
 
     assert ret is out
+    utils.gems_assert_equal(ret, ref_out)
     assert torch.equal(ret, ref_out)
     assert torch.equal(out, -inp)
     assert ret.stride() == ref_out.stride()
@@ -173,26 +175,28 @@ _BASE_SHAPE = (4, 5, 6, 7)
     "make_input",
     [
         lambda s, d: _gen_input(s, d).transpose(0, -1),
-        lambda s, d: _gen_input(s, d).permute(2, 0, 1),
+        lambda s, d: _gen_input(s, d).permute(0, 3, 1, 2),
         lambda s, d: _gen_input(s, d)[:, :, 1:3],
         lambda s, d: _gen_input((1, s[1], s[2], s[3]), d).expand(s),
         lambda s, d: _gen_input(s, d).transpose(1, 3),
-        lambda s, d: _gen_input((s[0] + 2, s[1]), d)[1 : s[0] + 1, ::-1],
+        lambda s, d: _gen_input(s, d).permute(2, 3, 1, 0).flip(0),
     ],
     ids=[
         "transpose-2d",
-        "permute-3d",
+        "permute-4d",
         "slice-middle-dim",
         "expand-zero-stride",
         "transpose-4d",
-        "slice-negative-step",
+        "permute-4d-flip",
     ],
 )
 @pytest.mark.parametrize("dtype", [torch.float32, torch.int16])
 def test_accuracy_neg_view_copy_strided_layouts(make_input, dtype):
-    # Every shape in this test is a non-contiguous view of a base tensor with
-    # strides the strided kernel has to reproduce, including a zero stride
-    # (expand) and a negative stride (reverse slice).
+    # Every shape in this test is a non-contiguous view of a base tensor,
+    # whose strides the strided kernel has to reproduce: reversed/permuted
+    # axes, a zero stride (expand) and a middle-dim slice. Negative-step
+    # slicing is rejected on CUDA ("step must be greater than zero"), so
+    # flip() supplies the reversed layout instead of [::-1].
     inp = make_input(_BASE_SHAPE, dtype)
     ref_inp = utils.to_reference(inp)
     assert not inp.is_contiguous()
@@ -304,17 +308,18 @@ def test_accuracy_neg_view_copy_dispatch_stability():
 @pytest.mark._neg_view_copy_out
 def test_accuracy_neg_view_copy_out_writes_and_returns_out():
     inp = torch.randn(4, 6, device=flag_gems.device)
+    # Sentinel fill: the values must be overwritten, not left in place.
     out = torch.empty(4, 6, device=flag_gems.device).fill_(-777.0)
-    ref_inp = utils.to_reference(inp)
-    ref_out = torch.empty(4, 6, device="cpu").fill_(-777.0)
+    ref_out = torch.empty(4, 6, device=flag_gems.device).fill_(-777.0)
 
-    ref_ret = torch.ops.aten._neg_view_copy.out(ref_inp, out=ref_out)
+    ref_ret = torch.ops.aten._neg_view_copy.out(inp, out=ref_out)
     ret = flag_gems._neg_view_copy_out(inp, out=out)
 
-    # Return identity and in-place write (the sentinel values are gone).
+    # Return identity (the same object) and full in-place overwrite.
     assert ref_ret is ref_out
     assert ret is out
     assert ret.data_ptr() == out.data_ptr()
+    utils.gems_assert_equal(ret, ref_out)
     assert torch.equal(ret, ref_out)
     assert torch.equal(ret, -inp)
 
@@ -325,26 +330,32 @@ def test_accuracy_neg_view_copy_out_non_contiguous_and_resize():
     # out buffer: it resizes to the input shape and writes the buffer's own
     # layout in place. The returned object is the out buffer itself.
     inp = torch.randn(3, 5, device=flag_gems.device)
-    base = torch.empty(5, 8, device=flag_gems.device)
-    out = base[2:5]  # shape (3, 5), non-contiguous
+    # Column slice of an 8x5 base: shape (3, 5) with stride (5, 1) -> not
+    # contiguous, so the buffer is written through its own layout.
+    base = torch.randn(8, 5, device=flag_gems.device)
+    marker = torch.zeros(8, 5, device=flag_gems.device)
+    marker[2:5] = 1.0
+    out = base[:, 1:6]
     assert not out.is_contiguous()
-    ref_inp = utils.to_reference(inp)
-    ref_base = torch.empty(5, 8, device="cpu")
-    ref_out = ref_base[2:5]
+    ref_base = torch.randn(8, 5, device=flag_gems.device)
+    ref_base.copy_(base)
+    ref_out = ref_base[:, 1:6]
 
-    torch.ops.aten._neg_view_copy.out(ref_inp, out=ref_out)
+    torch.ops.aten._neg_view_copy.out(inp, out=ref_out)
     ret = flag_gems._neg_view_copy_out(inp, out=out)
 
     assert ret is out
+    utils.gems_assert_equal(ret, ref_out)
     assert torch.equal(ret, ref_out)
     assert torch.equal(out, -inp)
-    # The scatter went through the buffer's own layout: base rows stay put.
-    assert torch.equal(base[2:5], -inp)
+    # The write stayed inside the view: every element outside it is untouched.
+    assert torch.equal(base[marker == 0], ref_base[marker == 0])
 
-    # Mismatched shape: native resizes the out buffer to the input shape.
-    small = torch.empty(2, 2, device=flag_gems.device)
-    ref_small = torch.empty(2, 2, device="cpu")
-    torch.ops.aten._neg_view_copy.out(ref_inp, out=ref_small)
+    # Mismatched shape on the same (non-contiguous) buffer: native resizes the
+    # out buffer to the input shape; the resized buffer is contiguous again.
+    small = base[:, 1:6]
+    ref_small = ref_base[:, 1:6]
+    torch.ops.aten._neg_view_copy.out(inp, out=ref_small)
     ret_small = flag_gems._neg_view_copy_out(inp, out=small)
     assert ret_small is small
     assert tuple(small.shape) == tuple(ref_small.shape) == (3, 5)
@@ -357,10 +368,9 @@ def test_accuracy_neg_view_copy_out_dtype_mismatch():
     # Native: RuntimeError("Expected out tensor to have dtype ..."). The
     # FlagGems overload must not silently write through a wider buffer.
     inp = torch.randn(4, device=flag_gems.device)
-    ref_inp = utils.to_reference(inp)
     with pytest.raises(RuntimeError):
         torch.ops.aten._neg_view_copy.out(
-            ref_inp, out=torch.empty(4, dtype=torch.float64, device="cpu")
+            inp, out=torch.empty(4, dtype=torch.float64, device=flag_gems.device)
         )
     with pytest.raises(RuntimeError):
         flag_gems._neg_view_copy_out(
@@ -375,13 +385,13 @@ def test_accuracy_neg_view_copy_out_from_non_contiguous_input():
     inp = torch.randn(5, 4, device=flag_gems.device).transpose(0, 1)
     assert not inp.is_contiguous()
     out = torch.empty(4, 5, device=flag_gems.device)
-    ref_inp = utils.to_reference(inp)
-    ref_out = torch.empty(4, 5, device="cpu")
+    ref_out = torch.empty(4, 5, device=flag_gems.device)
 
-    torch.ops.aten._neg_view_copy.out(ref_inp, out=ref_out)
+    torch.ops.aten._neg_view_copy.out(inp, out=ref_out)
     ret = flag_gems._neg_view_copy_out(inp, out=out)
 
     assert ret is out
+    utils.gems_assert_equal(ret, ref_out)
     assert torch.equal(ret, ref_out)
     assert torch.equal(out, -inp)
 
@@ -390,10 +400,9 @@ def test_accuracy_neg_view_copy_out_from_non_contiguous_input():
 def test_accuracy_neg_view_copy_out_empty():
     inp = torch.empty(0, device=flag_gems.device)
     out = torch.empty(0, device=flag_gems.device)
-    ref_inp = utils.to_reference(inp)
-    ref_out = torch.empty(0, device="cpu")
+    ref_out = torch.empty(0, device=flag_gems.device)
 
-    torch.ops.aten._neg_view_copy.out(ref_inp, out=ref_out)
+    torch.ops.aten._neg_view_copy.out(inp, out=ref_out)
     ret = flag_gems._neg_view_copy_out(inp, out=out)
 
     assert ret is out
