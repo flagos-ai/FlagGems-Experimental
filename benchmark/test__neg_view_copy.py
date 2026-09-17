@@ -66,15 +66,28 @@ class NegViewCopyBenchmark(base.Benchmark):
             yield (inp,)
 
 
+# Non-contiguous benchmark shapes: every entry is 2-D or wider so that
+# transpose(0, -1) produces a genuinely non-contiguous view (a 1-D transpose
+# is a no-op and would silently measure the contiguous path).
+NEG_VIEW_COPY_STRIDED_SHAPES = [
+    (16, 64),
+    (1024, 1024),
+    (1024, 2048),
+    (2048, 2048),
+]
+
+
 class NegViewCopyStridedBenchmark(NegViewCopyBenchmark):
     """Benchmark for the strided branch (non-contiguous input)."""
+
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = NEG_VIEW_COPY_STRIDED_SHAPES
 
     def get_input_iter(self, cur_dtype):
         for shape in self.shapes:
             inp = utils.generate_tensor_input(shape, cur_dtype, self.device)
-            # Square-ish non-contiguous view: transpose keeps the same numel
-            # so the strided kernel moves the same amount of data as the flat
-            # one, making the two cases comparable.
+            # The transposed view has the same numel as the flat one, so the
+            # strided kernel moves the same amount of data.
             yield (inp.transpose(0, -1),)
 
 
