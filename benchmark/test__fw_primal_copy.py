@@ -46,12 +46,13 @@ FW_PRIMAL_COPY_SHAPES = [(1024,), (65536,), (1048576,), (1024, 1024)]
 class _InferenceModeCallable:
     """Run a callable inside ``torch.inference_mode()``.
 
-    Measured on H20: the native composite backing ``_fw_primal_copy`` (and its
-    generated ``.out`` variant) asserts
-    ``InferenceMode::is_enabled() && self.is_inference()``, so the ``.out``
-    reference cannot resolve outside the context at all. Wrapping BOTH the
-    reference and the submitted implementation keeps the comparison
-    apples-to-apples (same context, same inputs, same work).
+    Needed by the ``.out`` overload only. Measured on H20: the functional
+    native path resolves in a normal context as long as the input is an
+    inference tensor, but the generated ``.out`` variant raises for every
+    input/buffer combination outside the context, so its reference can only
+    be measured inside it. Both the reference and the submitted
+    implementation are wrapped identically, so the two sides still do the
+    same work under the same context.
     """
 
     def __init__(self, op):
@@ -98,8 +99,8 @@ class FwPrimalCopyOutBenchmark(FwPrimalCopyBenchmark):
 def test__fw_primal_copy():
     bench = FwPrimalCopyBenchmark(
         op_name="_fw_primal_copy",
-        torch_op=_InferenceModeCallable(torch.ops.aten._fw_primal_copy),
-        gems_op=_InferenceModeCallable(flag_gems._fw_primal_copy),
+        torch_op=torch.ops.aten._fw_primal_copy,
+        gems_op=flag_gems._fw_primal_copy,
         dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
     )
     bench.run()
