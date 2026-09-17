@@ -71,11 +71,13 @@ def test__has_same_storage_numel_different_tensors_same_shape():
 @pytest.mark._has_same_storage_numel
 def test__has_same_storage_numel_view_of_same_storage():
     # nbytes covers the WHOLE storage, so a narrow view compares equal to its
-    # base even though the shapes differ.
+    # base even though the shapes differ. The reference view must be derived
+    # from the CPU base (not converted independently) so the reference pair
+    # shares one storage exactly as the candidate pair does.
     a = torch.randn(8, device=flag_gems.device)
     b = a[2:5]
     ref_a = utils.to_reference(a)
-    ref_b = utils.to_reference(b)
+    ref_b = ref_a[2:5]
 
     ref_out = torch.ops.aten._has_same_storage_numel(ref_a, ref_b)
     res_out = flag_gems._has_same_storage_numel(a, b)
@@ -88,7 +90,7 @@ def test__has_same_storage_numel_as_strided_views():
     a = torch.randn(8, device=flag_gems.device)
     b = torch.as_strided(a, (4,), (1,), 1)
     ref_a = utils.to_reference(a)
-    ref_b = utils.to_reference(b)
+    ref_b = torch.as_strided(ref_a, (4,), (1,), 1)
 
     ref_out = torch.ops.aten._has_same_storage_numel(ref_a, ref_b)
     res_out = flag_gems._has_same_storage_numel(a, b)
@@ -99,7 +101,7 @@ def test__has_same_storage_numel_as_strided_views():
     c = torch.randn(6, device=flag_gems.device)
     d = torch.as_strided(c, (3,), (2,), 0)
     ref_c = utils.to_reference(c)
-    ref_d = utils.to_reference(d)
+    ref_d = torch.as_strided(ref_c, (3,), (2,), 0)
     assert flag_gems._has_same_storage_numel(
         c, d
     ) == torch.ops.aten._has_same_storage_numel(ref_c, ref_d)
@@ -121,7 +123,7 @@ def test__has_same_storage_numel_different_dtypes():
     base = torch.randn(8, device=flag_gems.device, dtype=torch.float32)
     as_int64 = base.view(torch.int64)
     ref_base = utils.to_reference(base)
-    ref_view = utils.to_reference(as_int64)
+    ref_view = ref_base.view(torch.int64)
     ref_out = torch.ops.aten._has_same_storage_numel(ref_base, ref_view)
     res_out = flag_gems._has_same_storage_numel(base, as_int64)
     assert ref_out is False
@@ -155,7 +157,7 @@ def test__has_same_storage_numel_empty_tensors():
     a = torch.randn(8, device=flag_gems.device)
     empty_view = a[8:]
     ref_a = utils.to_reference(a)
-    ref_ev = utils.to_reference(empty_view)
+    ref_ev = ref_a[8:]
     ref_out = torch.ops.aten._has_same_storage_numel(ref_a, ref_ev)
     res_out = flag_gems._has_same_storage_numel(a, empty_view)
     assert ref_out is True
@@ -168,7 +170,7 @@ def test__has_same_storage_numel_non_contiguous():
     a = torch.randn(8, 2, device=flag_gems.device)
     b = a.t()
     ref_a = utils.to_reference(a)
-    ref_b = utils.to_reference(b)
+    ref_b = ref_a.t()
     assert flag_gems._has_same_storage_numel(
         a, b
     ) == torch.ops.aten._has_same_storage_numel(ref_a, ref_b)
@@ -188,8 +190,7 @@ def test__has_same_storage_numel_chunk_views():
     base = torch.randn(10, device=flag_gems.device)
     c1, c2 = torch.chunk(base, 2)
     ref_base = utils.to_reference(base)
-    ref_c1 = utils.to_reference(c1)
-    ref_c2 = utils.to_reference(c2)
+    ref_c1, ref_c2 = torch.chunk(ref_base, 2)
     assert flag_gems._has_same_storage_numel(
         c1, c2
     ) == torch.ops.aten._has_same_storage_numel(ref_c1, ref_c2)
@@ -215,7 +216,7 @@ def test__has_same_storage_numel_dtype_sweep(dtype):
     assert res_out == ref_out
 
     view = a[1:4]
-    ref_view = utils.to_reference(view)
+    ref_view = ref_a[1:4]
     assert flag_gems._has_same_storage_numel(
         a, view
     ) == torch.ops.aten._has_same_storage_numel(ref_a, ref_view)
@@ -228,7 +229,7 @@ def test__has_same_storage_numel_dispatch_stability():
     a = torch.randn(8, device=flag_gems.device)
     b = a[2:5]
     ref_a = utils.to_reference(a)
-    ref_b = utils.to_reference(b)
+    ref_b = ref_a[2:5]
     expected = torch.ops.aten._has_same_storage_numel(ref_a, ref_b)
 
     results = [flag_gems._has_same_storage_numel(a, b) for _ in range(5)]
