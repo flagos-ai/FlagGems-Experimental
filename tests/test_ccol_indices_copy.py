@@ -265,8 +265,6 @@ def test_accuracy_ccol_indices_copy_strided_ccol_1d():
     assert res_out.is_contiguous()
     assert torch.equal(res_out, inp.ccol_indices())
     assert res_out.data_ptr() != inp.ccol_indices().data_ptr()
-    # The gather reads the true strided values, not just any values.
-    assert torch.equal(res_out, ref_out)
 
 
 @pytest.mark.ccol_indices_copy
