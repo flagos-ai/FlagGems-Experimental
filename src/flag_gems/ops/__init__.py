@@ -108,6 +108,7 @@ from flag_gems.ops._linalg_eigvals import _linalg_eigvals
 from flag_gems.ops._list_to_tensor import _list_to_tensor
 from flag_gems.ops._make_dep_token import _make_dep_token
 from flag_gems.ops._make_dual import _make_dual
+from flag_gems.ops._make_dual_copy import _make_dual_copy, _make_dual_copy_out
 from flag_gems.ops._make_per_channel_quantized_tensor import (
     _make_per_channel_quantized_tensor,
     _make_per_channel_quantized_tensor_out,
@@ -1159,6 +1160,8 @@ __all__ = [
     "_list_to_tensor",
     "_make_dep_token",
     "_make_dual",
+    "_make_dual_copy",
+    "_make_dual_copy_out",
     "_make_per_channel_quantized_tensor",
     "_make_per_channel_quantized_tensor_out",
     "_make_per_tensor_quantized_tensor",

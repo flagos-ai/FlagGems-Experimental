@@ -252,6 +252,8 @@ _FULL_CONFIG = (
     ("_log_softmax_backward_data.out", log_softmax_backward_out),
     ("_make_dep_token", _make_dep_token),
     ("_make_dual", _make_dual),
+    ("_make_dual_copy", _make_dual_copy),
+    ("_make_dual_copy.out", _make_dual_copy_out),
     (
         "_make_per_channel_quantized_tensor",
         _make_per_channel_quantized_tensor,

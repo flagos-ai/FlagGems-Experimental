@@ -71,3 +71,4 @@ _indices_copy_out: test__indices_copy
 _make_per_tensor_quantized_tensor_out: test__make_per_tensor_quantized_tensor
 dstack_out: test_dstack
 _make_per_channel_quantized_tensor_out: test__make_per_channel_quantized_tensor
+_make_dual_copy_out: test__make_dual_copy
