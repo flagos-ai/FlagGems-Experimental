@@ -164,20 +164,28 @@ def test_adjoint_conjugate_bit_input():
     assert cx.is_conj()
 
     res_out = flag_gems.adjoint(cx)
+    # The conjugate-bit flag must be compared like-for-like on device:
+    # to_reference(cx) strips the bit when copying to CPU, so the CPU
+    # reference re-derives is_conj() with different semantics than native
+    # ATen on the original device tensor. Compare flags against native ATen
+    # on the SAME device; keep the CPU copy for value comparison only (the
+    # conjugate bit never changes values).
+    ref_out_gpu = cx.adjoint()
     ref_out = utils.to_reference(cx).adjoint()
 
-    assert res_out.is_conj() == ref_out.is_conj()
+    assert res_out.is_conj() == ref_out_gpu.is_conj()
     assert res_out.data_ptr() == cx.data_ptr()
-    assert torch.equal(res_out.resolve_conj(), ref_out.resolve_conj())
+    utils.gems_assert_equal(res_out.resolve_conj(), ref_out.resolve_conj())
 
     # Double adjoint must match native ATen exactly: applying adjoint to the
     # unconjugated transpose view sets the lazy conjugate bit, so the logical
     # round-trip value is conj(x) (the bits accumulate), never a copy.
     res2 = flag_gems.adjoint(res_out)
+    ref2_gpu = ref_out_gpu.adjoint()
     ref2 = ref_out.adjoint()
-    assert res2.is_conj() == ref2.is_conj()
+    assert res2.is_conj() == ref2_gpu.is_conj()
     assert res2.data_ptr() == x.data_ptr()
-    assert torch.equal(res2.resolve_conj(), ref2.resolve_conj())
+    utils.gems_assert_equal(res2.resolve_conj(), ref2.resolve_conj())
 
 
 @pytest.mark.adjoint
