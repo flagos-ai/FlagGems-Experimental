@@ -160,7 +160,10 @@ def test_accuracy_detach_copy_autograd_contract():
     assert ref_out.data_ptr() != ref_inp.data_ptr()
     # Native: output is not a view of the input (view_assoc is unset).
     assert ref_out._base is None
-    utils.gems_assert_equal(res_out, ref_out)
+    # ref_out must stay on CUDA: the native autograd wrapper (grad_fn=
+    # <NotImplemented>) only exists for the CUDA native op, so ref never
+    # goes through to_reference. Compare device-explicitly instead of via
+    # gems_assert_equal, which requires a CPU ref under --ref=cpu.
     assert torch.equal(res_out.detach().cpu(), ref_out.detach().to("cpu"))
     # Values equal the input's current content.
     assert torch.equal(res_out.detach(), inp.detach())
