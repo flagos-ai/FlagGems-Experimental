@@ -95,7 +95,10 @@ def _meta(t):
     meta = {
         "shape": tuple(t.shape),
         "dtype": t.dtype,
-        "device_type": t.device.type,
+        # ``device_type`` is only comparable when both sides run on the same
+        # device; under ``--ref=cpu`` the reference legitimately lives on the
+        # host, so only the implementation side is pinned there.
+        "device_type": t.device.type if not cfg.TO_CPU else None,
         "qscheme": t.qscheme(),
         "axis": t.q_per_channel_axis(),
         "scales": scales.to("cpu"),
@@ -113,16 +116,15 @@ def _meta(t):
         int_repr = t.int_repr()
         meta["int_repr_dtype"] = int_repr.dtype
         meta["int_repr_shape"] = tuple(int_repr.shape)
-        meta["int_repr_device_type"] = int_repr.device.type
+        meta["int_repr_device_type"] = int_repr.device.type if not cfg.TO_CPU else None
         try:
             dequantized = t.dequantize()
         except RuntimeError as exc:
             # Both sides must reject the same metadata the same way.
             meta["dequantize"] = f"RuntimeError: {exc}"
         else:
-            meta["dequantize"] = (
-                f"{dequantized.dtype}/{tuple(dequantized.shape)}/"
-                f"{dequantized.device.type}"
+            meta["dequantize"] = f"{dequantized.dtype}/{tuple(dequantized.shape)}/" + (
+                dequantized.device.type if not cfg.TO_CPU else "cpu"
             )
     return meta
 
@@ -188,7 +190,11 @@ def test_accuracy__empty_per_channel_affine_quantized_metadata(shape, axis, dtyp
         list(shape), scales=scales, zero_points=zero_points, axis=axis, dtype=dtype
     )
 
-    assert res.device.type == ref.device.type
+    # The implementation always lands on our device; the reference follows
+    # ``--ref``, so only compare the two when both run on the same device.
+    assert res.device.type == flag_gems.device
+    if not cfg.TO_CPU:
+        assert res.device.type == ref.device.type
     _assert_same_meta(res, ref)
     assert res.qscheme() == torch.per_channel_affine
     assert res.q_per_channel_axis() == axis
@@ -385,6 +391,14 @@ def test_accuracy__empty_per_channel_affine_quantized_device_resolution():
     assert with_device.device.type == flag_gems.device
     assert with_device.q_per_channel_scales().device.type == flag_gems.device
     assert with_device.q_per_channel_zero_points().device.type == flag_gems.device
+    if not cfg.TO_CPU:
+        # Same rule for the reference: the device argument is authoritative
+        # even though the qparams were just moved to the host.
+        ref_with_device = _reference(
+            [4, 8], scales=scales, zero_points=zero_points, axis=1, dtype=torch.quint8
+        )
+        assert ref_with_device.device.type == device
+        assert ref_with_device.q_per_channel_scales().device.type == device
 
     # Qparams on the host with an explicit device still produce a device
     # tensor, with the qparams carried across.
@@ -403,7 +417,9 @@ def test_accuracy__empty_per_channel_affine_quantized_device_resolution():
     _assert_same_meta(moved, with_device)
 
     # No device argument: the factory falls back to the default device rather
-    # than following the qparams, which is what the reference does too.
+    # than following the qparams, which is what the reference does too. Both
+    # sides agree regardless of the reference's own device, so this comparison
+    # is device-mode independent.
     default_dev = flag_gems._empty_per_channel_affine_quantized(
         [4, 8], scales=scales, zero_points=zero_points, axis=1, dtype=torch.quint8
     )
@@ -414,8 +430,9 @@ def test_accuracy__empty_per_channel_affine_quantized_device_resolution():
         axis=1,
         dtype=torch.quint8,
     )
-    assert default_dev.device.type == ref_default_dev.device.type
     assert default_dev.device.type == "cpu"
+    if not cfg.TO_CPU:
+        assert default_dev.device.type == ref_default_dev.device.type
 
 
 @pytest.mark._empty_per_channel_affine_quantized
