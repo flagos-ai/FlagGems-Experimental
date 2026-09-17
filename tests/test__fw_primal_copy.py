@@ -443,19 +443,24 @@ def test_accuracy__fw_primal_copy_out_from_non_contiguous_input():
 @pytest.mark._fw_primal_copy_out
 def test_accuracy__fw_primal_copy_out_non_contiguous_buffer():
     # An out buffer with its own strides must receive the values in ITS layout
-    # (the strided staging path scatters back), and the same buffer is
-    # returned.
+    # (the strided staging path scatters back), keep that layout, and be
+    # returned as the same object.
     inp = torch.randn(4, 6, device=flag_gems.device)
     out = torch.zeros(6, 4, device=flag_gems.device).t()
     assert not out.is_contiguous()
+    original_stride = out.stride()
     ref_inp = utils.to_reference(inp)
 
     ref_out = _native_copy_out(ref_inp, 0, (4, 6))
     res = flag_gems._fw_primal_copy_out(inp, 0, out=out)
 
     assert res is out
-    assert out.stride() == (1, 6)
+    # The buffer keeps its own (strided) layout; the values are written into
+    # it logically, not into a contiguous reinterpretation of its memory.
+    assert out.stride() == original_stride
+    assert not out.is_contiguous()
     utils.gems_assert_equal(out, ref_out)
+    utils.gems_assert_equal(out, inp)
 
 
 @pytest.mark._fw_primal_copy_out
