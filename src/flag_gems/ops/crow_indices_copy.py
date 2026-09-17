@@ -86,6 +86,14 @@ def crow_indices_copy(self: torch.Tensor) -> torch.Tensor:
             f"but got {layout_name}"
         )
     src = self.crow_indices()
+    # The row-index buffer of a sparse compressed tensor can be a
+    # non-contiguous view (the sparse constructor keeps whatever strided
+    # view it is handed). The flat copy kernel addresses elements linearly,
+    # so the buffer is materialized first; native gathers the same logical
+    # elements and also returns a contiguous result. No-op when the buffer
+    # is already contiguous (the common case).
+    if not src.is_contiguous():
+        src = src.contiguous()
     out = torch.empty_like(src)
     n = src.numel()
     if n == 0:
