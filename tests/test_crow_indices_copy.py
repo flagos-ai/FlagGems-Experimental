@@ -68,7 +68,12 @@ def _make_batched_csr(shape, nnz, seed=0):
     crow[..., 1:] = counts.cumsum(0)
     ccol = torch.randint(0, shape[-1], (nnz,), generator=gen).to(torch.int64)
     values = torch.randn(nnz, generator=gen)
-    return torch.sparse_csr_tensor(crow, ccol, values, shape)
+    return torch.sparse_csr_tensor(
+        crow.to(flag_gems.device),
+        ccol.to(flag_gems.device),
+        values.to(flag_gems.device),
+        shape,
+    )
 
 
 def _gen_values(nnz, dtype):
@@ -93,10 +98,15 @@ def _gen_values(nnz, dtype):
 def _make_bsr(shape, block=2, seed=0):
     """Build a BSR tensor with two fully-covered 2x2 blocks."""
     gen = torch.Generator().manual_seed(seed)
-    crow = torch.tensor([0, 1, 2], dtype=torch.int64, device=flag_gems.device)
-    ccol = torch.tensor([0, 1], dtype=torch.int64, device=flag_gems.device)
-    values = torch.randn(2, block, block, generator=gen, device=flag_gems.device)
-    return torch.sparse_bsr_tensor(crow, ccol, values, shape)
+    crow = torch.tensor([0, 1, 2], dtype=torch.int64)
+    ccol = torch.tensor([0, 1], dtype=torch.int64)
+    values = torch.randn(2, block, block, generator=gen)
+    return torch.sparse_bsr_tensor(
+        crow.to(flag_gems.device),
+        ccol.to(flag_gems.device),
+        values.to(flag_gems.device),
+        shape,
+    )
 
 
 @pytest.mark.crow_indices_copy
@@ -158,7 +168,7 @@ def test_accuracy_crow_indices_copy_fresh_copy_contract():
     # return fresh memory, so writing through the result must not reach the
     # sparse tensor, and re-reading the source must give the original values.
     csr = _make_csr((3, 4), nnz=2, seed=3)
-    original = csr.crow_indices().clone()
+    original = csr.crow_indices().cpu().clone()
     assert original.numel() > 0
 
     res_out = flag_gems.crow_indices_copy(csr)
@@ -257,16 +267,15 @@ def test_accuracy_crow_indices_copy_unsupported_layouts():
     # (CSC/BSC) and strided inputs must reproduce the native ATen rejection
     # message verbatim; the strided case additionally proves the override does
     # not re-enter itself (a naive delegation would recurse).
-    gen = torch.Generator().manual_seed(9)
     crow = torch.tensor([0, 2, 4], dtype=torch.int64, device=flag_gems.device)
     ccol = torch.tensor([0, 1, 0, 1], dtype=torch.int64, device=flag_gems.device)
-    values = torch.randn(4, generator=gen, device=flag_gems.device)
+    values = torch.randn(4, device=flag_gems.device)
 
     csc = torch.sparse_csc_tensor(ccol, crow, values, (3, 3))
     bsc = torch.sparse_bsc_tensor(
         ccol,
         crow,
-        torch.randn(4, 2, 2, generator=gen, device=flag_gems.device),
+        torch.randn(4, 2, 2, device=flag_gems.device),
         (4, 4),
     )
     dense = torch.randn(2, 3, device=flag_gems.device)
@@ -279,7 +288,7 @@ def test_accuracy_crow_indices_copy_unsupported_layouts():
     # (no SparseCUDA kernel for this op) rather than the layout RuntimeError.
     coo = torch.sparse_coo_tensor(
         torch.tensor([[0, 1], [1, 0]], dtype=torch.int64, device=flag_gems.device),
-        torch.randn(2, generator=gen, device=flag_gems.device),
+        torch.randn(2, device=flag_gems.device),
         (2, 3),
     )
     with pytest.raises((NotImplementedError, RuntimeError)):
@@ -292,14 +301,13 @@ def test_accuracy_crow_indices_copy_contiguous_metadata():
     # source buffer. A non-contiguous source buffer (possible when a strided
     # row-index view is handed to the sparse constructor) still yields a
     # contiguous 1-D result on both sides.
-    gen = torch.Generator().manual_seed(13)
     big = torch.arange(0, 8, dtype=torch.int64, device=flag_gems.device)
     crow_nc = big[::2]
     assert not crow_nc.is_contiguous()
     csr = torch.sparse_csr_tensor(
         crow_nc,
         torch.tensor([1, 2], dtype=torch.int64, device=flag_gems.device),
-        torch.randn(2, generator=gen, device=flag_gems.device),
+        torch.randn(2, device=flag_gems.device),
         (3, 4),
     )
 
