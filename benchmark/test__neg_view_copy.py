@@ -16,10 +16,26 @@
 
 import pytest
 import torch
+from _pytest.mark.structures import Mark, MarkDecorator
 
 import flag_gems
 
 from . import base, consts, utils
+
+# ``_neg_view_copy`` starts with an underscore, and ``pytest.mark`` refuses to
+# generate a marker via attribute access for such names. Register the markers
+# directly on the MarkGenerator so ``@pytest.mark._neg_view_copy`` and
+# ``@pytest.mark._neg_view_copy_out`` both work.
+setattr(
+    pytest.mark,
+    "_neg_view_copy",
+    MarkDecorator(Mark("_neg_view_copy", (), {}, _ispytest=True), _ispytest=True),
+)
+setattr(
+    pytest.mark,
+    "_neg_view_copy_out",
+    MarkDecorator(Mark("_neg_view_copy_out", (), {}, _ispytest=True), _ispytest=True),
+)
 
 # Shapes chosen so the contiguous path's tuning table is fully covered:
 # small (< 2**20 elements, default body), 2-byte at >= 2**20 (EVICT body),
