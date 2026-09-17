@@ -70,6 +70,33 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _values_copy
+  description: 'Returns a freshly allocated copy of the values of a sparse COO tensor
+    (shape `nnz` plus the dense dimensions, hybrid COO included) as a dense strided
+    tensor, or a plain copy of the input when the input is strided.
+
+    '
+  for:
+  - _values_copy
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
+- id: _values_copy_out
+  description: A variant of `_values_copy()` that writes the result into the `out`
+    tensor and returns it.
+  for:
+  - _values_copy.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _weight_norm
   description: 'Reparameterizes a module''s weight tensor by decoupling its magnitude
     (g)
