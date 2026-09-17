@@ -250,7 +250,7 @@ def test_accuracy__make_dual_copy_mixed_dtypes():
             with dual_level():
                 ref_out = _ref_make_dual_copy(primal, tangent, 0)
                 res_out = flag_gems._make_dual_copy(primal, tangent, 0)
-            utils.gems_assert_equal(res_out, ref_out)
+            utils.gems_assert_equal(res_out, utils.to_reference(ref_out))
             utils.gems_assert_equal(res_out, ref_primal)
             assert res_out.dtype == primal_dtype
 
@@ -473,7 +473,7 @@ def test_accuracy__make_dual_copy_serves_regular_tensors_under_inference_mode():
         with dual_level():
             ref_out = _ref_make_dual_copy(regular_primal, regular_tangent, 0)
             res_out = flag_gems._make_dual_copy(regular_primal, regular_tangent, 0)
-        utils.gems_assert_equal(res_out, ref_out)
+        utils.gems_assert_equal(res_out, utils.to_reference(ref_out))
         utils.gems_assert_equal(res_out, ref_primal)
         assert res_out.data_ptr() != regular_primal.data_ptr()
 
@@ -529,7 +529,7 @@ def test_accuracy__make_dual_copy_registration_wiring():
         assert res_pub.data_ptr() != primal.data_ptr()
         assert res_mod.data_ptr() != primal.data_ptr()
         utils.gems_assert_equal(res_pub, ref_primal)
-        utils.gems_assert_equal(res_pub, res_mod)
+        utils.gems_assert_equal(res_pub, utils.to_reference(res_mod))
 
 
 @pytest.mark._make_dual_copy_out
@@ -551,7 +551,7 @@ def test_accuracy__make_dual_copy_out():
         assert ret is out
         assert ref_ret is ref_buffer
         utils.gems_assert_equal(out, ref_primal)
-        utils.gems_assert_equal(out, ref_buffer)
+        utils.gems_assert_equal(out, utils.to_reference(ref_buffer))
 
 
 @pytest.mark._make_dual_copy_out
