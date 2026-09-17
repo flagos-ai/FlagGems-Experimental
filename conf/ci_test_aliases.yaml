@@ -30,6 +30,7 @@ alias_copy_out: test_alias_copy
 slow_conv_dilated3d_out: test_slow_conv_dilated3d
 as_strided_copy_out: test_as_strided_copy
 _values_copy_out: test__values_copy
+_fw_primal_copy_out: test__fw_primal_copy
 baddbmm_out: test_baddbmm
 ccol_indices_copy_out: test_ccol_indices_copy
 nanmedian_out: test_nanmedian
