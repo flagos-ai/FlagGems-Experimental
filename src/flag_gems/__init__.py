@@ -193,6 +193,12 @@ _FULL_CONFIG = (
         _native_batch_norm_legit_no_training,
     ),
     ("_nested_sum_backward", _nested_sum_backward),
+    (
+        "_nested_tensor_strides",
+        _nested_tensor_strides,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
     ("_nested_view_from_buffer_copy", _nested_view_from_buffer_copy),
     ("_pdist_backward", _pdist_backward),
     ("_pdist_forward", _pdist_forward),
