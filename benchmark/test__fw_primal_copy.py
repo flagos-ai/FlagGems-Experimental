@@ -69,9 +69,14 @@ class FwPrimalCopyBenchmark(base.Benchmark):
     def get_input_iter(self, cur_dtype):
         # Yield a 2-tuple ``(tensor, level)``: the harness unpacks each yielded
         # item as an argument list, so a bare tensor would be iterated into
-        # scalars.
+        # scalars. The input is materialized as an inference tensor inside
+        # ``inference_mode``: the native composite resolves only for inference
+        # inputs (measured), so a plain tensor would make the reference side
+        # of the comparison fail rather than measure anything.
         for shape in self.shapes:
             inp = utils.generate_tensor_input(shape, cur_dtype, self.device)
+            with torch.inference_mode():
+                inp = inp.clone()
             yield inp, 0
 
 
@@ -81,9 +86,12 @@ class FwPrimalCopyOutBenchmark(FwPrimalCopyBenchmark):
     def get_input_iter(self, cur_dtype):
         for shape in self.shapes:
             inp = utils.generate_tensor_input(shape, cur_dtype, self.device)
+            with torch.inference_mode():
+                inp = inp.clone()
+                out = torch.empty_like(inp)
             # A dict in the yielded tuple becomes keyword arguments, so ``out``
             # is passed as the keyword the schema declares.
-            yield inp, 0, {"out": torch.empty_like(inp)}
+            yield inp, 0, {"out": out}
 
 
 @pytest.mark._fw_primal_copy
