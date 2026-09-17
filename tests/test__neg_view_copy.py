@@ -128,6 +128,7 @@ def test_accuracy_neg_view_copy_contiguous_tuning_write_out(dtype):
     # out buffer), so values are compared, not devices.
     shape = TUNING_SHAPE_LARGE
     inp = _gen_input(shape, dtype)
+    ref_inp = utils.to_reference(inp)
     out = torch.empty(shape, dtype=dtype, device=flag_gems.device)
     ref_out = torch.empty(shape, dtype=dtype, device=flag_gems.device)
 
@@ -135,8 +136,10 @@ def test_accuracy_neg_view_copy_contiguous_tuning_write_out(dtype):
     ret = flag_gems._neg_view_copy_out(inp, out=out)
 
     assert ret is out
-    utils.gems_assert_equal(ret, ref_out)
-    assert torch.equal(ret, ref_out)
+    # The out buffer is device-bound, so the comparison is device-explicit
+    # (gems_assert_equal requires a CPU reference under --ref=cpu).
+    assert torch.equal(ret.detach().cpu(), ref_out.detach().cpu())
+    assert torch.equal(ret.detach().cpu(), (-ref_inp).detach().cpu())
     assert torch.equal(out, -inp)
     assert ret.stride() == ref_out.stride()
 
@@ -308,6 +311,7 @@ def test_accuracy_neg_view_copy_dispatch_stability():
 @pytest.mark._neg_view_copy_out
 def test_accuracy_neg_view_copy_out_writes_and_returns_out():
     inp = torch.randn(4, 6, device=flag_gems.device)
+    ref_inp = utils.to_reference(inp)
     # Sentinel fill: the values must be overwritten, not left in place.
     out = torch.empty(4, 6, device=flag_gems.device).fill_(-777.0)
     ref_out = torch.empty(4, 6, device=flag_gems.device).fill_(-777.0)
@@ -319,8 +323,8 @@ def test_accuracy_neg_view_copy_out_writes_and_returns_out():
     assert ref_ret is ref_out
     assert ret is out
     assert ret.data_ptr() == out.data_ptr()
-    utils.gems_assert_equal(ret, ref_out)
-    assert torch.equal(ret, ref_out)
+    assert torch.equal(ret.detach().cpu(), ref_out.detach().cpu())
+    assert torch.equal(ret.detach().cpu(), (-ref_inp).detach().cpu())
     assert torch.equal(ret, -inp)
 
 
@@ -330,7 +334,8 @@ def test_accuracy_neg_view_copy_out_non_contiguous_and_resize():
     # out buffer: it resizes to the input shape and writes the buffer's own
     # layout in place. The returned object is the out buffer itself.
     inp = torch.randn(3, 5, device=flag_gems.device)
-    # Column slice of an 8x5 base: shape (3, 5) with stride (5, 1) -> not
+    ref_inp = utils.to_reference(inp)
+    # Column slice of an 8x5 base: a (3, 5) view with stride (5, 1) -> not
     # contiguous, so the buffer is written through its own layout.
     base = torch.randn(8, 5, device=flag_gems.device)
     marker = torch.zeros(8, 5, device=flag_gems.device)
@@ -345,8 +350,8 @@ def test_accuracy_neg_view_copy_out_non_contiguous_and_resize():
     ret = flag_gems._neg_view_copy_out(inp, out=out)
 
     assert ret is out
-    utils.gems_assert_equal(ret, ref_out)
-    assert torch.equal(ret, ref_out)
+    assert torch.equal(ret.detach().cpu(), ref_out.detach().cpu())
+    assert torch.equal(ret.detach().cpu(), (-ref_inp).detach().cpu())
     assert torch.equal(out, -inp)
     # The write stayed inside the view: every element outside it is untouched.
     assert torch.equal(base[marker == 0], ref_base[marker == 0])
@@ -359,7 +364,7 @@ def test_accuracy_neg_view_copy_out_non_contiguous_and_resize():
     ret_small = flag_gems._neg_view_copy_out(inp, out=small)
     assert ret_small is small
     assert tuple(small.shape) == tuple(ref_small.shape) == (3, 5)
-    assert torch.equal(ret_small, ref_small)
+    assert torch.equal(ret_small.detach().cpu(), ref_small.detach().cpu())
     assert torch.equal(small, -inp)
 
 
@@ -384,6 +389,7 @@ def test_accuracy_neg_view_copy_out_from_non_contiguous_input():
     # buffer directly.
     inp = torch.randn(5, 4, device=flag_gems.device).transpose(0, 1)
     assert not inp.is_contiguous()
+    ref_inp = utils.to_reference(inp)
     out = torch.empty(4, 5, device=flag_gems.device)
     ref_out = torch.empty(4, 5, device=flag_gems.device)
 
@@ -391,14 +397,15 @@ def test_accuracy_neg_view_copy_out_from_non_contiguous_input():
     ret = flag_gems._neg_view_copy_out(inp, out=out)
 
     assert ret is out
-    utils.gems_assert_equal(ret, ref_out)
-    assert torch.equal(ret, ref_out)
+    assert torch.equal(ret.detach().cpu(), ref_out.detach().cpu())
+    assert torch.equal(ret.detach().cpu(), (-ref_inp).detach().cpu())
     assert torch.equal(out, -inp)
 
 
 @pytest.mark._neg_view_copy_out
 def test_accuracy_neg_view_copy_out_empty():
     inp = torch.empty(0, device=flag_gems.device)
+    ref_inp = utils.to_reference(inp)
     out = torch.empty(0, device=flag_gems.device)
     ref_out = torch.empty(0, device=flag_gems.device)
 
@@ -407,7 +414,8 @@ def test_accuracy_neg_view_copy_out_empty():
 
     assert ret is out
     assert tuple(out.shape) == (0,)
-    utils.gems_assert_equal(ret, ref_out)
+    assert torch.equal(ret.detach().cpu(), ref_out.detach().cpu())
+    assert torch.equal(ret.detach().cpu(), (-ref_inp).detach().cpu())
 
 
 @pytest.mark._neg_view_copy
