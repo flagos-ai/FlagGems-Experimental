@@ -88,6 +88,7 @@ from flag_gems.ops._has_compatible_shallow_copy_type import (
     _has_compatible_shallow_copy_type,
 )
 from flag_gems.ops._has_same_storage_numel import _has_same_storage_numel
+from flag_gems.ops._indices import _indices
 from flag_gems.ops._is_all_true import _is_all_true
 from flag_gems.ops._jagged_to_padded_dense_forward import (
     _jagged_to_padded_dense_forward,
@@ -1046,6 +1047,7 @@ __all__ = [
     "_has_compatible_shallow_copy_type",
     "_has_same_storage_numel",
     "_index_put_impl_",
+    "_indices",
     "_is_all_true",
     "_jagged_to_padded_dense_forward",
     "_linalg_eigvals",

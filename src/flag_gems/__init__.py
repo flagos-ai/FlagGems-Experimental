@@ -170,6 +170,7 @@ _FULL_CONFIG = (
     ),
     ("_has_same_storage_numel", _has_same_storage_numel),
     ("_index_put_impl_", _index_put_impl_),
+    ("_indices", _indices, None, (AUTOGRAD_DISPATCH_KEY,)),
     ("_is_all_true", _is_all_true),
     ("_jagged_to_padded_dense_forward", _jagged_to_padded_dense_forward),
     ("_linalg_eigvals", _linalg_eigvals),
