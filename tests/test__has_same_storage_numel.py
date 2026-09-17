@@ -21,7 +21,6 @@ from _pytest.mark.structures import Mark, MarkDecorator
 import flag_gems
 
 from . import accuracy_utils as utils
-from .conftest import QUICK_MODE
 
 # ``_has_same_storage_numel`` starts with an underscore, and ``pytest.mark``
 # refuses to generate a marker via attribute access for such names. Register
