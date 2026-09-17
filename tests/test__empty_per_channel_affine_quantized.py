@@ -40,7 +40,8 @@ device = flag_gems.device
 
 # The factory is a quantized allocator: the data buffer is uninitialized, so
 # the contract under test is the quantizer metadata (qscheme, axis, the scales
-# and zero_points storage) and the tensor geometry, never element values.
+# and zero_points storage, plus the errors the metadata accessors raise) and
+# the tensor geometry, never element values.
 #
 # ``quint4x2``/``quint2x4`` allocate fine but this build has no CUDA
 # ``int_repr`` kernel for them (``int_repr_quantized_cuda`` is only defined
@@ -49,12 +50,27 @@ QTYPES = [torch.quint8, torch.qint8, torch.qint32, torch.quint4x2, torch.quint2x
 PACKED_QTYPES = (torch.quint4x2, torch.quint2x4)
 
 QP_LEN = 8
-QP_SHAPES = [(4, 8), (2, 3, 4), (8,), (1, 8)]
+
+# (shape, axis) pairs drawn from the valid axis range of each rank: a positive
+# axis, the trailing axis and the negative spelling of both. Rank 1 has only
+# axis 0 (``-1`` is the same dimension), rank 2 covers 0/1/-1/-2, rank 3 adds
+# a middle axis.
+SWEEP_CASES = [
+    ((4, 8), 0),
+    ((4, 8), 1),
+    ((4, 8), -1),
+    ((4, 8), -2),
+    ((2, 3, 4), 0),
+    ((2, 3, 4), 1),
+    ((2, 3, 4), -1),
+    ((8,), 0),
+    ((1, 8), 1),
+]
 if cfg.QUICK_MODE:
-    QP_SHAPES = [(4, 8)]
+    SWEEP_CASES = [((4, 8), 1), ((8,), 0)]
 
 
-def _make_qparams(length, dtype=torch.quint8, on_cpu=False):
+def _make_qparams(length, on_cpu=False):
     # Deterministic, all-positive scales with a matching-length integral
     # zero_point vector: the ``per_channel_affine`` (integral zero points)
     # flavour, distinct from ``per_channel_affine_float_qparams``.
@@ -65,7 +81,15 @@ def _make_qparams(length, dtype=torch.quint8, on_cpu=False):
 
 
 def _meta(t):
-    """Harvest every output property that an uninitialized factory still fixes."""
+    """Harvest every output property that an uninitialized factory still fixes.
+
+    The metadata accessors validate lazily: ``q_per_channel_scales()``,
+    ``q_per_channel_zero_points()`` and ``q_per_channel_axis()`` answer for any
+    stored axis/length, while ``dequantize()`` is the accessor that rejects an
+    out-of-range axis or a length that does not match the selected dimension.
+    That rejection is part of the contract, so it is recorded rather than
+    allowed to abort the comparison.
+    """
     scales = t.q_per_channel_scales()
     zero_points = t.q_per_channel_zero_points()
     meta = {
@@ -86,12 +110,20 @@ def _meta(t):
         "requires_grad": t.requires_grad,
     }
     if t.dtype not in PACKED_QTYPES:
-        meta["int_repr_dtype"] = t.int_repr().dtype
-        meta["int_repr_shape"] = tuple(t.int_repr().shape)
-        meta["int_repr_device_type"] = t.int_repr().device.type
-        dequantized = t.dequantize()
-        meta["dequantized_dtype"] = dequantized.dtype
-        meta["dequantized_shape"] = tuple(dequantized.shape)
+        int_repr = t.int_repr()
+        meta["int_repr_dtype"] = int_repr.dtype
+        meta["int_repr_shape"] = tuple(int_repr.shape)
+        meta["int_repr_device_type"] = int_repr.device.type
+        try:
+            dequantized = t.dequantize()
+        except RuntimeError as exc:
+            # Both sides must reject the same metadata the same way.
+            meta["dequantize"] = f"RuntimeError: {exc}"
+        else:
+            meta["dequantize"] = (
+                f"{dequantized.dtype}/{tuple(dequantized.shape)}/"
+                f"{dequantized.device.type}"
+            )
     return meta
 
 
@@ -143,13 +175,12 @@ def _reference(size, *, scales, zero_points, axis, dtype, memory_format=None):
 
 @pytest.mark._empty_per_channel_affine_quantized
 @pytest.mark.parametrize("dtype", QTYPES)
-@pytest.mark.parametrize("shape", QP_SHAPES)
-@pytest.mark.parametrize("axis", [0, 1, -1])
-def test_accuracy__empty_per_channel_affine_quantized_metadata(shape, dtype, axis):
-    # Main sweep: dtype class x rank x axis (positive, trailing, negative).
-    # The quantizer metadata must match the reference exactly; element values
-    # are deliberately not compared (uninitialized data on both sides).
-    scales, zero_points = _make_qparams(shape[axis % len(shape)])
+@pytest.mark.parametrize("shape,axis", SWEEP_CASES)
+def test_accuracy__empty_per_channel_affine_quantized_metadata(shape, axis, dtype):
+    # Main sweep: dtype class x rank x valid axis. The quantizer metadata must
+    # match the reference exactly; element values are deliberately not
+    # compared (uninitialized data on both sides).
+    scales, zero_points = _make_qparams(shape[axis])
     res = _call(
         list(shape), scales=scales, zero_points=zero_points, axis=axis, dtype=dtype
     )
@@ -166,9 +197,10 @@ def test_accuracy__empty_per_channel_affine_quantized_metadata(shape, dtype, axi
 @pytest.mark._empty_per_channel_affine_quantized
 @pytest.mark.parametrize("axis", [0, 1, -1, -2, 2, 5, -3])
 def test_accuracy__empty_per_channel_affine_quantized_axis_values(axis):
-    # Native does not validate ``axis``: any int is stored verbatim and read
-    # back verbatim, including values outside ``[-ndim, ndim)``. Pinned so the
-    # delegated path keeps the same non-validating contract.
+    # The factory does not validate ``axis``: any int is stored verbatim and
+    # read back verbatim, including values outside ``[-ndim, ndim)``. The
+    # consumers reject it later (``dequantize`` raises), and that lazy
+    # rejection is compared here alongside the stored value.
     scales, zero_points = _make_qparams(QP_LEN)
     res = _call(
         [4, 8], scales=scales, zero_points=zero_points, axis=axis, dtype=torch.quint8
@@ -185,8 +217,9 @@ def test_accuracy__empty_per_channel_affine_quantized_axis_values(axis):
 @pytest.mark._empty_per_channel_affine_quantized
 @pytest.mark.parametrize("length", [0, 1, 2, 3, QP_LEN])
 def test_accuracy__empty_per_channel_affine_quantized_qparam_length(length):
-    # Native does not cross-check the qparam length against the size of the
-    # selected dimension either: a mismatched length is stored as given.
+    # A length that does not match the selected dimension is stored as given
+    # (the factory does not cross-check it); ``dequantize`` is the accessor
+    # that rejects the mismatch.
     scales, zero_points = _make_qparams(length)
     res = _call(
         [4, 8], scales=scales, zero_points=zero_points, axis=1, dtype=torch.quint8
@@ -214,9 +247,9 @@ def test_accuracy__empty_per_channel_affine_quantized_qparam_length(length):
 def test_accuracy__empty_per_channel_affine_quantized_qparam_dtypes(
     scales_dtype, zp_dtype, expected_scheme
 ):
-    # The scale/zero_point dtype combination is what decides the stored
-    # qscheme and the dtype the qparams are coerced to. These rules are
-    # native (the implementation delegates), so they must survive verbatim.
+    # The scale/zero_point dtype combination decides the stored qscheme and
+    # the dtype the qparams are coerced to. These rules are native (the
+    # implementation delegates), so they must survive verbatim.
     scales = (torch.arange(QP_LEN, dtype=torch.float32, device=device) + 1.0).to(
         scales_dtype
     )
@@ -235,16 +268,26 @@ def test_accuracy__empty_per_channel_affine_quantized_qparam_dtypes(
 
 
 @pytest.mark._empty_per_channel_affine_quantized
-@pytest.mark.parametrize("shape", [(0,), (0, 8), (4, 0), (1,), (1, 1)])
-def test_accuracy__empty_per_channel_affine_quantized_empty_and_small(shape):
+@pytest.mark.parametrize(
+    "shape,axis", [((0,), 0), ((0, 8), 1), ((4, 0), 1), ((1,), 0), ((1, 1), 1)]
+)
+def test_accuracy__empty_per_channel_affine_quantized_empty_and_small(shape, axis):
     # Zero-sized outputs carry no backing page (nbytes == 0, data_ptr == 0);
     # size-1 outputs still allocate. Both must keep the metadata contract.
-    scales, zero_points = _make_qparams(QP_LEN)
+    scales, zero_points = _make_qparams(shape[axis])
     res = _call(
-        shape, scales=scales, zero_points=zero_points, axis=0, dtype=torch.quint8
+        list(shape),
+        scales=scales,
+        zero_points=zero_points,
+        axis=axis,
+        dtype=torch.quint8,
     )
     ref = _reference(
-        shape, scales=scales, zero_points=zero_points, axis=0, dtype=torch.quint8
+        list(shape),
+        scales=scales,
+        zero_points=zero_points,
+        axis=axis,
+        dtype=torch.quint8,
     )
 
     if res.numel() == 0:
@@ -255,6 +298,9 @@ def test_accuracy__empty_per_channel_affine_quantized_empty_and_small(shape):
 
 @pytest.mark._empty_per_channel_affine_quantized
 def test_accuracy__empty_per_channel_affine_quantized_zero_dim():
+    # A 0-dim request is accepted and yields a 1-element tensor; axis 0 is
+    # nevertheless out of range for the resulting rank, and both sides reject
+    # it lazily at dequantize time.
     scales, zero_points = _make_qparams(QP_LEN)
     res = _call([], scales=scales, zero_points=zero_points, axis=0, dtype=torch.quint8)
     ref = _reference(
@@ -312,13 +358,26 @@ def test_accuracy__empty_per_channel_affine_quantized_memory_format():
                 dtype=torch.quint8,
                 memory_format=unsupported,
             )
+        ref_scales = utils.to_reference(scales)
+        ref_zero_points = utils.to_reference(zero_points)
+        expected_dev = "cpu" if cfg.TO_CPU else device
+        with pytest.raises(RuntimeError):
+            torch.ops.aten._empty_per_channel_affine_quantized(
+                [4, 8],
+                scales=ref_scales,
+                zero_points=ref_zero_points,
+                axis=1,
+                dtype=torch.quint8,
+                device=expected_dev,
+                memory_format=unsupported,
+            )
 
 
 @pytest.mark._empty_per_channel_affine_quantized
 def test_accuracy__empty_per_channel_affine_quantized_device_resolution():
     # Native takes the output device from the ``device`` argument only -- the
     # qparam tensors do not select it -- and then moves the qparams onto that
-    # device. Both halves of that rule are pinned here.
+    # device.
     scales, zero_points = _make_qparams(QP_LEN)
     with_device = _call(
         [4, 8], scales=scales, zero_points=zero_points, axis=1, dtype=torch.quint8
@@ -367,7 +426,7 @@ def test_accuracy__empty_per_channel_affine_quantized_unsupported_dtype():
     # re-entering itself (which would surface as a RecursionError).
     scales, zero_points = _make_qparams(QP_LEN)
     for dtype in (torch.float32, torch.float16, torch.int32, torch.bool, None):
-        with pytest.raises(NotImplementedError) as gems_exc:
+        with pytest.raises(NotImplementedError):
             flag_gems._empty_per_channel_affine_quantized(
                 [4, 8],
                 scales=scales,
@@ -376,7 +435,6 @@ def test_accuracy__empty_per_channel_affine_quantized_unsupported_dtype():
                 dtype=dtype,
                 device=flag_gems.device,
             )
-        assert "RecursionError" not in type(gems_exc.value).__name__
 
         ref_scales = utils.to_reference(scales)
         ref_zero_points = utils.to_reference(zero_points)
@@ -394,72 +452,82 @@ def test_accuracy__empty_per_channel_affine_quantized_unsupported_dtype():
 
 @pytest.mark._empty_per_channel_affine_quantized
 def test_accuracy__empty_per_channel_affine_quantized_uninitialized_storage():
-    # The native factory returns *uninitialized* storage. This implementation
-    # must therefore not write the buffer either: a zero-filling kernel would
-    # silently change what the tensor holds, since the reference never
-    # promises zeroed data. Compare raw storage bytes against a plain
-    # allocation taken from the same allocator state: equality means no extra
-    # device write happened. (When the allocator hands out fresh pages both
-    # sides read as zeros, so the assertion holds in either allocator state.)
-    scales, zero_points = _make_qparams(QP_LEN)
-    size = [64]
-    nbytes = 64
-    filler = 0xAB
+    # The native factory returns *uninitialized* storage: it hands back
+    # whatever the caching allocator recycles and never writes the data
+    # buffer. This implementation must not write it either, because
+    # zero-filling would silently change what the tensor holds (the reference
+    # never promises zeroed data). The discriminator is the set of device
+    # kernels launched by the allocation itself: the qparams are built
+    # outside the profiled region, so what remains is the allocation path.
+    # Both sides launch exactly the same kernels -- measured on H20 as the
+    # single qparam copy kernel -- while a zero-filling variant adds its own
+    # kernel on top (validated as a negative control: it reports two extra
+    # names, so this assertion would catch a reintroduced zero-fill).
+    #
+    # (Raw byte comparison after recycling a dirty block was rejected as the
+    # discriminator: it is not deterministic -- on the CPU allocator in
+    # particular -- and its negative control did not fire.)
+    if cfg.TO_CPU:
+        pytest.skip("kernel counting requires the device backend")
 
-    def _recycle():
-        junk = torch.full([nbytes], filler, dtype=torch.uint8, device=flag_gems.device)
-        assert int(junk[0].item()) == filler
-        del junk
+    from torch.profiler import ProfilerActivity, profile
 
-    def _raw(t):
-        storage = t.untyped_storage()
-        total = storage.nbytes()
-        assert total > 0
-        view = torch.empty(0, dtype=torch.uint8, device=t.device).set_(storage)
-        return torch.as_strided(view, (total,), (1,), 0).clone()
+    scales, zero_points = _make_qparams(512)
 
-    _recycle()
-    res = _call(
-        size, scales=scales, zero_points=zero_points, axis=0, dtype=torch.quint8
+    # Profiler bookkeeping entries are not device kernels of the operation.
+    bookkeeping = {
+        "Activity Buffer Request",
+        "cudaLaunchKernel",
+        "cudaDeviceSynchronize",
+        "cudaStreamSynchronize",
+        "cudaEventRecord",
+        "cudaEventQuery",
+        "cudaMemsetAsync",
+    }
+
+    def _launched_kernels(fn, iterations=5):
+        for _ in range(5):
+            fn()
+        torch.cuda.synchronize()
+        with profile(activities=[ProfilerActivity.CUDA]) as prof:
+            for _ in range(iterations):
+                fn()
+            torch.cuda.synchronize()
+        return sorted(
+            event.key
+            for event in prof.key_averages()
+            if event.count and event.key not in bookkeeping
+        )
+
+    res_kernels = _launched_kernels(
+        lambda: _call(
+            [512], scales=scales, zero_points=zero_points, axis=0, dtype=torch.quint8
+        )
     )
-    res_bytes = _raw(res)
-    del res
-
-    _recycle()
-    control = torch.empty([nbytes], dtype=torch.uint8, device=flag_gems.device)
-    control_bytes = _raw(control)
-    del control
-
-    _recycle()
-    ref = _reference(
-        size, scales=scales, zero_points=zero_points, axis=0, dtype=torch.quint8
+    ref_kernels = _launched_kernels(
+        lambda: _reference(
+            [512], scales=scales, zero_points=zero_points, axis=0, dtype=torch.quint8
+        )
     )
-    ref_bytes = _raw(ref)
-    del ref
 
-    assert torch.equal(res_bytes, control_bytes), (
-        f"implementation wrote into the storage it returned: "
-        f"{int((res_bytes != control_bytes).sum())} differing bytes"
+    assert res_kernels == ref_kernels, (
+        "the implementation launches different device kernels than the "
+        "allocation-only reference, i.e. it writes the data buffer: "
+        f"impl={res_kernels} ref={ref_kernels}"
     )
-    assert torch.equal(
-        ref_bytes, control_bytes
-    ), "reference wrote into the storage it returned"
 
 
 @pytest.mark._empty_per_channel_affine_quantized
 def test_accuracy__empty_per_channel_affine_quantized_dispatched_path():
     # The operator is a factory, so ATen's dispatch table for it has no plain
-    # device key at all: the deleted-entry probe showed a sentinel installed on
-    # the device key is never selected, while the Autograd key is. The
+    # device key at all: a sentinel installed on the device key is never
+    # selected for a dispatched call, while the Autograd key is. The
     # registration must therefore carry the Autograd key, and a dispatched
-    # call (torch.ops.aten.<op> / torch._empty_per_channel_affine_quantized)
-    # must actually execute the submitted implementation.
-    from torch.library import Library
-
+    # call through the aten packet must execute the submitted implementation.
     config_entries = [
         entry
         for entry in flag_gems._FULL_CONFIG
-        if entry and entry[0] == ("_empty_per_channel_affine_quantized")
+        if entry and entry[0] == "_empty_per_channel_affine_quantized"
     ]
     assert config_entries, "no _FULL_CONFIG entry for the operator"
     entry = config_entries[0]
@@ -468,6 +536,8 @@ def test_accuracy__empty_per_channel_affine_quantized_dispatched_path():
     assert (
         autograd_key in extra_keys
     ), f"the dispatched path needs the {autograd_key} key, got {extra_keys!r}"
+
+    from torch.library import Library
 
     lib = Library("aten", "IMPL")
     hits = []
@@ -485,17 +555,18 @@ def test_accuracy__empty_per_channel_affine_quantized_dispatched_path():
         memory_format=None,
     ):
         hits.append(axis)
-        return flag_gems._empty_per_channel_affine_quantized(
-            size,
-            scales=scales,
-            zero_points=zero_points,
-            axis=axis,
-            dtype=dtype,
-            layout=layout,
-            device=device,
-            pin_memory=pin_memory,
-            memory_format=memory_format,
-        )
+        with torch._C._AutoDispatchBelowAutograd():
+            return torch.ops.aten._empty_per_channel_affine_quantized(
+                size,
+                scales=scales,
+                zero_points=zero_points,
+                axis=axis,
+                dtype=dtype,
+                layout=layout,
+                device=device,
+                pin_memory=pin_memory,
+                memory_format=memory_format,
+            )
 
     scales, zero_points = _make_qparams(QP_LEN)
     lib.impl("_empty_per_channel_affine_quantized", sentinel, autograd_key)
@@ -513,8 +584,27 @@ def test_accuracy__empty_per_channel_affine_quantized_dispatched_path():
         assert dispatched.q_per_channel_axis() == 1
         assert dispatched.qscheme() == torch.per_channel_affine
 
-        # The python-level factory binding is the same entry point.
-        via_torch = torch._empty_per_channel_affine_quantized(
+        # Repeated dispatched calls stay routed.
+        for _ in range(2):
+            again = torch.ops.aten._empty_per_channel_affine_quantized(
+                [4, 8],
+                scales=scales,
+                zero_points=zero_points,
+                axis=1,
+                dtype=torch.quint8,
+                device=flag_gems.device,
+            )
+            assert again.q_per_channel_axis() == 1
+        assert hits == [1, 1, 1], f"repeat dispatches lost routing: {hits}"
+
+        # The ``torch._empty_per_channel_affine_quantized`` builtin is *not*
+        # dispatched through the Autograd key (measured: zero sentinel hits),
+        # so it keeps running the native kernel. Pinned so the difference
+        # stays visible rather than being assumed away: the tested call path
+        # through which this registration actually executes the submitted
+        # implementation is the ``torch.ops.aten`` packet.
+        before = len(hits)
+        via_builtin = torch._empty_per_channel_affine_quantized(
             [4, 8],
             scales=scales,
             zero_points=zero_points,
@@ -522,8 +612,20 @@ def test_accuracy__empty_per_channel_affine_quantized_dispatched_path():
             dtype=torch.quint8,
             device=flag_gems.device,
         )
-        assert hits == [1, 1], f"torch binding did not reach the impl: {hits}"
-        assert via_torch.shape == torch.Size([4, 8])
+        assert (
+            len(hits) == before
+        ), "the torch builtin unexpectedly routed through the Autograd key"
+        assert via_builtin.q_per_channel_axis() == 1
+        _assert_same_meta(
+            via_builtin,
+            _call(
+                [4, 8],
+                scales=scales,
+                zero_points=zero_points,
+                axis=1,
+                dtype=torch.quint8,
+            ),
+        )
     finally:
         lib._destroy()
 
@@ -539,11 +641,17 @@ def test_accuracy__empty_per_channel_affine_quantized_dispatched_path():
     )
     assert after.q_per_channel_axis() == 1
     assert after.qscheme() == torch.per_channel_affine
+    _assert_same_meta(
+        after,
+        _call(
+            [4, 8], scales=scales, zero_points=zero_points, axis=1, dtype=torch.quint8
+        ),
+    )
 
 
 @pytest.mark._empty_per_channel_affine_quantized
 def test_accuracy__empty_per_channel_affine_quantized_out_overload():
-    # ``.out`` is a CompositeExplicitAutograd kernel whose shape/buffer checks
+    # ``.out`` is a CompositeExplicitAutograd kernel whose buffer/shape checks
     # live in the composite body; the implementation does not override it, so
     # it must keep working while the base overload is registered. Verified
     # against the native behaviour: the passed buffer is resized/rewritten and
@@ -560,6 +668,10 @@ def test_accuracy__empty_per_channel_affine_quantized_out_overload():
     assert returned.q_per_channel_axis() == 1
     assert returned.qscheme() == torch.per_channel_affine
     assert returned.q_per_channel_scales().dtype == torch.float64
+    assert torch.equal(
+        returned.q_per_channel_scales().to("cpu"),
+        scales.to(torch.float64).to("cpu"),
+    )
 
 
 @pytest.mark._empty_per_channel_affine_quantized
