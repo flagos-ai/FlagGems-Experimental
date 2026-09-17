@@ -28,6 +28,7 @@ arctanh_out: test_atanh
 atan2_out: test_atan2
 alias_copy_out: test_alias_copy
 as_strided_copy_out: test_as_strided_copy
+_fw_primal_copy_out: test__fw_primal_copy
 baddbmm_out: test_baddbmm
 nanmedian_out: test_nanmedian
 scaled_mm_out: test_scaled_mm
