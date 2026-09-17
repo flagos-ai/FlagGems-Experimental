@@ -121,6 +121,10 @@ from flag_gems.ops._nested_compute_contiguous_strides_offsets import (
 from flag_gems.ops._nested_sum_backward import _nested_sum_backward
 from flag_gems.ops._nested_tensor_strides import _nested_tensor_strides
 from flag_gems.ops._nested_view_from_buffer_copy import _nested_view_from_buffer_copy
+from flag_gems.ops._new_zeros_with_same_feature_meta import (
+    _new_zeros_with_same_feature_meta,
+    _new_zeros_with_same_feature_meta_out,
+)
 from flag_gems.ops._nnz import _nnz
 from flag_gems.ops._pdist_backward import _pdist_backward
 from flag_gems.ops._pdist_forward import _pdist_forward
@@ -592,10 +596,10 @@ from flag_gems.ops.linear import linear
 from flag_gems.ops.linear_backward import linear_backward
 from flag_gems.ops.linspace import linspace
 from flag_gems.ops.log import log
+from flag_gems.ops.log10 import log10, log10_, log10_out
 from flag_gems.ops.log1p import log1p, log1p_out
 from flag_gems.ops.log1p_ import log1p_
 from flag_gems.ops.log2 import log2, log2_
-from flag_gems.ops.log10 import log10, log10_, log10_out
 from flag_gems.ops.log_ import log_
 from flag_gems.ops.log_normal import log_normal
 from flag_gems.ops.log_normal_ import log_normal_
@@ -1097,6 +1101,8 @@ __all__ = [
     "_nested_sum_backward",
     "_nested_tensor_strides",
     "_nested_view_from_buffer_copy",
+    "_new_zeros_with_same_feature_meta",
+    "_new_zeros_with_same_feature_meta_out",
     "_nnz",
     "_pdist_backward",
     "_pdist_forward",
