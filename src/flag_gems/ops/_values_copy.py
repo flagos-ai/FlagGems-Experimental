@@ -153,23 +153,32 @@ def _can_use_nd(src: torch.Tensor) -> bool:
 def _copy_into(src: torch.Tensor, dst: torch.Tensor) -> None:
     """Copy the non-empty ``src`` into the same-shaped ``dst``.
 
-    The kernels run directly whenever the buffers are addressable: the flat
-    kernel for two contiguous tensors, the ND kernel for two tensors sharing a
-    dense non-overlapping layout. Every other combination -- strided values the
-    ND kernel cannot address, or a destination whose layout is unrelated -- is
-    materialized and staged through a contiguous buffer whose offsets the flat
-    kernel is guaranteed to stay inside. The distinction only affects which
+    Both direct kernel paths require the destination to share the source's
+    layout: the ND kernel addresses both tensors at the physical offsets derived
+    from ``src``'s shape/stride table, so it stays inside a ``numel``-element
+    buffer exactly when ``dst.stride() == src.stride()`` holds for a *dense*
+    source -- the layout ``torch.empty_like`` reproduces for it, and the shape
+    the kernel was written for. For a gapped, expanded or otherwise overlapping
+    source that equality also comes out true for ``empty_like`` destinations
+    (both sides get the canonical compact strides) while the source's own
+    offsets reach past ``numel - 1``: such a source is materialized first, which
+    is what makes the flat call below sound. Any other destination layout is
+    served through a staged buffer and ``copy_``. The route only decides which
     schedule performs the copy; the bytes moved are the same.
     """
     if src.is_contiguous() and dst.is_contiguous():
         _launch_flat(src, dst)
-    elif _can_use_nd(src) and dst.stride() == src.stride():
+    elif (
+        not src.is_contiguous()
+        and src.dim() <= _MAX_NDIM
+        and dst.stride() == src.stride()
+    ):
         _launch_nd(src, dst)
     elif dst.is_contiguous():
-        # A contiguous destination is always writable by the flat kernel once
-        # the source is dense; a strided source that the ND kernel cannot
-        # address is materialized first (the ``alias_copy`` / accepted
-        # ``crow_indices_copy`` fix idiom).
+        # A strided source whose strides ``empty_like`` did not reproduce is not
+        # dense (sliced with gaps, expanded, overlapping), so its physical
+        # offsets would run past the buffer: materialize it and take the flat
+        # kernel (the ``alias_copy`` / accepted ``crow_indices_copy`` idiom).
         _launch_flat(src if src.is_contiguous() else src.contiguous(), dst)
     else:
         staged = torch.empty(src.shape, dtype=src.dtype, device=src.device)
