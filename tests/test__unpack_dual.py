@@ -359,8 +359,12 @@ def test_accuracy__unpack_dual_requires_grad():
 
     (res_primal * 3.0).sum().backward()
     (ref_primal * 3.0).sum().backward()
-    utils.gems_assert_equal(x.grad, ref_x.grad)
-    utils.gems_assert_equal(x.grad, torch.full((4,), 3.0, device=_DEVICE))
+    # Both gradients are moved through ``to_reference`` before comparison:
+    # under --ref=cpu ``ref_x.grad`` is a CPU tensor, and ``gems_assert_equal``
+    # requires its second argument on the reference device.
+    utils.gems_assert_equal(utils.to_reference(x.grad), ref_x.grad)
+    expected = utils.to_reference(torch.full((4,), 3.0, device=_DEVICE))
+    utils.gems_assert_equal(utils.to_reference(x.grad), expected)
 
 
 @pytest.mark._unpack_dual
@@ -508,7 +512,7 @@ def test_accuracy__unpack_dual_vf_binding():
     assert out.primal.data_ptr() == x.data_ptr()
     assert out.tangent is None
     # And it is the same (only) overload the implementation delegates to.
-    assert torch.ops.aten._unpack_dual.default._schema.name == "_unpack_dual"
+    assert torch.ops.aten._unpack_dual.default._schema.name == "aten::_unpack_dual"
     assert torch.ops.aten._unpack_dual.overloads() == ["default"]
 
 
