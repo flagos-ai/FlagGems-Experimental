@@ -189,6 +189,18 @@ _FULL_CONFIG = (
     ("_has_same_storage_numel", _has_same_storage_numel),
     ("_index_put_impl_", _index_put_impl_),
     ("_indices", _indices, None, (AUTOGRAD_DISPATCH_KEY,)),
+    (
+        "_indices_copy",
+        _indices_copy,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
+    (
+        "_indices_copy.out",
+        _indices_copy_out,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
     ("_is_all_true", _is_all_true),
     ("_jagged_to_padded_dense_forward", _jagged_to_padded_dense_forward),
     ("_linalg_eigvals", _linalg_eigvals),
@@ -610,11 +622,6 @@ _FULL_CONFIG = (
     ("diff", diff),
     ("digamma", digamma),
     ("digamma_", digamma_),
-    # aten::dim is not a dispatcher operator on this build (it is a JIT
-    # primitive plus a Python Tensor method; probes: probe1..probe14 in the
-    # run dir). A device-key registration is unreachable dead code, so the
-    # entry registers no extra dispatch key and the implementation is tested
-    # through its direct call path, mirroring the can_cast investigation.
     ("dim", dim),
     ("dist", dist),
     ("div.out", true_divide_out),
@@ -1012,9 +1019,9 @@ _FULL_CONFIG = (
     ("native_layer_norm_backward", layer_norm_backward),
     ("ne.Scalar", ne_scalar),
     ("ne.Tensor", ne),
-    ("ne_.Scalar", ne_scalar_),
     ("ne_.Scalar", not_equal_scalar_),
-    ("ne_.Tensor", ne_),
+    ("ne_.Scalar", not_equal_scalar_),
+    ("ne_.Tensor", not_equal_),
     ("ne_.Tensor", not_equal_),
     ("neg", neg),
     ("neg_", neg_),
