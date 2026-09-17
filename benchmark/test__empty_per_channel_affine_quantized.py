@@ -20,7 +20,7 @@ from _pytest.mark.structures import Mark, MarkDecorator
 
 import flag_gems
 
-from . import base, consts
+from . import base
 
 # ``_empty_per_channel_affine_quantized`` starts with an underscore; register
 # its marker directly on the MarkGenerator.
