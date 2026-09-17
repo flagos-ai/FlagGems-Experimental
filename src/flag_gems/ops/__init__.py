@@ -114,6 +114,7 @@ from flag_gems.ops._pdist_backward import _pdist_backward
 from flag_gems.ops._pdist_forward import _pdist_forward
 from flag_gems.ops._prelu_kernel import _prelu_kernel
 from flag_gems.ops._prelu_kernel_backward import _prelu_kernel_backward
+from flag_gems.ops._remove_batch_dim import _remove_batch_dim
 from flag_gems.ops._reshape_alias import _reshape_alias
 from flag_gems.ops._resize_output import _resize_output
 from flag_gems.ops._resize_output_ import _resize_output_
@@ -1064,6 +1065,7 @@ __all__ = [
     "_pdist_forward",
     "_prelu_kernel",
     "_prelu_kernel_backward",
+    "_remove_batch_dim",
     "_reshape_alias",
     "_resize_output",
     "_resize_output_",
