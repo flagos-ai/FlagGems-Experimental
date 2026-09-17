@@ -164,8 +164,11 @@ def test_accuracy__make_dual_copy(shape, dtype):
             res_out = flag_gems._make_dual_copy(primal, tangent, 0)
 
         utils.gems_assert_equal(res_out, ref_out)
-        # Values are the primal's, not primal + tangent.
-        utils.gems_assert_equal(res_out, primal)
+        # Values are the primal's, not primal + tangent. The comparison is
+        # against the converted reference (`ref_primal`), never the device
+        # tensor: under `--ref=cpu` the helper asserts its second argument is
+        # already on the reference device.
+        utils.gems_assert_equal(res_out, ref_primal)
         assert res_out.shape == primal.shape
         assert res_out.dtype == primal.dtype
         # A copy, never a view: fresh storage, no base, no autograd history.
@@ -222,7 +225,7 @@ def test_accuracy__make_dual_copy_level(level):
         assert res_tangent_out is None
         assert ref_tangent_out is None
         utils.gems_assert_equal(res_out, ref_out)
-        utils.gems_assert_equal(res_out, primal)
+        utils.gems_assert_equal(res_out, ref_primal)
 
 
 @pytest.mark._make_dual_copy
@@ -243,11 +246,12 @@ def test_accuracy__make_dual_copy_mixed_dtypes():
             primal = _gen((3, 4), primal_dtype, flag_gems.device)
             tangent = _gen((3, 4), tangent_dtype, flag_gems.device)
             assert primal.is_inference() and tangent.is_inference()
+            ref_primal = utils.to_reference(primal)
             with dual_level():
                 ref_out = _ref_make_dual_copy(primal, tangent, 0)
                 res_out = flag_gems._make_dual_copy(primal, tangent, 0)
             utils.gems_assert_equal(res_out, ref_out)
-            utils.gems_assert_equal(res_out, primal)
+            utils.gems_assert_equal(res_out, ref_primal)
             assert res_out.dtype == primal_dtype
 
 
@@ -264,8 +268,9 @@ def test_accuracy__make_dual_copy_complex64():
             ref_out = _ref_make_dual_copy(ref_primal, ref_tangent, 0)
             res_out = flag_gems._make_dual_copy(primal, tangent, 0)
         utils.gems_assert_equal(res_out, ref_out)
+        utils.gems_assert_equal(res_out, ref_primal)
         # Bitwise (not merely within tolerance): the reinterpretation is exact.
-        assert torch.equal(res_out, primal)
+        assert torch.equal(res_out.cpu(), ref_primal.cpu())
         assert res_out.dtype == torch.complex64
 
         # Same for a non-contiguous complex64 primal (the strided branch).
@@ -278,7 +283,8 @@ def test_accuracy__make_dual_copy_complex64():
             ref_out = _ref_make_dual_copy(ref_primal_nc, ref_tangent_nc, 0)
             res_out = flag_gems._make_dual_copy(primal_nc, tangent_nc, 0)
         utils.gems_assert_equal(res_out, ref_out)
-        assert torch.equal(res_out, primal_nc)
+        utils.gems_assert_equal(res_out, ref_primal_nc)
+        assert torch.equal(res_out.cpu(), ref_primal_nc.cpu())
         assert res_out.is_contiguous()
 
 
@@ -308,7 +314,7 @@ def test_accuracy__make_dual_copy_non_contiguous(make_input):
             res_out = flag_gems._make_dual_copy(primal, tangent, 0)
 
         utils.gems_assert_equal(res_out, ref_out)
-        utils.gems_assert_equal(res_out, primal)
+        utils.gems_assert_equal(res_out, ref_primal)
         assert res_out.is_contiguous()
         assert res_out.is_contiguous() == ref_out.is_contiguous()
         assert res_out.stride() == ref_out.stride()
@@ -462,12 +468,14 @@ def test_accuracy__make_dual_copy_serves_regular_tensors_under_inference_mode():
     # same values there.
     regular_primal = _gen((3, 4), torch.float32, flag_gems.device)
     regular_tangent = _gen((3, 4), torch.float32, flag_gems.device)
-    with torch.inference_mode(), dual_level():
-        ref_out = _ref_make_dual_copy(regular_primal, regular_tangent, 0)
-        res_out = flag_gems._make_dual_copy(regular_primal, regular_tangent, 0)
-    utils.gems_assert_equal(res_out, regular_primal)
-    utils.gems_assert_equal(res_out, ref_out)
-    assert res_out.data_ptr() != regular_primal.data_ptr()
+    with torch.inference_mode():
+        ref_primal = utils.to_reference(regular_primal)
+        with dual_level():
+            ref_out = _ref_make_dual_copy(regular_primal, regular_tangent, 0)
+            res_out = flag_gems._make_dual_copy(regular_primal, regular_tangent, 0)
+        utils.gems_assert_equal(res_out, ref_out)
+        utils.gems_assert_equal(res_out, ref_primal)
+        assert res_out.data_ptr() != regular_primal.data_ptr()
 
 
 @pytest.mark._make_dual_copy
@@ -476,12 +484,12 @@ def test_accuracy__make_dual_copy_dispatch_stability():
     # identical, correctly isolated results (no shared mutable state).
     with torch.inference_mode():
         primal, tangent = _inference_pair((128,), torch.float32, flag_gems.device)
+        ref_primal = utils.to_reference(primal)
         with dual_level():
-            ref_out = _ref_make_dual_copy(primal, tangent, 0)
             for _ in range(3):
                 assert torch.ops.aten.numel(primal) == 128
                 res_out = flag_gems._make_dual_copy(primal, tangent, 0)
-                utils.gems_assert_equal(res_out, ref_out)
+                utils.gems_assert_equal(res_out, ref_primal)
                 assert res_out.data_ptr() != primal.data_ptr()
             assert torch.ops.aten.numel(primal.clone()) == 128
 
@@ -514,11 +522,13 @@ def test_accuracy__make_dual_copy_registration_wiring():
     # The module implementation and the public entry agree.
     with torch.inference_mode():
         primal, tangent = _inference_pair((3, 4), torch.float32, flag_gems.device)
+        ref_primal = utils.to_reference(primal)
         with dual_level():
             res_pub = fg_pkg._make_dual_copy(primal, tangent, 0)
             res_mod = impl_mod._make_dual_copy(primal, tangent, 0)
         assert res_pub.data_ptr() != primal.data_ptr()
         assert res_mod.data_ptr() != primal.data_ptr()
+        utils.gems_assert_equal(res_pub, ref_primal)
         utils.gems_assert_equal(res_pub, res_mod)
 
 
@@ -530,6 +540,7 @@ def test_accuracy__make_dual_copy_out():
     # cell this test drives.
     with torch.inference_mode():
         primal, tangent = _inference_pair((3, 4), torch.float32, flag_gems.device)
+        ref_primal = utils.to_reference(primal)
         out = torch.empty(3, 4, device=flag_gems.device)
         ref_buffer = torch.empty(3, 4, device=flag_gems.device)
         with dual_level():
@@ -539,7 +550,7 @@ def test_accuracy__make_dual_copy_out():
             ret = flag_gems._make_dual_copy_out(primal, tangent, 0, out=out)
         assert ret is out
         assert ref_ret is ref_buffer
-        utils.gems_assert_equal(out, primal)
+        utils.gems_assert_equal(out, ref_primal)
         utils.gems_assert_equal(out, ref_buffer)
 
 
@@ -549,18 +560,19 @@ def test_accuracy__make_dual_copy_out_resize():
     # ``resize_out_helper``); an empty buffer is grown the same way.
     with torch.inference_mode():
         primal, tangent = _inference_pair((3, 4), torch.float32, flag_gems.device)
+        ref_primal = utils.to_reference(primal)
         with dual_level():
             small = torch.empty(1, 1, device=flag_gems.device)
             ret = flag_gems._make_dual_copy_out(primal, tangent, 0, out=small)
             assert ret is small
             assert tuple(small.shape) == (3, 4)
-            utils.gems_assert_equal(small, primal)
+            utils.gems_assert_equal(small, ref_primal)
 
             empty = torch.empty(0, device=flag_gems.device)
             ret = flag_gems._make_dual_copy_out(primal, tangent, 0, out=empty)
             assert ret is empty
             assert tuple(empty.shape) == (3, 4)
-            utils.gems_assert_equal(empty, primal)
+            utils.gems_assert_equal(empty, ref_primal)
 
 
 @pytest.mark._make_dual_copy_out
@@ -569,12 +581,13 @@ def test_accuracy__make_dual_copy_out_non_contiguous():
     # keeps its strides while receiving the values.
     with torch.inference_mode():
         primal, tangent = _inference_pair((3, 4), torch.float32, flag_gems.device)
+        ref_primal = utils.to_reference(primal)
         with dual_level():
             nc = torch.empty(4, 3, device=flag_gems.device).t()
             ret = flag_gems._make_dual_copy_out(primal, tangent, 0, out=nc)
         assert ret is nc
         assert not nc.is_contiguous()
-        utils.gems_assert_equal(nc, primal)
+        utils.gems_assert_equal(nc, ref_primal)
 
 
 @pytest.mark._make_dual_copy_out
