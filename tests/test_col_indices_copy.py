@@ -219,20 +219,26 @@ def test_accuracy_col_indices_copy_is_fresh_allocation():
 def test_accuracy_col_indices_copy_strided_buffer():
     # The sparse constructor keeps a strided index view it is handed, so the
     # internal col_indices buffer can be non-contiguous; native returns a
-    # contiguous copy of the logical elements.
-    base = torch.tensor([0, 77, 1, 77, 0, 77], dtype=torch.int64)
+    # contiguous copy of the logical elements. The strided view must be built
+    # on the device directly: ``Tensor.to(device)`` would materialize it.
+    base = torch.tensor(
+        [0, 77, 1, 77, 0, 77], dtype=torch.int64, device=flag_gems.device
+    )
     strided_ccol = base[::2]
     assert not strided_ccol.is_contiguous()
 
-    crow = torch.tensor([0, 3], dtype=torch.int64)
-    values = torch.ones(3)
+    crow = torch.tensor([0, 3], dtype=torch.int64, device=flag_gems.device)
+    values = torch.ones(3, device=flag_gems.device)
     csr = torch.sparse_csr_tensor(
-        crow.to(flag_gems.device),
-        strided_ccol.to(flag_gems.device),
-        values.to(flag_gems.device),
+        crow,
+        strided_ccol,
+        values,
         (1, 4),
     )
     assert not csr.col_indices().is_contiguous()
+    # Guard the premise: the buffer really is the strided view, so the copy
+    # below exercises the materialization path rather than a trivial case.
+    assert csr.col_indices().stride() == (2,)
 
     ref_out = torch.ops.aten.col_indices_copy(utils.to_reference(csr))
     res_out = flag_gems.col_indices_copy(csr)
@@ -310,7 +316,11 @@ def test_accuracy_col_indices_copy_out():
         csr = _make_csr(nnz)
         ref_csr = utils.to_reference(csr)
 
-        ref_out = torch.empty(nnz, dtype=csr.col_indices().dtype)
+        # The reference buffer lives on the reference tensor's device, which
+        # is the GPU in the full phase and the CPU under --ref=cpu.
+        ref_out = torch.empty(
+            nnz, dtype=ref_csr.col_indices().dtype, device=ref_csr.device
+        )
         torch.ops.aten.col_indices_copy.out(ref_csr, out=ref_out)
 
         out = torch.empty_like(csr.col_indices())
