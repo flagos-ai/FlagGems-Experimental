@@ -131,7 +131,14 @@ def _indices_copy_out(self: torch.Tensor, *, out: torch.Tensor) -> torch.Tensor:
     if nnz == 0:
         return out
 
-    dst = out if out.is_contiguous() else torch.empty_like(out)
+    # The kernels write one flat contiguous stream; a non-contiguous ``out``
+    # is therefore filled through a contiguous staging buffer and scattered
+    # back into the caller's own layout. ``empty_like`` would inherit ``out``'s
+    # strides, so the staging buffer is allocated explicitly contiguous.
+    if out.is_contiguous():
+        dst = out
+    else:
+        dst = torch.empty((sdim, nnz), dtype=torch.int64, device=out.device)
     with torch_device_fn.device(self.device):
         if idx.is_contiguous():
             numel = sdim * nnz
