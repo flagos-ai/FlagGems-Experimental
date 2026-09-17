@@ -277,6 +277,7 @@ from flag_gems.ops.bmm_w8a8_fp8 import bmm_w8a8_fp8
 from flag_gems.ops.broadcast_tensors import broadcast_tensors
 from flag_gems.ops.broadcast_to import broadcast_to
 from flag_gems.ops.bucketize import bucketize
+from flag_gems.ops.can_cast import can_cast
 from flag_gems.ops.cat import cat, cat_out
 from flag_gems.ops.cauchy import cauchy, cauchy_
 from flag_gems.ops.cdist import _cdist_backward, _cdist_forward, cdist
@@ -1226,6 +1227,7 @@ __all__ = [
     "broadcast_tensors",
     "broadcast_to",
     "bucketize",
+    "can_cast",
     "cat",
     "cat_out",
     "cauchy",

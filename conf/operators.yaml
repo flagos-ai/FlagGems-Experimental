@@ -2225,6 +2225,20 @@ ops:
   - Math
   stages:
   - alpha: '5.4'
+- id: can_cast
+  description: 'Returns True if a tensor of the source dtype can be cast to the
+    destination dtype under ATen type promotion, else False.
+
+    '
+  for:
+  - can_cast
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Logic
+  stages:
+  - alpha: '5.4'
 - id: cat
   description: Concatenates the given sequence of tensors in tensors in the given
     dimension.
