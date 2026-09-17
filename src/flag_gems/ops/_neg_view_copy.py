@@ -204,9 +204,10 @@ def _neg_view_copy(self: torch.Tensor) -> torch.Tensor:
 def _neg_view_copy_out(self: torch.Tensor, *, out: torch.Tensor) -> torch.Tensor:
     """``aten::_neg_view_copy.out``: write the negated values into ``out``.
 
-    Measured native contract: a dtype mismatch raises ``RuntimeError``; a
-    shape mismatch resizes ``out`` to the input shape; the buffer is written
-    in place in its own layout; the buffer itself is returned.
+    Measured native contract: an out buffer on another device or with another
+    dtype raises ``RuntimeError``; a shape mismatch resizes ``out`` to the
+    input shape; the buffer is written in place in its own layout; the buffer
+    itself is returned.
     """
     logger.debug("GEMS _NEG_VIEW_COPY_OUT")
     _check_neg_dtype(self.dtype)
@@ -214,6 +215,14 @@ def _neg_view_copy_out(self: torch.Tensor, *, out: torch.Tensor) -> torch.Tensor
         raise RuntimeError(
             f"Expected out tensor to have dtype {self.dtype}, but got "
             f"{out.dtype} instead"
+        )
+    if out.device != self.device:
+        # Native: "Expected out tensor to have device cuda:0, but got cpu
+        # instead". The kernels can only write device memory, so this must be
+        # rejected rather than silently staged through the host.
+        raise RuntimeError(
+            f"Expected out tensor to have device {self.device}, but got "
+            f"{out.device} instead"
         )
     if tuple(out.shape) != tuple(self.shape):
         out.resize_(self.shape)
