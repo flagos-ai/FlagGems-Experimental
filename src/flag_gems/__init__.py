@@ -67,6 +67,12 @@ SpecOpRegistrar(registry=globals(), vendor=vendor_name).apply()
 registrar = GeneralOpRegistrar
 current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
+# Factories with no input tensor cannot be reached through a backend key (there
+# is no tensor to read a key from), and ATen does not register them on the
+# Autograd key either. ADInplaceOrView is the highest-priority key that both
+# intercepts their dispatched calls and permits a recursively-safe delegation
+# back through the native BackendSelect kernel.
+ADINPLACEORVIEW_DISPATCH_KEY = torch._C.DispatchKey.ADInplaceOrView.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
 SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
@@ -134,6 +140,12 @@ _FULL_CONFIG = (
     (
         "_embedding_bag_per_sample_weights_backward",
         _embedding_bag_per_sample_weights_backward,
+    ),
+    (
+        "_empty_affine_quantized",
+        _empty_affine_quantized,
+        None,
+        (ADINPLACEORVIEW_DISPATCH_KEY,),
     ),
     ("_euclidean_dist", _euclidean_dist),
     (

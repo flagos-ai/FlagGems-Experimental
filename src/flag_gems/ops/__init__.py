@@ -60,6 +60,7 @@ from flag_gems.ops._embedding_bag_dense_backward import _embedding_bag_dense_bac
 from flag_gems.ops._embedding_bag_per_sample_weights_backward import (
     _embedding_bag_per_sample_weights_backward,
 )
+from flag_gems.ops._empty_affine_quantized import _empty_affine_quantized
 from flag_gems.ops._euclidean_dist import _euclidean_dist
 from flag_gems.ops._fake_quantize_learnable_per_channel_affine_backward import (
     _fake_quantize_learnable_per_channel_affine_backward,
@@ -1029,6 +1030,7 @@ __all__ = [
     "_dyn_quant_pack_4bit_weight",
     "_embedding_bag_dense_backward",
     "_embedding_bag_per_sample_weights_backward",
+    "_empty_affine_quantized",
     "_euclidean_dist",
     "_fake_quantize_learnable_per_channel_affine_backward",
     "_fake_quantize_learnable_per_tensor_affine",
