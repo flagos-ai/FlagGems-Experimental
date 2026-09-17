@@ -45,10 +45,11 @@ def _coo_input(nnz, cur_dtype, device, strided_values=False):
     if strided_values:
         # Dense non-overlapping strided values: the ND-kernel path. Built as a
         # transpose of a (2, nnz) buffer, so the element count is unchanged and
-        # the work matches the flat case.
+        # the work matches the flat case. The COO carries one sparse dim plus
+        # one dense dim, so the logical shape is (nnz,) + (2,).
         values = utils.generate_tensor_input((2, nnz), cur_dtype, device).t()
-    else:
-        values = utils.generate_tensor_input((nnz,), cur_dtype, device)
+        return torch.sparse_coo_tensor(indices, values, (max(nnz, 1), 2))
+    values = utils.generate_tensor_input((nnz,), cur_dtype, device)
     return torch.sparse_coo_tensor(indices, values, (max(nnz, 1),))
 
 
