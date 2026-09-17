@@ -150,10 +150,16 @@ def test_accuracy_atleast_2d_non_contiguous():
     assert flag_gems.atleast_2d(t3) is t3
 
     # Non-contiguous 1-D (a strided column of a matrix): (1, N) view with
-    # the source strides, zero-copy.
-    col = torch.randn(4, 5, device=flag_gems.device)[:, 1]
+    # the source strides, zero-copy. The reference is built by converting
+    # the BASE tensor and re-deriving the column view on the reference
+    # device: converting the strided 1-D view directly would materialize it
+    # into a contiguous buffer (stride (1,)) and lose the layout under test.
+    base = torch.randn(4, 5, device=flag_gems.device)
+    col = base[:, 1]
     assert not col.is_contiguous()
-    ref_col = utils.to_reference(col)
+    ref_base = utils.to_reference(base)
+    ref_col = ref_base[:, 1]
+    assert not ref_col.is_contiguous()
     res_col = flag_gems.atleast_2d(col)
     ref_nc = torch.ops.aten.atleast_2d(ref_col)
     assert tuple(res_col.shape) == (1, 4) == tuple(ref_nc.shape)
@@ -186,9 +192,11 @@ def test_accuracy_atleast_2d_alias_semantics():
     utils.gems_assert_equal(res, ref_a)
 
     # Writes through the 1-D view must be visible in the input, matching
-    # the native view semantics (zero-copy alias, not a copy).
+    # the native view semantics (zero-copy alias, not a copy). The
+    # reference copy is converted through to_reference so it lives on the
+    # reference device (a direct clone would stay on the candidate device).
     src = torch.arange(6, dtype=torch.float32, device=flag_gems.device)
-    ref_src = src.clone()
+    ref_src = utils.to_reference(src.clone())
     view = flag_gems.atleast_2d(src)
     view[0, 3] = 99.0
     ref_view = torch.ops.aten.atleast_2d(ref_src)
