@@ -63,6 +63,7 @@ from flag_gems.ops._embedding_bag_dense_backward import _embedding_bag_dense_bac
 from flag_gems.ops._embedding_bag_per_sample_weights_backward import (
     _embedding_bag_per_sample_weights_backward,
 )
+from flag_gems.ops._empty_affine_quantized import _empty_affine_quantized
 from flag_gems.ops._empty_per_channel_affine_quantized import (
     _empty_per_channel_affine_quantized,
 )
@@ -1108,6 +1109,7 @@ __all__ = [
     "_efficientzerotensor",
     "_embedding_bag_dense_backward",
     "_embedding_bag_per_sample_weights_backward",
+    "_empty_affine_quantized",
     "_empty_per_channel_affine_quantized",
     "_euclidean_dist",
     "_fake_quantize_learnable_per_channel_affine_backward",
