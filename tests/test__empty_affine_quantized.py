@@ -387,14 +387,12 @@ def test_accuracy__empty_affine_quantized_does_not_write_storage():
 
 @pytest.mark._empty_affine_quantized
 def test_accuracy__empty_affine_quantized_unsupported_dtype():
-    # A non-quantized dtype is rejected: the device key has no kernel for it,
-    # while the CPU kernel validates the dtype up front and raises
-    # RuntimeError. The registrar necessarily also installs the implementation
-    # on the plain device key (see the module docstring); that path must
-    # reproduce the native rejection instead of re-entering itself, which would
-    # surface as a RecursionError.
+    # A non-quantized dtype resolves to the plain device key, where this build
+    # has no kernel: the dispatcher answers with NotImplementedError. With the
+    # operator not registered (the state these tests run in) the nested call
+    # raises that error before it can re-enter the implementation.
     for dtype in (torch.float32, torch.float16, torch.int32, torch.bool, None):
-        with pytest.raises(NotImplementedError, match="CUDA backend"):
+        with pytest.raises(NotImplementedError):
             flag_gems._empty_affine_quantized(
                 [2, 3], dtype=dtype, device=flag_gems.device
             )
@@ -406,17 +404,51 @@ def test_accuracy__empty_affine_quantized_unsupported_dtype():
         with pytest.raises(expected_error):
             _reference([2, 3], dtype=dtype)
 
+    if cfg.TO_CPU:
+        pytest.skip("the device-key re-entrancy path needs the device backend")
+
+    # The registrar always also installs the implementation on the plain device
+    # key (`GeneralOpRegistrar.register_impl`), so that path is reachable in a
+    # `use_gems` session. It must reproduce the native rejection rather than
+    # re-entering itself, which would surface as a RecursionError. Replicating
+    # the registrar's registration here exercises exactly that branch.
+    from torch.library import Library
+
+    lib = Library("aten", "IMPL")
+    lib.impl("_empty_affine_quantized", flag_gems._empty_affine_quantized, "CUDA")
+    try:
+        for dtype in (torch.float32, torch.float16, torch.int32, torch.bool, None):
+            with pytest.raises(NotImplementedError, match="'CUDA' backend"):
+                torch.ops.aten._empty_affine_quantized(
+                    [2, 3], dtype=dtype, device=flag_gems.device
+                )
+        # A quantized request still works while the device key is overridden:
+        # it is routed to the native QuantizedCUDA kernel by the delegated call.
+        ok = torch.ops.aten._empty_affine_quantized(
+            [2, 3], dtype=torch.quint8, device=flag_gems.device, scale=0.5, zero_point=3
+        )
+        assert ok.q_scale() == 0.5
+        assert ok.q_zero_point() == 3
+    finally:
+        lib._destroy()
+
+    # After destroying that library the device key is empty again and the
+    # direct entry still reports the operator's own rejection.
+    with pytest.raises(NotImplementedError):
+        flag_gems._empty_affine_quantized(
+            [2, 3], dtype=torch.float32, device=flag_gems.device
+        )
+
 
 @pytest.mark._empty_affine_quantized
 def test_accuracy__empty_affine_quantized_device_resolution():
     # The output device comes from the ``device`` argument. Omitting it falls
     # back to the default device rather than following anything else.
     res = _call([2], dtype=torch.qint8)
-    assert device == torch.device("cuda"), "flag_gems.device is not 'cuda'"
     assert res.device.type == flag_gems.device
-    # The device string carries no index here (the argument was omitted), so
-    # compare the device type rather than the full torch.device: torch.device
-    # ("cuda") != torch.device("cuda:0").
+    # ``flag_gems.device`` is the backend's device-name string ("cuda"), and the
+    # unindexed device carries no index: torch.device("cuda") is not equal to
+    # torch.device("cuda:0"), so compare the device type.
     assert res.device.type == "cuda"
 
     # An explicit indexed device argument lands on that device.
@@ -603,15 +635,26 @@ def test_accuracy__empty_affine_quantized_out_overload():
     assert refilled.q_scale() == 3.0
     assert refilled.q_zero_point() == 5
 
-    # Resizing a populated out buffer is not supported: the composite body
-    # forwards to aten::resize_ with a quantized tensor, and neither this
-    # build's device key nor its QuantizedCPU key implements that. The
-    # rejection is therefore part of the contract on both sides.
+    # Resizing a populated out buffer goes through aten::resize_ on a quantized
+    # tensor. This build's device key does not implement that (measured:
+    # NotImplementedError from the QuantizedCUDA backend), while its
+    # QuantizedCPU key does (with the usual deprecation warning). The
+    # implementation must not change either behaviour, so each phase pins the
+    # native one.
     populated = _reference([2, 3], dtype=torch.qint8)
-    with pytest.raises(NotImplementedError):
-        torch.ops.aten._empty_affine_quantized.out(
+    if cfg.TO_CPU:
+        resized = torch.ops.aten._empty_affine_quantized.out(
             [4, 5], scale=2.0, zero_point=9, out=populated
         )
+        assert resized is populated
+        assert resized.shape == torch.Size([4, 5])
+        assert resized.q_scale() == 2.0
+        assert resized.q_zero_point() == 9
+    else:
+        with pytest.raises(NotImplementedError):
+            torch.ops.aten._empty_affine_quantized.out(
+                [4, 5], scale=2.0, zero_point=9, out=populated
+            )
 
     # A non-quantized buffer is rejected: the .out schema has no dtype argument,
     # so the buffer's own dtype is what the composite body forwards, and a
