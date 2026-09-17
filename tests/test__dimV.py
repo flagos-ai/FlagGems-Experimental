@@ -58,7 +58,7 @@ def _make_coo(nnd, nnz, size, seed=0):
 
 
 def _coo_cases(shape):
-    n0, n1 = shape[0], shape[1] if len(shape) > 1 else shape[0]
+    n0 = shape[0]
     dense_tail = shape[1:] if len(shape) > 1 else ()
     return [
         ("plain", _make_coo(len(shape), 3, shape, seed=1)),
