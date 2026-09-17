@@ -103,7 +103,20 @@ ops:
   kind:
   - Tensor
   stages:
+  stages:
   - alpha: '5.5'
+- id: _indices
+  description: Returns the indices tensor of a sparse COO tensor as a zero-copy
+    view.
+  for:
+  - _indices
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _nnz
   description: 'Returns the number of stored elements (nnz) of a sparse tensor.
 
