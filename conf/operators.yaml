@@ -53,6 +53,37 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.4'
+- id: _new_zeros_with_same_feature_meta
+  description: >-
+    Returns a freshly allocated zero tensor whose shape is
+    `self.shape[:self_num_batch_dims] + other.shape` and whose dtype and
+    device come from `other`, mirroring
+    `aten::_new_zeros_with_same_feature_meta`. Used by forward-mode
+    autograd to materialize a zero feature-metadata tensor for a tangent.
+  for:
+  - _new_zeros_with_same_feature_meta
+  labels:
+  - aten
+  - KernelGen
+  - pointwise
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
+- id: _new_zeros_with_same_feature_meta_out
+  description: >-
+    A variant of `_new_zeros_with_same_feature_meta()` that writes the zeros
+    into the `out` tensor and returns it.
+  for:
+  - _new_zeros_with_same_feature_meta.out
+  labels:
+  - aten
+  - KernelGen
+  - pointwise
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _reshape_alias
   description: 'Creates a view of the input tensor with the given size and stride,
 
