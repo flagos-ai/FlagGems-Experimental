@@ -167,6 +167,7 @@ _FULL_CONFIG = (
         (AUTOGRAD_DISPATCH_KEY,),
     ),
     ("_index_put_impl_", _index_put_impl_),
+    ("_indices", _indices, None, (AUTOGRAD_DISPATCH_KEY,)),
     ("_is_all_true", _is_all_true),
     ("_jagged_to_padded_dense_forward", _jagged_to_padded_dense_forward),
     ("_linalg_eigvals", _linalg_eigvals),
