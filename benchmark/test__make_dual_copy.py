@@ -17,7 +17,6 @@
 import pytest
 import torch
 from _pytest.mark.structures import Mark, MarkDecorator
-from torch.autograd.forward_ad import dual_level
 
 import flag_gems
 
@@ -55,9 +54,11 @@ def _inference_pair(shape, cur_dtype, device):
     """Primal/tangent built inside inference mode.
 
     ``aten::_make_dual_copy`` only reaches its native kernel for inference
-    tensors (or inside inference_mode), so the pair -- and the whole timed
-    region -- is created under ``torch.inference_mode()``; otherwise the
-    reference operator raises natively and the measurement is meaningless.
+    tensors (the composite asserts ``primal.is_inference()``), so both operands
+    are created under ``torch.inference_mode()``; otherwise the reference
+    operator raises natively and the measurement is meaningless. The guard is
+    entered only to build the pair -- the timed region itself runs without it,
+    because an inference tensor keeps its eligibility after the guard exits.
     """
     with torch.inference_mode():
         primal = utils.generate_tensor_input(shape, cur_dtype, device)
@@ -89,11 +90,15 @@ class MakeDualCopyBenchmark(base.Benchmark):
     def get_input_iter(self, cur_dtype):
         # A 3-tuple per case: (primal, tangent, level). The harness unpacks each
         # yielded item as an argument list, so the trailing level int becomes
-        # the third positional argument of the op call.
-        with torch.inference_mode(), dual_level():
-            for shape in self.shapes:
-                primal, tangent = _inference_pair(shape, cur_dtype, self.device)
-                yield (primal, tangent, 0)
+        # the third positional argument of the op call. The generator must not
+        # hold a dual level open across the yield: the harness runs the timed
+        # calls while the generator is suspended, and a nested forward-AD level
+        # there raises ("Nested forward mode AD is not supported"). Inference
+        # tensors alone make both the reference and the implementation callable,
+        # so no level is needed at all.
+        for shape in self.shapes:
+            primal, tangent = _inference_pair(shape, cur_dtype, self.device)
+            yield (primal, tangent, 0)
 
 
 @pytest.mark._make_dual_copy
@@ -104,23 +109,21 @@ def test__make_dual_copy():
         gems_op=flag_gems._make_dual_copy,
         dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
     )
-    # Every timed call needs the inference context (the native operator only
-    # runs for inference tensors) and an active forward-AD level, exactly as
-    # the operator is used in practice.
-    with torch.inference_mode(), dual_level():
-        bench.run()
+    bench.run()
 
 
 class MakeDualCopyStridedBenchmark(MakeDualCopyBenchmark):
     """Same op on non-contiguous primals: drives the shape/stride gather kernel."""
 
     def get_input_iter(self, cur_dtype):
-        with torch.inference_mode(), dual_level():
-            for shape in self.shapes:
-                if len(shape) < 2:
-                    continue
-                primal, tangent = _inference_pair(shape[::-1], cur_dtype, self.device)
-                yield (primal.t(), tangent.t(), 0)
+        # No dual level here either: the transposed operands stay inference
+        # tensors (views of inference tensors are inference tensors), which is
+        # all the reference and the implementation need.
+        for shape in self.shapes:
+            if len(shape) < 2:
+                continue
+            primal, tangent = _inference_pair(shape[::-1], cur_dtype, self.device)
+            yield (primal.t(), tangent.t(), 0)
 
 
 @pytest.mark._make_dual_copy
@@ -131,17 +134,15 @@ def test__make_dual_copy_strided():
         gems_op=flag_gems._make_dual_copy,
         dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
     )
-    with torch.inference_mode(), dual_level():
-        bench.run()
+    bench.run()
 
 
 class MakeDualCopyOutBenchmark(MakeDualCopyBenchmark):
     def get_input_iter(self, cur_dtype):
-        with torch.inference_mode(), dual_level():
-            for shape in self.shapes:
-                primal, tangent = _inference_pair(shape, cur_dtype, self.device)
-                out = torch.empty(shape, dtype=cur_dtype, device=self.device)
-                yield primal, tangent, 0, {"out": out}
+        for shape in self.shapes:
+            primal, tangent = _inference_pair(shape, cur_dtype, self.device)
+            out = torch.empty(shape, dtype=cur_dtype, device=self.device)
+            yield primal, tangent, 0, {"out": out}
 
 
 @pytest.mark._make_dual_copy_out
@@ -152,5 +153,4 @@ def test__make_dual_copy_out():
         gems_op=flag_gems._make_dual_copy_out,
         dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
     )
-    with torch.inference_mode(), dual_level():
-        bench.run()
+    bench.run()
