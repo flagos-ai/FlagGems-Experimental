@@ -299,7 +299,11 @@ def test_accuracy_indices_copy_out(nnz, shape):
     assert res is out
     utils.gems_assert_equal(out, ref_out)
     assert torch.equal(utils.to_cpu(out, ref_out), ref_out)
-    assert out.data_ptr() != x._indices().data_ptr()
+    if nnz > 0:
+        # The out buffer must be distinct storage from the source index
+        # matrix; an empty CUDA tensor has no backing page (data_ptr == 0 on
+        # both sides), so the property is only observable for nnz > 0.
+        assert out.data_ptr() != x._indices().data_ptr()
 
 
 @pytest.mark._indices_copy_out
