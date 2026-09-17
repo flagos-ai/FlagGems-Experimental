@@ -72,9 +72,39 @@ def _same_values(a, b):
     return torch.equal(a.detach().cpu(), b.detach().cpu())
 
 
+def _values_input(shape, dtype, device, strided=False):
+    """Values tensor of ``shape``/``dtype``, optionally non-contiguous.
+
+    Integer and bool element types cannot be sampled with ``randn`` (there is
+    no normal kernel for them), so they are built on the CPU and moved; the
+    ``strided`` views are transposes (dense non-overlapping), which is the
+    layout the ND kernel is written for.
+    """
+    if dtype in utils.FLOAT_DTYPES:
+        values = torch.randn(shape, dtype=dtype, device=device)
+    elif dtype in utils.INT_DTYPES:
+        values = torch.randint(
+            torch.iinfo(dtype).min,
+            torch.iinfo(dtype).max,
+            shape,
+            dtype=dtype,
+            device="cpu",
+        ).to(device)
+    else:
+        values = torch.randint(0, 2, size=shape, dtype=torch.bool, device="cpu").to(
+            device
+        )
+    if strided:
+        # ``transpose`` covers 3-D+ where ``t()`` (<= 2-D) does not; both
+        # produce the same dense non-overlapping non-contiguous layout.
+        values = values.transpose(0, -1)
+        assert not values.is_contiguous()
+    return values
+
+
 def _make_coo_plain(device, dtype=torch.float32):
     indices = torch.tensor([[0, 1, 1], [1, 0, 1]], dtype=torch.int64, device=device)
-    values = torch.randn(3, dtype=dtype, device=device)
+    values = _values_input((3,), dtype, device)
     return torch.sparse_coo_tensor(indices, values, (2, 3))
 
 
@@ -82,7 +112,7 @@ def _make_coo_hybrid(device, dtype=torch.float32):
     # One sparse dim plus two dense trailing dims: the values tensor carries
     # the dense dims, shape (nnz, 2, 3), contiguous -> flat-kernel path.
     indices = torch.tensor([[0, 1]], dtype=torch.int64, device=device)
-    values = torch.randn(2, 2, 3, dtype=dtype, device=device)
+    values = _values_input((2, 2, 3), dtype, device)
     return torch.sparse_coo_tensor(indices, values, (2, 2, 3))
 
 
@@ -91,8 +121,7 @@ def _make_coo_hybrid_strided(device, dtype=torch.float32):
     # non-overlapping, non-contiguous) buffer. The constructor keeps that
     # layout, so the stored values are strided and take the ND-kernel path.
     indices = torch.tensor([[0, 1, 2]], dtype=torch.int64, device=device)
-    values = torch.randn(4, 3, dtype=dtype, device=device).t()
-    assert not values.is_contiguous()
+    values = _values_input((4, 3), dtype, device, strided=True)
     return torch.sparse_coo_tensor(indices, values, (4, 4))
 
 
@@ -100,7 +129,7 @@ def _make_coo_uncoalesced(device, dtype=torch.float32):
     # Duplicate coordinates: deliberately not coalesced. The stored values are
     # returned raw regardless of coalescing state.
     indices = torch.tensor([[0, 0, 1], [0, 0, 2]], dtype=torch.int64, device=device)
-    values = torch.randn(3, dtype=dtype, device=device)
+    values = _values_input((3,), dtype, device)
     return torch.sparse_coo_tensor(indices, values, (2, 3))
 
 
@@ -124,29 +153,15 @@ if QUICK_MODE:
     ]
 
 # Shapes for the dense (is_sparse=False) branch: a 1-D case, a small 2-D case
-# and a large 4-D case. The last entry is a square, so ``_dense_input``'s
-# transpose is genuinely non-contiguous for the strided variants.
+# and a large 4-D case; the square and cubic entries keep the strided variants
+# genuinely non-contiguous.
 DENSE_SHAPES = [(16,), (8, 8), (16, 128, 64, 60)]
 if QUICK_MODE:
     DENSE_SHAPES = [(8, 8)]
 
 
 def _dense_input(shape, dtype, strided=False):
-    if dtype in utils.FLOAT_DTYPES:
-        inp = torch.randn(shape, dtype=dtype, device=flag_gems.device)
-    elif dtype in utils.INT_DTYPES:
-        inp = torch.randint(
-            torch.iinfo(dtype).min,
-            torch.iinfo(dtype).max,
-            shape,
-            dtype=dtype,
-            device="cpu",
-        ).to(flag_gems.device)
-    else:
-        inp = torch.randint(0, 2, size=shape, dtype=torch.bool, device="cpu").to(
-            flag_gems.device
-        )
-    return inp.t() if strided else inp
+    return _values_input(shape, dtype, flag_gems.device, strided=strided)
 
 
 @pytest.mark._values_copy
@@ -276,12 +291,11 @@ def test_accuracy_values_copy_strided_values():
 @pytest.mark._values_copy
 @pytest.mark.parametrize("shape", [(8, 8), (4, 5, 6)])
 def test_accuracy_values_copy_dense_non_contiguous(shape):
-    # Dense non-contiguous input through the is_sparse=False branch. A square
+    # Dense non-contiguous input through the is_sparse=False branch. A
     # transpose is dense non-overlapping, so ``empty_like`` keeps the strides
     # and the ND kernel's offset map stays inside both buffers.
     inp = _dense_input(shape, torch.float32, strided=True)
     assert not inp.is_contiguous()
-
     ref_out = _reference(utils.to_reference(inp))
     res_out = flag_gems._values_copy(inp)
 
