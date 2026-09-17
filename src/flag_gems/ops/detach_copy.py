@@ -40,9 +40,9 @@ def _detach_copy_strided(
 ):
     # meta layout: for dim i in [0, ndim): meta[2*i] = shape[i], meta[2*i+1] = stride[i]
     pid = tl.program_id(0).to(tl.int64)
-    l = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = l < n_elements
-    idx = l
+    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
+    idx = offsets
     in_off = tl.zeros([BLOCK_SIZE], dtype=tl.int64)
     for k in tl.static_range(ndim):
         i = ndim - 1 - k
@@ -52,7 +52,7 @@ def _detach_copy_strided(
         idx = idx // d
         in_off += c * s
     val = tl.load(x_ptr + in_off, mask=mask)
-    tl.store(out_ptr + l, val, mask=mask)
+    tl.store(out_ptr + offsets, val, mask=mask)
 
 
 def detach_copy(self: torch.Tensor) -> torch.Tensor:
