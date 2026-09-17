@@ -437,10 +437,13 @@ def test_accuracy__empty_per_channel_affine_quantized_device_resolution():
 
 @pytest.mark._empty_per_channel_affine_quantized
 def test_accuracy__empty_per_channel_affine_quantized_unsupported_dtype():
-    # A non-quantized dtype has no kernel for the CUDA backend on this build.
-    # The registrar necessarily also installs the implementation on the plain
-    # device key, and that path must reproduce the native rejection instead of
-    # re-entering itself (which would surface as a RecursionError).
+    # A non-quantized dtype has no kernel for the device backend on this
+    # build. The registrar necessarily also installs the implementation on
+    # the plain device key, and that path must reproduce the native rejection
+    # instead of re-entering itself (which would surface as a RecursionError).
+    # The device key and the CPU key reject with different exception classes
+    # (NotImplementedError vs RuntimeError), so each side is pinned against
+    # its own native behaviour.
     scales, zero_points = _make_qparams(QP_LEN)
     for dtype in (torch.float32, torch.float16, torch.int32, torch.bool, None):
         with pytest.raises(NotImplementedError):
@@ -456,7 +459,11 @@ def test_accuracy__empty_per_channel_affine_quantized_unsupported_dtype():
         ref_scales = utils.to_reference(scales)
         ref_zero_points = utils.to_reference(zero_points)
         expected_dev = "cpu" if cfg.TO_CPU else device
-        with pytest.raises(NotImplementedError):
+        # The CPU kernel validates the quantized dtype up front and raises
+        # RuntimeError; the (absent) device kernel is answered by the
+        # dispatcher with NotImplementedError.
+        expected_error = RuntimeError if cfg.TO_CPU else NotImplementedError
+        with pytest.raises(expected_error):
             torch.ops.aten._empty_per_channel_affine_quantized(
                 [4, 8],
                 scales=ref_scales,
