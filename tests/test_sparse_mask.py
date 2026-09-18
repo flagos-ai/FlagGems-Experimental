@@ -31,15 +31,24 @@ from .conftest import QUICK_MODE
 #     0-nnz empty),
 #   - dtype class of self (float/int/bool).
 if QUICK_MODE:
-    DENSE_SHAPES_2D = [(3, 4)]
     DENSE_SHAPES_ND = [(2, 3, 4)]
-    NNZ_LIST = [4]
 else:
-    DENSE_SHAPES_2D = [(3, 4), (16, 33), (128, 256)]
     DENSE_SHAPES_ND = [(2, 3, 4), (4, 5, 6, 7)]
-    # nnz must fit every parametrized shape (min numel 12): 1 (single entry),
-    # 8 (unsorted within one program), 64 (multi-program over the 512 block).
-    NNZ_LIST = [1, 8, 64]
+
+# (shape, nnz) pairs: nnz levels hit the single-entry case, the within-one-block
+# case (BLOCK2D=512) and the multi-program case (1000 > 512); each nnz fits
+# the paired shape.
+if QUICK_MODE:
+    CASES_2D = [((3, 4), 4)]
+else:
+    CASES_2D = [
+        ((3, 4), 1),
+        ((3, 4), 12),
+        ((16, 33), 8),
+        ((16, 33), 64),
+        ((128, 256), 1000),
+        ((128, 256), 4096),
+    ]
 
 DTYPES = utils.FLOAT_DTYPES + utils.INT_DTYPES + utils.BOOL_TYPES
 
@@ -70,8 +79,7 @@ def _make_coo_mask(shape, nnz, dtype, seed=0, coalesced=False):
 
 
 @pytest.mark.sparse_mask
-@pytest.mark.parametrize("shape", DENSE_SHAPES_2D)
-@pytest.mark.parametrize("nnz", NNZ_LIST)
+@pytest.mark.parametrize("shape,nnz", CASES_2D)
 def test_accuracy_sparse_mask_dense_2d(shape, nnz):
     # Dense 2-D self: exercises the _gather2d_kernel branch (explicit
     # (stride0, stride1) address computation), coalesced and uncoalesced.
