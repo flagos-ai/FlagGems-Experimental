@@ -241,6 +241,7 @@ from .not_equal import not_equal, not_equal_scalar
 from .ones import ones
 from .ones_like import ones_like
 from .pad import constant_pad_nd, pad
+from .pdist_forward import _pdist_forward, pdist_forward
 from .per_token_group_quant_fp8 import SUPPORTED_FP8_DTYPE, per_token_group_quant_fp8
 from .permute_copy import permute_copy
 from .pixel_unshuffle import pixel_unshuffle, pixel_unshuffle_out
@@ -363,6 +364,7 @@ __all__ = [
     "_functional_sym_constrain_range",
     "_functional_sym_constrain_range_for_size",
     "_is_all_true",
+    "_pdist_forward",
     "_jagged_to_padded_dense_forward",
     "_native_batch_norm_legit_no_training",
     "_safe_softmax",
@@ -661,6 +663,7 @@ __all__ = [
     "ones",
     "ones_like",
     "pad",
+    "pdist_forward",
     "per_token_group_quant_fp8",
     "permute_copy",
     "pixel_unshuffle",
