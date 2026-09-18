@@ -22,15 +22,28 @@ device-side data movement, so the operator contract is *which arguments are
 accepted or rejected* and *what the resulting tensor's metadata and aliasing
 are*.
 
-The two overloads and the keys that intercept them, measured per key on this
-build in fresh processes (run log ``coord/sched/logs/sparse_csc_tensor-other-
-a1-156c17bf.log``): plain dense component tensors compute the plain backend
-key (``CUDA``/``CPU``), which the ``_FULL_CONFIG`` device-key registration
-covers; ``SparseCUDA`` / ``SparseCsrCUDA`` / ``BackendSelect`` / ``Autograd``
-/ ``CompositeExplicitAutograd`` all miss, and ``CompositeImplicitAutograd``
-also intercepts (it is the native kernel's own key, reached when the device
-key misses).  No sparse backend key is involved: CSC here is the *output*
-layout, while every input is a plain strided tensor.
+The two overloads and the keys that intercept them, measured with labelled
+raising sentinels per (overload, key) pair (run logs
+``coord/sched/logs/sparse_csc_tensor-other-a1-156c17bf.log`` for the device
+keys, the fresh-process matrix for the composite keys):
+
+========================  ===========================================
+call form                  key that fires
+========================  ===========================================
+``..., device=``           plain device key (``CUDA`` / ``CPU``)
+``..., layout=torch...``   ``CompositeImplicitAutograd``
+``..., layout=None``       plain device key
+(any form)                 the sparse backend keys never fire
+========================  ===========================================
+
+The explicit ``layout=`` argument changes the selected key, so ``_FULL_CONFIG``
+registers **both** the device key and ``CompositeImplicitAutograd`` -- the
+arrangement the accepted ``sparse_csr_tensor`` integration uses.  A
+device-key-only registration would ship an unreachable implementation for
+every layout-qualified call, which is exactly what the routing test now
+covers.  ``SparseCUDA`` / ``SparseCsrCUDA`` / ``BackendSelect`` / ``Autograd``
+/ ``CompositeExplicitAutograd`` all miss: CSC here is the *output* layout,
+while every input is a plain strided tensor.
 
 Delegation, not re-dispatch: each implementation calls the ATen op that
 computes its own result natively, never the overload it implements (which

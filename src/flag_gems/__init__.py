@@ -68,6 +68,17 @@ registrar = GeneralOpRegistrar
 current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
+# sparse_csc_tensor's two overloads are tensor-input constructors whose native
+# kernels live on CompositeImplicitAutograd only. The plain device key serves
+# the layout-less call forms, but an explicit layout= argument selects the
+# composite key instead (measured with sentinels on a fresh process per key:
+# layout= -> CompositeImplicitAutograd, layout=None for every other form ->
+# device key). Both keys are therefore registered, exactly as the accepted
+# sparse_csr_tensor integration does; registering the device key alone would
+# ship an unreachable implementation for every layout-qualified call.
+COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
+    torch._C.DispatchKey.CompositeImplicitAutograd.name
+)
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
 SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 
@@ -1105,8 +1116,32 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
-    ("sparse_csc_tensor.ccol_row_value", sparse_csc_tensor_ccol_row_value),
-    ("sparse_csc_tensor.ccol_row_value_size", sparse_csc_tensor_ccol_row_value_size),
+    # sparse_csc_tensor: two ATen overloads, measured per key with labelled
+    # sentinels in a fresh process per (overload, key) pair. Neither overload
+    # has a backend kernel: they are pure composite constructors. A call that
+    # omits layout= resolves on the plain device key, while an explicit
+    # layout= argument selects CompositeImplicitAutograd -- so both keys carry
+    # the implementation (the accepted sparse_csr_tensor arrangement). The
+    # sparse backend keys (SparseCUDA / SparseCsrCUDA) are dead here: CSC is
+    # the *output* layout and every input is a plain strided tensor.
+    #
+    # The Python builtin torch.sparse_csc_tensor does NOT route through either
+    # overload: its C++ argument parser calls the shared
+    # aten::sparse_compressed_tensor.comp_plain_value[_size] op (owned by the
+    # sparse_compressed_tensor integration). What the tests and the benchmark
+    # exercise is the packet surface registered here.
+    (
+        "sparse_csc_tensor.ccol_row_value",
+        sparse_csc_tensor_ccol_row_value,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_csc_tensor.ccol_row_value_size",
+        sparse_csc_tensor_ccol_row_value_size,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
     (
         "sparse_dim",
         sparse_dim,
