@@ -204,7 +204,10 @@ def cartesian_prod(
     logger.debug("GEMS CARTESIAN_PROD")
     for t in tensors:
         if t.dim() != 1:
-            raise RuntimeError(f"Expect a 1D vector, but got shape {tuple(t.shape)}")
+            # Render the shape the way ATen's IntArrayRef prints it, matching
+            # the native message from TensorShape.cpp / Itertools.cpp.
+            shape_str = "[" + ", ".join(str(int(s)) for s in t.shape) + "]"
+            raise RuntimeError(f"Expect a 1D vector, but got shape {shape_str}")
     if len(tensors) == 1:
         # Native returns the input tensor object itself (verified identity).
         return tensors[0]
