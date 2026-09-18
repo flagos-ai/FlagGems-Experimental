@@ -53,6 +53,37 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.4'
+- id: _make_per_channel_quantized_tensor
+  description: 'Wraps an integer tensor (uint8/int8/int32) into a per-channel affine
+
+    quantized tensor: the values are copied verbatim into the quantized tensor''s
+
+    int representation and scale/zero_point/axis become the per-channel
+
+    quantizer parameters.
+
+    '
+  for:
+  - _make_per_channel_quantized_tensor
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Quantization
+  stages:
+  - alpha: '5.4'
+- id: _make_per_channel_quantized_tensor_out
+  description: A variant of `_make_per_channel_quantized_tensor()` that writes the
+    result into the `out` tensor and returns it.
+  for:
+  - _make_per_channel_quantized_tensor.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Quantization
+  stages:
+  - alpha: '5.4'
 - id: _reshape_alias
   description: 'Creates a view of the input tensor with the given size and stride,
 
