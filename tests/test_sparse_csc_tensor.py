@@ -32,17 +32,19 @@ from .conftest import QUICK_MODE
 #   * all three components are aliased, never copied (data_ptr identity holds
 #     on the result's ccol_indices()/row_indices()/values(), on CPU and CUDA);
 #   * the packet overloads need an explicit `device` for non-CPU components
-#     ("Values and compressed tensor instance need to be on the same device."),
-#     while the python builtin derives it from values.options(); this
-#     implementation resolves device=values.device when none is given, i.e. it
-#     takes the builtin's (more permissive) route;
-#   * the size-inferred overload computes nrows = row_indices.max() + 1 and
-#     ncols = max(ccol_indices.size(-1) - 1, 0);
+#     ("Values and compressed tensor instance need to be on the same device."):
+#     device=None resolves to a CPU instance and the component placement check
+#     rejects CUDA components. Every test therefore passes device= explicitly
+#     on the packet surface (the documented way to call these forms), and the
+#     device-less rejection is pinned in test_sparse_csc_tensor_device_kwarg;
+#   * the size-inferred overload computes [batch..., max(row) + 1,
+#     ccol.size(-1) - 1, dense...] via the native estimator, including its
+#     empty-max convention (all-negative rows infer nrows == 0);
 #   * nnz == 0 infers nrows == 0 unless size is given explicitly;
 #   * the packet overloads do NOT cast -- a dtype/values.dtype mismatch raises
 #     "dtype of values (...) must match dtype of sparse tensor (...)" -- while
-#     the builtin casts with Tensor.to. The implementation casts (the builtin's
-#     behaviour), so every cast assertion below is against the builtin.
+#     the python builtin casts with Tensor.to one level up. The cast grid is
+#     exercised through the builtin; the packet rejection is pinned alongside.
 #
 # The marker name has no leading underscore, so plain ``@pytest.mark.<name>``
 # attribute access works; no manual marker registration is needed.
@@ -184,7 +186,7 @@ def test_sparse_csc_tensor_ccol_row_value_size(nnz, nrows, ncols, seed, index_dt
         ref_ccol, ref_row, ref_values, [nrows, ncols], device=_device_of(ref_ccol)
     )
     res = flag_gems.sparse_csc_tensor_ccol_row_value_size(
-        ccol, row, values, [nrows, ncols]
+        ccol, row, values, [nrows, ncols], device=dev
     )
 
     assert _meta(res) == _meta(ref), f"metadata: {_meta(res)} != {_meta(ref)}"
@@ -209,7 +211,7 @@ def test_sparse_csc_tensor_ccol_row_value_infer(nnz, nrows, ncols, seed):
     ref = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
         ref_ccol, ref_row, ref_values, device=_device_of(ref_ccol)
     )
-    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
+    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
 
     assert _meta(res) == _meta(ref), f"metadata: {_meta(res)} != {_meta(ref)}"
     assert torch.equal(res.ccol_indices().cpu(), ref.ccol_indices().cpu())
@@ -248,7 +250,7 @@ def test_sparse_csc_tensor_values_dtypes(dtype):
         device=_device_of(ref_ccol),
     )
     res = flag_gems.sparse_csc_tensor_ccol_row_value_size(
-        ccol, row, values, [nrows, ncols], dtype=dtype
+        ccol, row, values, [nrows, ncols], dtype=dtype, device=dev
     )
     assert _meta(res) == _meta(ref)
     assert torch.equal(res.values().cpu(), ref.values().cpu())
@@ -260,10 +262,12 @@ def test_sparse_csc_tensor_values_dtypes(dtype):
 @pytest.mark.sparse_csc_tensor
 @pytest.mark.parametrize("src_dtype, dst_dtype", CAST_DTYPES)
 def test_sparse_csc_tensor_dtype_cast_branch(src_dtype, dst_dtype):
-    # The dtype-cast Triton kernel, executed only when dtype != values.dtype.
-    # The reference is the python builtin (which casts with Tensor.to); the
-    # packet would reject the mismatch instead.
-    dev = flag_gems.device
+    # The dtype-cast lives in the python builtin (its C++ parser materialises
+    # the components in the requested dtype before construction); the packet
+    # overloads reject a dtype/values mismatch instead (measured). The cast
+    # grid is therefore exercised through the builtin on both sides, and the
+    # packet's no-cast rejection is pinned on the same inputs.
+    dev = torch.device(str(flag_gems.device))
     ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     if src_dtype == torch.bool:
@@ -276,9 +280,7 @@ def test_sparse_csc_tensor_dtype_cast_branch(src_dtype, dst_dtype):
     ref = torch.sparse_csc_tensor(
         ref_ccol, ref_row, ref_values, (5, 4), dtype=dst_dtype
     )
-    res = flag_gems.sparse_csc_tensor_ccol_row_value_size(
-        ccol, row, values, [5, 4], dtype=dst_dtype
-    )
+    res = torch.sparse_csc_tensor(ccol, row, values, (5, 4), dtype=dst_dtype)
 
     assert _meta(res) == _meta(ref)
     assert res.dtype == dst_dtype
@@ -289,22 +291,42 @@ def test_sparse_csc_tensor_dtype_cast_branch(src_dtype, dst_dtype):
     assert ref.values().data_ptr() != ref_values.data_ptr()
     assert res.ccol_indices().data_ptr() == ccol.data_ptr()
     assert res.row_indices().data_ptr() == row.data_ptr()
+
     # A same-dtype request takes the no-cast path on both sides: alias kept.
+    # (On the packet surface a dtype/values mismatch is rejected, not cast.)
+    if src_dtype != dst_dtype:
+        with pytest.raises(RuntimeError, match="dtype of values"):
+            flag_gems.sparse_csc_tensor_ccol_row_value_size(
+                ccol, row, values, [5, 4], dtype=dst_dtype, device=dev
+            )
     res_same = flag_gems.sparse_csc_tensor_ccol_row_value_size(
-        ccol, row, values, [5, 4], dtype=src_dtype
+        ccol, row, values, [5, 4], dtype=src_dtype, device=dev
     )
-    ref_same = torch.sparse_csc_tensor(
-        ref_ccol, ref_row, ref_values, (5, 4), dtype=src_dtype
+    ref_same = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+        ref_ccol,
+        ref_row,
+        ref_values,
+        [5, 4],
+        dtype=src_dtype,
+        device=_device_of(ref_ccol),
     )
     assert res_same.values().data_ptr() == values.data_ptr()
     assert ref_same.values().data_ptr() == ref_values.data_ptr()
+    assert torch.equal(res_same.values().cpu(), ref_same.values().cpu())
 
 
 @pytest.mark.sparse_csc_tensor
 def test_sparse_csc_tensor_noncontiguous_components():
     # Non-contiguous bottle index components are stored verbatim (aliased
     # views): the constructor never normalizes them.
-    dev = flag_gems.device
+    #
+    # --ref=cpu trap: ``utils.to_reference`` converts each tensor
+    # independently, and ``.to("cpu")`` of a stride-2 CUDA view materializes a
+    # *contiguous* CPU copy, so the reference side built from converted views
+    # would lose the very property under test. The strided views are therefore
+    # built from the already-converted bases, on each side's own device, so
+    # both sides hold genuinely strided components.
+    dev = torch.device(str(flag_gems.device))
     ccol_base = torch.tensor([0, 0, 1, 2, 3], dtype=torch.int64, device=dev)
     ccol = ccol_base[1:]  # contiguous slice: same values, offset storage
     row_base = torch.zeros(8, dtype=torch.int64, device=dev)
@@ -316,11 +338,22 @@ def test_sparse_csc_tensor_noncontiguous_components():
     assert not values.is_contiguous()
     assert not row.is_contiguous()
 
-    ref_ccol, ref_row, ref_values = _ref_components(ccol, row, values)
+    ref_ccol_base, ref_row_base, ref_values_base = _ref_components(
+        ccol_base, row_base, values_base
+    )
+    ref_ccol = ref_ccol_base[1:]
+    ref_row = ref_row_base[::2]
+    ref_row[0], ref_row[1], ref_row[2] = 0, 1, 2
+    ref_values = ref_values_base[::2]
+    ref_values[0], ref_values[1], ref_values[2] = 1.0, 2.0, 3.0
+    assert not ref_values.is_contiguous()
+    assert not ref_row.is_contiguous()
     ref = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
         ref_ccol, ref_row, ref_values, [5, 4], device=_device_of(ref_ccol)
     )
-    res = flag_gems.sparse_csc_tensor_ccol_row_value_size(ccol, row, values, [5, 4])
+    res = flag_gems.sparse_csc_tensor_ccol_row_value_size(
+        ccol, row, values, [5, 4], device=dev
+    )
     assert _meta(res) == _meta(ref)
     assert torch.equal(res.values().cpu(), ref.values().cpu())
     assert torch.equal(res.row_indices().cpu(), ref.row_indices().cpu())
@@ -334,13 +367,15 @@ def test_sparse_csc_tensor_noncontiguous_components():
 
 
 @pytest.mark.sparse_csc_tensor
-def test_sparse_csc_tensor_known_difference_noncontiguous_cast():
-    # Disclosed difference, pinned on both sides: the supplied cast kernel
-    # walks src with flat offsets, so a non-contiguous values tensor is read
-    # as if it were contiguous, whereas Tensor.to (used by the native builtin)
-    # reads through the strides. Both behaviours are pinned so a silent change
-    # on either side is caught.
-    dev = flag_gems.device
+def test_sparse_csc_tensor_dtype_cast_builtin_path():
+    # The dtype cast lives in the python builtin, not in the packet overloads:
+    # the builtin materialises the components in the requested dtype (reading
+    # strided views through their strides) before calling the shared
+    # constructor, while the packet overloads reject a dtype/values mismatch
+    # outright (measured, probe H). Both behaviours are pinned. A cast
+    # materializes fresh values storage, and the indices follow the same
+    # materialisation on the builtin path.
+    dev = torch.device(str(flag_gems.device))
     ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     base = torch.arange(0, 6, device=dev, dtype=torch.float32)
@@ -351,29 +386,54 @@ def test_sparse_csc_tensor_known_difference_noncontiguous_cast():
     ref = torch.sparse_csc_tensor(
         ref_nc, ref_row, ref_nc_v, (5, 4), dtype=torch.float64
     )
-    assert ref.values().tolist() == [0.0, 2.0, 4.0]  # native reads the strides
+    assert ref.values().tolist() == [0.0, 2.0, 4.0]  # the builtin reads strides
     assert ref.values().is_contiguous()
+    assert ref.values().dtype == torch.float64
 
-    res = flag_gems.sparse_csc_tensor_ccol_row_value_size(
-        ccol, row, nc, [5, 4], dtype=torch.float64
-    )
-    # The kernel's flat read of the stride-2 view yields the first three
-    # storage elements: [0, 1, 2].
-    assert res.values().tolist() == [0.0, 1.0, 2.0]
-    assert res.values().dtype == torch.float64
-    assert res.values().is_contiguous()
-    assert _meta(res)[:6] == _meta(ref)[:6]
-    # On a contiguous input the two agree exactly.
+    # The packet form rejects the same request: no cast on that surface.
+    with pytest.raises(RuntimeError, match="dtype of values"):
+        torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+            ref_nc,
+            ref_row,
+            ref_nc_v,
+            [5, 4],
+            dtype=torch.float64,
+            device=_device_of(ref_nc),
+        )
+    with pytest.raises(RuntimeError, match="dtype of values"):
+        flag_gems.sparse_csc_tensor_ccol_row_value_size(
+            ccol, row, nc, [5, 4], dtype=torch.float64, device=dev
+        )
+    # The implementation rejects it with the same native sentence.
+    with pytest.raises(RuntimeError) as res_exc:
+        flag_gems.sparse_csc_tensor_ccol_row_value_size(
+            ccol, row, nc, [5, 4], dtype=torch.float64, device=dev
+        )
+    ref_ccol2, ref_row2, ref_values2 = _ref_components(ccol, row, nc)
+    with pytest.raises(RuntimeError) as ref_exc:
+        torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+            ref_ccol2,
+            ref_row2,
+            ref_values2,
+            [5, 4],
+            dtype=torch.float64,
+            device=_device_of(ref_ccol2),
+        )
+    assert str(res_exc.value) == str(ref_exc.value)
+
+    # On a contiguous input the builtin cast and the implementation's explicit
+    # matching dtype both agree with plain construction.
     contig = base[:3]
     ref_c, ref_row_c, ref_v_c = _ref_components(ccol, row, contig)
-    assert torch.equal(
-        flag_gems.sparse_csc_tensor_ccol_row_value_size(
-            ccol, row, contig, [5, 4], dtype=torch.float64
-        ).values(),
-        torch.sparse_csc_tensor(
-            ref_c, ref_row_c, ref_v_c, (5, 4), dtype=torch.float64
-        ).values(),
+    builtin_cast = torch.sparse_csc_tensor(
+        ref_c, ref_row_c, ref_v_c, (5, 4), dtype=torch.float64
     )
+    no_cast = flag_gems.sparse_csc_tensor_ccol_row_value_size(
+        ccol, row, contig, [5, 4], dtype=torch.float32, device=dev
+    )
+    assert torch.equal(no_cast.values().cpu(), builtin_cast.values().cpu())
+    # dtype=values.dtype is the aliasing path: no new storage.
+    assert no_cast.values().data_ptr() == contig.data_ptr()
 
 
 @pytest.mark.sparse_csc_tensor
@@ -389,7 +449,6 @@ def test_sparse_csc_tensor_inference_plus_one_convention(rows):
     # nrows is max(row) + 1 -- not nnz, not the minimum; holes are kept.
     dev = flag_gems.device
     nnz = len(rows)
-    ncols = max(nnz, 1)
     row = torch.tensor(rows, dtype=torch.int64, device=dev)
     ccol = torch.arange(0, nnz + 1, dtype=torch.int64, device=dev)
     values = torch.randn(nnz, device=dev)
@@ -398,19 +457,20 @@ def test_sparse_csc_tensor_inference_plus_one_convention(rows):
     ref = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
         ref_ccol, ref_row, ref_values, device=_device_of(ref_ccol)
     )
-    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
+    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
     assert tuple(res.shape) == (max(rows) + 1, nnz)
     assert _meta(res) == _meta(ref)
     assert torch.equal(res.values().cpu(), ref.values().cpu())
 
 
 @pytest.mark.sparse_csc_tensor
-def test_sparse_csc_tensor_known_difference_negative_rows():
-    # Disclosed difference, pinned on both sides: the supplied max kernel
-    # pads masked lanes with other=0, so an all-negative row set infers
-    # nrows == max(0, max(row)) + 1 == 1 where native's max() + 1 gives 0.
-    # Reachable only when size is omitted AND every row index is negative.
-    dev = flag_gems.device
+def test_sparse_csc_tensor_inference_negative_rows():
+    # Measured native contract (probe G D1: "[-3,-1] native=(0, 1)"):
+    # all-negative row indices infer nrows == max(row) + 1 == 0, i.e. an
+    # empty row dimension, while the components are still stored verbatim.
+    # The delegation runs the native estimator, so both sides take the same
+    # route; the explicit-size form stores the negative indices as given.
+    dev = torch.device(str(flag_gems.device))
     ccol = torch.tensor([0, 2], dtype=torch.int64, device=dev)
     row = torch.tensor([-3, -1], dtype=torch.int64, device=dev)
     values = torch.randn(2, device=dev)
@@ -421,8 +481,9 @@ def test_sparse_csc_tensor_known_difference_negative_rows():
     )
     assert tuple(ref.shape) == (0, 1)  # native: max(-1) + 1 == 0
 
-    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
-    assert tuple(res.shape) == (1, 1)  # the kernel pads with 0 -> 0 + 1
+    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
+    assert tuple(res.shape) == (0, 1)
+    assert _meta(res) == _meta(ref)
     assert res._nnz() == ref._nnz() == 2
     assert res.row_indices().tolist() == ref.row_indices().tolist() == [-3, -1]
     # With an explicit size both sides agree (native stores negative indices
@@ -430,7 +491,9 @@ def test_sparse_csc_tensor_known_difference_negative_rows():
     ref_e = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
         ref_ccol, ref_row, ref_values, [3, 1], device=_device_of(ref_ccol)
     )
-    res_e = flag_gems.sparse_csc_tensor_ccol_row_value_size(ccol, row, values, [3, 1])
+    res_e = flag_gems.sparse_csc_tensor_ccol_row_value_size(
+        ccol, row, values, [3, 1], device=dev
+    )
     assert _meta(res_e) == _meta(ref_e)
     assert torch.equal(res_e.row_indices().cpu(), ref_e.row_indices().cpu())
 
@@ -448,7 +511,7 @@ def test_sparse_csc_tensor_nnz_zero():
     ref = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
         ref_ccol, ref_row, ref_values, device=_device_of(ref_ccol)
     )
-    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
+    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
     assert tuple(ref.shape) == (0, 3)
     assert _meta(res) == _meta(ref)
     assert res._nnz() == 0
@@ -458,7 +521,9 @@ def test_sparse_csc_tensor_nnz_zero():
     ref_e = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
         ref_ccol, ref_row, ref_values, [7, 3], device=_device_of(ref_ccol)
     )
-    res_e = flag_gems.sparse_csc_tensor_ccol_row_value_size(ccol, row, values, [7, 3])
+    res_e = flag_gems.sparse_csc_tensor_ccol_row_value_size(
+        ccol, row, values, [7, 3], device=dev
+    )
     assert tuple(ref_e.shape) == (7, 3)
     assert _meta(res_e) == _meta(ref_e)
     assert torch.equal(res_e.ccol_indices().cpu(), ref_e.ccol_indices().cpu())
@@ -469,7 +534,9 @@ def test_sparse_csc_tensor_nnz_zero():
     ref0 = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
         ref_cc, ref_r, ref_v, device=_device_of(ref_cc)
     )
-    res0 = flag_gems.sparse_csc_tensor_ccol_row_value(empty_ccol, row, values)
+    res0 = flag_gems.sparse_csc_tensor_ccol_row_value(
+        empty_ccol, row, values, device=dev
+    )
     assert tuple(ref0.shape) == (0, 0)
     assert _meta(res0) == _meta(ref0)
 
@@ -486,7 +553,7 @@ def test_sparse_csc_tensor_single_column_and_row():
     ref = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
         ref_ccol, ref_row, ref_values, device=_device_of(ref_ccol)
     )
-    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
+    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
     assert tuple(res.shape) == (5, 1)
     assert _meta(res) == _meta(ref)
     assert torch.equal(res.values().cpu(), ref.values().cpu())
@@ -498,7 +565,7 @@ def test_sparse_csc_tensor_single_column_and_row():
     ref2 = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
         ref_c2, ref_r2, ref_v2, device=_device_of(ref_c2)
     )
-    res2 = flag_gems.sparse_csc_tensor_ccol_row_value(ccol2, row2, values2)
+    res2 = flag_gems.sparse_csc_tensor_ccol_row_value(ccol2, row2, values2, device=dev)
     assert tuple(res2.shape) == (1, 2)
     assert _meta(res2) == _meta(ref2)
 
@@ -518,7 +585,7 @@ def test_sparse_csc_tensor_dense_dims(dense):
     ref = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
         ref_ccol, ref_row, ref_values, device=_device_of(ref_ccol)
     )
-    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
+    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
     assert res.dense_dim() == len(dense)
     assert tuple(res.shape) == (5, ncols) + tuple(dense)
     assert _meta(res) == _meta(ref)
@@ -530,7 +597,9 @@ def test_sparse_csc_tensor_dense_dims(dense):
     ref_e = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
         ref_ccol, ref_row, ref_values, size, device=_device_of(ref_ccol)
     )
-    res_e = flag_gems.sparse_csc_tensor_ccol_row_value_size(ccol, row, values, size)
+    res_e = flag_gems.sparse_csc_tensor_ccol_row_value_size(
+        ccol, row, values, size, device=dev
+    )
     assert _meta(res_e) == _meta(ref_e)
 
 
@@ -549,7 +618,7 @@ def test_sparse_csc_tensor_batched_matches_native_shape():
     ref = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
         ref_ccol, ref_row, ref_values, device=_device_of(ref_ccol)
     )
-    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
+    res = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
     assert tuple(ref.shape) == (2, 5, 2)
     assert tuple(res.shape) == tuple(ref.shape)
     assert res._nnz() == ref._nnz()
@@ -559,15 +628,16 @@ def test_sparse_csc_tensor_batched_matches_native_shape():
 @pytest.mark.sparse_csc_tensor
 def test_sparse_csc_tensor_matches_reference_table():
     # Reference metadata captured in a process that never imported flag_gems
-    # (native_probe_a.log / native_probe_d.log), pinned as literals so a silent
+    # (native_probe_a.log: explicit meta shape (5, 4), ccol shape (5,),
+    # ccol [0, 1, 2, 3, 3]; inferred (3, 4)), pinned as literals so a silent
     # semantic drift shows up even if the harness changes.
-    dev = flag_gems.device
-    ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
+    dev = torch.device(str(flag_gems.device))
+    ccol = torch.tensor([0, 1, 2, 3, 3], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     values = torch.tensor([3.0, 4.0, 5.0], device=dev)
 
     explicit = flag_gems.sparse_csc_tensor_ccol_row_value_size(
-        ccol, row, values, [5, 4]
+        ccol, row, values, [5, 4], device=dev
     )
     assert tuple(explicit.shape) == (5, 4)
     assert explicit.dtype == torch.float32
@@ -581,29 +651,42 @@ def test_sparse_csc_tensor_matches_reference_table():
     assert explicit.row_indices().dtype == torch.int64
     assert _alias(explicit, ccol, row, values)
 
-    inferred = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
-    assert tuple(inferred.shape) == (3, 3)
+    inferred = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
+    assert tuple(inferred.shape) == (3, 4)
     assert inferred._nnz() == 3
     assert _alias(inferred, ccol, row, values)
 
 
 @pytest.mark.sparse_csc_tensor
 def test_sparse_csc_tensor_public_forms_agree():
-    # The two registered overloads must agree with each other and with the
-    # python builtin on a fully spelled-out call.
-    dev = flag_gems.device
-    ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
+    # The two registered overloads must agree with their own native
+    # counterparts and with the python builtin on a fully spelled-out call.
+    # The two overloads answer different questions by construction (the
+    # inferred shape (3, 4) vs the explicit (5, 4)), so each is compared
+    # against its own native twin, never against each other.
+    dev = torch.device(str(flag_gems.device))
+    ccol = torch.tensor([0, 1, 2, 3, 3], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     values = torch.tensor([3.0, 4.0, 5.0], device=dev)
+    ref_ccol, ref_row, ref_values = _ref_components(ccol, row, values)
 
     builtin = torch.sparse_csc_tensor(ccol, row, values, (5, 4))
     packet = flag_gems.sparse_csc_tensor_ccol_row_value_size(
         ccol, row, values, [5, 4], device=dev
     )
+    ref_packet = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+        ref_ccol, ref_row, ref_values, [5, 4], device=_device_of(ref_ccol)
+    )
     infer = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values, device=dev)
+    ref_infer = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
+        ref_ccol, ref_row, ref_values, device=_device_of(ref_ccol)
+    )
     assert _meta(packet) == _meta(builtin)
+    assert _meta(packet) == _meta(ref_packet)
     assert torch.equal(packet.values().cpu(), builtin.values().cpu())
-    assert _meta(infer) == _meta(packet)
+    assert _meta(infer) == _meta(ref_infer)
+    assert tuple(infer.shape) == tuple(ref_infer.shape) == (3, 4)
+    assert _alias(infer, ccol, row, values)
 
 
 @pytest.mark.sparse_csc_tensor
@@ -632,9 +715,9 @@ def test_sparse_csc_tensor_dispatch_reached():
             ccol_indices, row_indices, values, **kw
         )
 
-    dev = flag_gems.device
+    dev = torch.device(str(flag_gems.device))
     key = flag_gems.runtime.device.dispatch_key
-    assert key == flag_gems.runtime.backend_info.dispatch_key
+    assert key == flag_gems.backend_info.dispatch_key
     ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     values = torch.tensor([3.0, 4.0, 5.0], device=dev)
@@ -656,12 +739,13 @@ def test_sparse_csc_tensor_dispatch_reached():
             )._nnz()
             == 3
         )
-        # Python builtin entry points (the path a user actually takes).
+        # The python builtin does NOT route through these overloads: its C++
+        # argument parser calls the shared composite directly (measured with
+        # sentinels on a clean process), so these two calls must NOT hit.
         assert torch.sparse_csc_tensor(ccol, row, values, (5, 4))._nnz() == 3
         assert torch.sparse_csc_tensor(ccol, row, values)._nnz() == 3
-
-        assert hits.count("size") >= 2, hits
-        assert hits.count("value") >= 2, hits
+        assert hits.count("size") == 1, hits
+        assert hits.count("value") == 1, hits
     finally:
         lib._destroy()
 
@@ -675,20 +759,84 @@ def test_sparse_csc_tensor_dispatch_reached():
     )
     assert (
         flag_gems.sparse_csc_tensor_ccol_row_value_size(
-            ccol, row, values, [5, 4]
+            ccol, row, values, [5, 4], device=dev
         )._nnz()
         == 3
     )
 
 
 @pytest.mark.sparse_csc_tensor
+def test_sparse_csc_tensor_enabled_registration_reaches_the_impl():
+    # End-to-end routing proof on the PRODUCTION registration arrangement:
+    # flag_gems.enable() registers _FULL_CONFIG exactly as a user would
+    # trigger it, then poisoning the delegate the implementation calls proves
+    # the shipped code -- not a native kernel -- executes for every packet
+    # call form. The builtin is not listed: its C++ parser never enters these
+    # overloads (measured), so a poison on the delegate cannot affect it.
+    dev = torch.device(str(flag_gems.device))
+    ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
+    row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
+    values = torch.tensor([3.0, 4.0, 5.0], device=dev)
+    flag_gems.enable()
+
+    original = torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size._op
+
+    def poison(*args, **kwargs):
+        raise RuntimeError("POISON-COMPOSITE")
+
+    forms = [
+        (
+            "size, device",
+            lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+                ccol, row, values, [5, 4], device=dev
+            ),
+        ),
+        (
+            "size, layout+device",
+            lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+                ccol, row, values, [5, 4], layout=torch.sparse_csc, device=dev
+            ),
+        ),
+        (
+            "infer, device",
+            lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value(
+                ccol, row, values, device=dev
+            ),
+        ),
+        (
+            "infer, layout+device",
+            lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value(
+                ccol, row, values, layout=torch.sparse_csc, device=dev
+            ),
+        ),
+    ]
+    try:
+        torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size._op = poison
+        for label, fn in forms:
+            with pytest.raises(RuntimeError, match="POISON-COMPOSITE"):
+                fn()
+    finally:
+        torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size._op = original
+
+    # Health after the poison is removed: the routed path is still correct.
+    res = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+        ccol, row, values, [5, 4], device=dev
+    )
+    assert res._nnz() == 3
+    assert _meta(res) == _meta(
+        flag_gems.sparse_csc_tensor_ccol_row_value_size(
+            ccol, row, values, [5, 4], device=dev
+        )
+    )
+
+
+@pytest.mark.sparse_csc_tensor
 def test_sparse_csc_tensor_repeated_dispatch():
     # Repeated routed calls must be stable: no recursion (the implementation
-    # delegates to _sparse_csc_tensor_unsafe, never to the overload it
-    # implements) and no cross-call state. The inference branch allocates a
-    # fresh scratch buffer per call, so back-to-back inferred calls on
-    # different row sets cannot leak a previous maximum.
-    dev = flag_gems.device
+    # delegates to the shared composite, never to the overload it implements)
+    # and no cross-call state: back-to-back inferred calls on different row
+    # sets must each infer their own maximum.
+    dev = torch.device(str(flag_gems.device))
     ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
     values = torch.tensor([3.0, 4.0, 5.0], device=dev)
     rowsets = [
@@ -702,7 +850,9 @@ def test_sparse_csc_tensor_repeated_dispatch():
                 ccol, row, values, device=dev
             )
             assert tuple(r.shape) == expected
-            r2 = flag_gems.sparse_csc_tensor_ccol_row_value(ccol, row, values)
+            r2 = flag_gems.sparse_csc_tensor_ccol_row_value(
+                ccol, row, values, device=dev
+            )
             assert tuple(r2.shape) == expected
             r3 = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
                 ccol, row, values, [8, 3], device=dev
@@ -715,7 +865,7 @@ def test_sparse_csc_tensor_repeated_dispatch():
         empty_ccol = torch.zeros(1, dtype=torch.int64, device=dev)
         assert tuple(
             flag_gems.sparse_csc_tensor_ccol_row_value(
-                empty_ccol, empty, torch.empty(0, device=dev)
+                empty_ccol, empty, torch.empty(0, device=dev), device=dev
             ).shape
         ) == (0, 0)
 
@@ -736,7 +886,7 @@ def test_sparse_csc_tensor_error_parity():
         (
             "row 2-D (inferred)",
             lambda: flag_gems.sparse_csc_tensor_ccol_row_value(
-                ccol, row.reshape(1, 3), values
+                ccol, row.reshape(1, 3), values, device=dev
             ),
             lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value(
                 ccol, row.reshape(1, 3), values, device=dev
@@ -746,7 +896,10 @@ def test_sparse_csc_tensor_error_parity():
         (
             "ccol 0-dim (inferred)",
             lambda: flag_gems.sparse_csc_tensor_ccol_row_value(
-                torch.tensor(0, dtype=torch.int64, device=dev), row[:1], values[:1]
+                torch.tensor(0, dtype=torch.int64, device=dev),
+                row[:1],
+                values[:1],
+                device=dev,
             ),
             lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value(
                 torch.tensor(0, dtype=torch.int64, device=dev),
@@ -759,7 +912,7 @@ def test_sparse_csc_tensor_error_parity():
         (
             "values 0-dim (inferred)",
             lambda: flag_gems.sparse_csc_tensor_ccol_row_value(
-                ccol, row, torch.tensor(1.0, device=dev)
+                ccol, row, torch.tensor(1.0, device=dev), device=dev
             ),
             lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value(
                 ccol, row, torch.tensor(1.0, device=dev), device=dev
@@ -769,22 +922,12 @@ def test_sparse_csc_tensor_error_parity():
         (
             "float row dtype (inferred)",
             lambda: flag_gems.sparse_csc_tensor_ccol_row_value(
-                ccol, row.to(torch.float32), values
+                ccol, row.to(torch.float32), values, device=dev
             ),
             lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value(
                 ccol, row.to(torch.float32), values, device=dev
             ),
             ["estimate_sparse_compressed_tensor_size", "Float"],
-        ),
-        (
-            "size length mismatch",
-            lambda: flag_gems.sparse_csc_tensor_ccol_row_value_size(
-                ccol, row, values, [5, 4, 2], device=dev
-            ),
-            lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
-                ccol, row, values, [5, 4, 2], device=dev
-            ),
-            ["dimensionality"],
         ),
         (
             "layout csr rejected",
@@ -795,6 +938,16 @@ def test_sparse_csc_tensor_error_parity():
                 ccol, row, values, [5, 4], layout=torch.sparse_csr, device=dev
             ),
             ["SparseCsc", "SparseCsr"],
+        ),
+        (
+            "dtype mismatch rejected (packet has no cast)",
+            lambda: flag_gems.sparse_csc_tensor_ccol_row_value_size(
+                ccol, row, values, [5, 4], dtype=torch.float64, device=dev
+            ),
+            lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+                ccol, row, values, [5, 4], dtype=torch.float64, device=dev
+            ),
+            ["dtype of values", "Float", "Double"],
         ),
     ]
 
@@ -828,7 +981,7 @@ def test_sparse_csc_tensor_layout_kwarg_behavior():
     pairs = [
         (
             lambda kw: flag_gems.sparse_csc_tensor_ccol_row_value_size(
-                ccol, row, values, [5, 4], **kw
+                ccol, row, values, [5, 4], device=dev, **kw
             ),
             lambda kw: torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
                 ref_ccol, ref_row, ref_values, [5, 4], device=_device_of(ref_ccol), **kw
@@ -836,7 +989,7 @@ def test_sparse_csc_tensor_layout_kwarg_behavior():
         ),
         (
             lambda kw: flag_gems.sparse_csc_tensor_ccol_row_value(
-                ccol, row, values, **kw
+                ccol, row, values, device=dev, **kw
             ),
             lambda kw: torch.ops.aten.sparse_csc_tensor.ccol_row_value(
                 ref_ccol, ref_row, ref_values, device=_device_of(ref_ccol), **kw
@@ -862,7 +1015,7 @@ def test_sparse_csc_tensor_device_kwarg():
     # plain string both work; on CPU components the packet accepts the call
     # without any device, and a cross-device request is rejected by the alias
     # check inside the unsafe constructor, exactly as native.
-    dev = flag_gems.device
+    dev = torch.device(str(flag_gems.device))
     ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     values = torch.tensor([3.0, 4.0, 5.0], device=dev)
@@ -877,21 +1030,24 @@ def test_sparse_csc_tensor_device_kwarg():
         )
         assert _meta(res) == _meta(ref)
 
-    # This implementation resolves a missing device from values (the builtin's
-    # route), so an omitted device works for non-CPU components too.
-    implicit = flag_gems.sparse_csc_tensor_ccol_row_value_size(
-        ccol, row, values, [5, 4]
-    )
-    assert implicit.device == values.device
-    assert _alias(implicit, ccol, row, values)
-
+    # With device omitted the shared constructor's own resolution applies: a
+    # device-less call with CUDA components is rejected by native ("Values and
+    # compressed tensor instance need to be on the same device."), measured in
+    # probe G. The implementation forwards device=None untouched, so it takes
+    # the native route; on CPU components the same call succeeds.
+    with pytest.raises(RuntimeError, match="same device"):
+        flag_gems.sparse_csc_tensor_ccol_row_value_size(ccol, row, values, [5, 4])
     cpu_ccol, cpu_row, cpu_values = ccol.cpu(), row.cpu(), values.cpu()
-    assert (
-        flag_gems.sparse_csc_tensor_ccol_row_value_size(
-            cpu_ccol, cpu_row, cpu_values, [5, 4]
-        ).device.type
-        == "cpu"
+    implicit = flag_gems.sparse_csc_tensor_ccol_row_value_size(
+        cpu_ccol, cpu_row, cpu_values, [5, 4]
     )
+    assert implicit.device.type == "cpu"
+    ref_implicit = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+        cpu_ccol, cpu_row, cpu_values, [5, 4]
+    )
+    assert _meta(implicit) == _meta(ref_implicit)
+    assert _alias(implicit, cpu_ccol, cpu_row, cpu_values)
+
     if dev.type == "cuda":
         # The components cannot move (they are aliased), so asking for the
         # other device fails on both sides.
