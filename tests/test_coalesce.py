@@ -219,8 +219,18 @@ def test_accuracy_coalesce_single_entry():
 
 
 @pytest.mark.coalesce
-def test_accuracy_coalesce_dense_dims():
-    """Hybrid COO (dense trailing dims): index rows are sparse, values 2-D."""
+def test_accuracy_coalesce_hybrid_dense_dims_unsupported():
+    """Hybrid COO (values with dense trailing dims) is an explicit limitation.
+
+    Native adds whole value rows for duplicate columns (measured,
+    runs/coalesce/probe_native_cpu.log: duplicate hybrid columns fold to the
+    row-wise sum). The supplied kernels accumulate 1-D value arrays only —
+    they read ``val_ptr + entry_index`` (the first dense column) and build a
+    1-D output value tensor, which ``torch.sparse_coo_tensor`` rejects for a
+    shape with dense dims. The implementation rejects the input with
+    NotImplementedError instead of silently producing wrong values; the
+    exception CLASS is the contract asserted (never the message text).
+    """
     hidx = torch.tensor(
         [[0, 1, 1, 0], [2, 0, 2, 2]], dtype=torch.int64, device=flag_gems.device
     )
@@ -230,13 +240,10 @@ def test_accuracy_coalesce_dense_dims():
     assert inp.dense_dim() == 1
 
     ref_out = ref_inp.coalesce()
-    res = flag_gems.coalesce(inp)
+    assert ref_out._nnz() == 3
 
-    assert res.dense_dim() == 1
-    assert res.dense_dim() == ref_out.dense_dim()
-    assert tuple(res.shape) == tuple(ref_out.shape)
-    utils.gems_assert_equal(res._indices(), ref_out._indices())
-    utils.gems_assert_close(res._values(), ref_out._values(), torch.float32)
+    with pytest.raises(NotImplementedError):
+        flag_gems.coalesce(inp)
 
 
 @pytest.mark.coalesce

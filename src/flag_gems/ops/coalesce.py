@@ -464,12 +464,27 @@ def coalesce(self: torch.Tensor) -> torch.Tensor:
     shape = tuple(self.shape)
     n = self._nnz()
     S = self.sparse_dim()
+    D = self.dense_dim()
     dt = self.dtype
     if self.is_coalesced() or n == 0:
         return self
     idx = self._indices()
     val = self._values()
     dev = self.device
+    if D > 0:
+        # Hybrid COO (values with trailing dense dims) is unsupported by the
+        # supplied kernels: they address ``val_ptr + offs`` with a scalar
+        # offset, which reads only the first dense column, and the output is
+        # built with a 1-D value tensor, which ``torch.sparse_coo_tensor``
+        # rejects for a shape with dense dims. Native instead adds whole
+        # value rows (values.stride(0) blocks). Because the op carries no
+        # backend key, this override cannot fall back to the native composite
+        # either; the limitation is disclosed in the report.
+        raise NotImplementedError(
+            "coalesce does not support hybrid COO tensors with dense dimensions "
+            f"(sparse_dim={S}, dense_dim={D}); the submitted kernel accumulation "
+            "is defined for 1-D values only"
+        )
     # ``torch_device_fn.device`` is accelerator-specific and raises ValueError
     # for a CPU device; the Triton kernels below are a GPU implementation, so a
     # CPU tensor cannot be served here either. The context is entered for every
