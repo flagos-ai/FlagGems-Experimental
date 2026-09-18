@@ -201,6 +201,31 @@ def _assert_same(res, ref):
     ), f"fingerprint mismatch:\n  gems={_fingerprint(res)}\n  ref ={_fingerprint(ref)}"
 
 
+# The packet overloads do NOT derive the device from the components: measured on
+# this build, a call whose tensors live on a non-default device and which omits
+# ``device=`` raises "Values and compressed tensor instance need to be on the
+# same device". Every test therefore passes the device explicitly on both sides
+# (that is the documented way to call the packet forms); the rejection itself is
+# pinned separately in test_sparse_bsc_tensor_null_device_rejected_off_default.
+def _ref_call(overload, ccol, row, values, *rest, **kwargs):
+    """Reference constructor call, device-qualified for the reference device.
+
+    ``utils.to_reference`` converts each argument to the reference device
+    independently, so the reference device is read back from the converted
+    values tensor and handed to the constructor explicitly -- the packet
+    overloads reject a mismatching (or missing) device.
+    """
+    ref_values = utils.to_reference(values)
+    return overload(
+        utils.to_reference(ccol),
+        utils.to_reference(row),
+        ref_values,
+        *([list(rest[0])] if rest else []),
+        device=ref_values.device,
+        **kwargs,
+    )
+
+
 def _dense_sum(t):
     """Sum of the dense expansion, computed portably on the CPU."""
     return float(t.to_dense().to("cpu").sum())
@@ -246,13 +271,10 @@ def test_sparse_bsc_tensor_ccol_row_value_size(
     ccol, row, values = _bsc_components(
         size, (block_rows, block_cols), nnz, seed, dev, index_dtype=index_dtype
     )
-    ref = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        list(size),
+    ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, size)
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+        ccol, row, values, list(size), device=dev
     )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values, list(size))
 
     _assert_same(res, ref)
     # The constructed tensor lives on the components' device (the reference runs
@@ -273,10 +295,8 @@ def test_sparse_bsc_tensor_ccol_row_value_infer(
     # compared against native rather than against a re-derivation.
     dev = flag_gems.device
     ccol, row, values = _bsc_components(size, (block_rows, block_cols), nnz, seed, dev)
-    ref = _ROW_VALUE(
-        utils.to_reference(ccol), utils.to_reference(row), utils.to_reference(values)
-    )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    ref = _ref_call(_ROW_VALUE, ccol, row, values)
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values, device=dev)
 
     # The inferred extents are max(row_indices) + 1 row-blocks and
     # (len(ccol_indices) - 1) column-blocks, each times the stored block shape.
@@ -325,32 +345,36 @@ def test_sparse_bsc_tensor_components_are_aliased_not_copied():
     dev = flag_gems.device
     ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 11, dev)
 
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values, [4, 4])
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+        ccol, row, values, [4, 4], device=dev
+    )
     assert res.ccol_indices().data_ptr() == ccol.data_ptr()
     assert res.row_indices().data_ptr() == row.data_ptr()
     assert res.values().data_ptr() == values.data_ptr()
 
-    # The same aliasing contract holds on the reference device. The reference
-    # pair is built by converting the components ONCE (``to_reference``), so the
-    # relationship survives the --ref=cpu phase: converting the (already
-    # CPU-converted) handle separately would break the identity for reasons that
-    # have nothing to do with the operator.
-    ref_ccol = utils.to_reference(ccol)
-    ref_row = utils.to_reference(row)
-    ref_values = utils.to_reference(values)
-    ref_constructed = _ROW_VALUE_SIZE(ref_ccol, ref_row, ref_values, [4, 4])
+    # The reference side gets its OWN components, cloned after conversion, so
+    # the two constructions never share a handle: this keeps the test honest in
+    # both phases (under --ref=cpu ``to_reference`` returns a different tensor
+    # than on the GPU phase, and mutating one side must not touch the other).
+    ref_ccol = utils.to_reference(ccol).clone()
+    ref_row = utils.to_reference(row).clone()
+    ref_values = utils.to_reference(values).clone()
+    ref_constructed = _ROW_VALUE_SIZE(
+        ref_ccol, ref_row, ref_values, [4, 4], device=ref_values.device
+    )
     assert ref_constructed.ccol_indices().data_ptr() == ref_ccol.data_ptr()
     assert ref_constructed.row_indices().data_ptr() == ref_row.data_ptr()
     assert ref_constructed.values().data_ptr() == ref_values.data_ptr()
 
-    # A write through the caller's handle is visible on both constructed
-    # tensors, which is the observable form of the alias (data_ptr equality of
-    # two separately-converted tensors is not a portable cross-phase assertion).
+    # A write through the caller's handle is visible on the constructed tensor:
+    # that is the observable form of the alias, and it is what the reference
+    # does as well.
     before = res.values().clone()
     ref_before = ref_values.clone()
     values.add_(1.0)
     ref_values.add_(1.0)
     assert torch.equal(res.values().cpu(), values.cpu())
+    assert torch.equal(ref_constructed.values().cpu(), ref_values.cpu())
     assert torch.equal(ref_values.cpu(), ref_before.cpu() + 1.0)
     assert not torch.equal(res.values().cpu(), before.cpu())
 
@@ -370,23 +394,18 @@ def test_sparse_bsc_tensor_zero_nnz():
     row = torch.empty(0, dtype=torch.int64, device=dev)
     values = torch.empty((0, 2, 2), device=dev)
 
-    ref = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        [4, 4],
+    ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, [4, 4])
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+        ccol, row, values, [4, 4], device=dev
     )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values, [4, 4])
     _assert_same(res, ref)
     assert res._nnz() == 0
     assert res.ccol_indices().numel() == 3
     assert res.row_indices().numel() == 0
     assert res.to_dense().abs().sum().item() == 0.0
 
-    ref_i = _ROW_VALUE(
-        utils.to_reference(ccol), utils.to_reference(row), utils.to_reference(values)
-    )
-    res_i = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    ref_i = _ref_call(_ROW_VALUE, ccol, row, values)
+    res_i = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values, device=dev)
     _assert_same(res_i, ref_i)
     assert res_i._nnz() == 0
 
@@ -399,13 +418,10 @@ def test_sparse_bsc_tensor_single_block():
     row = torch.tensor([0], dtype=torch.int64, device=dev)
     values = torch.arange(4, dtype=torch.float32, device=dev).reshape(1, 2, 2)
 
-    ref = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        [2, 2],
+    ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, [2, 2])
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+        ccol, row, values, [2, 2], device=dev
     )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values, [2, 2])
     _assert_same(res, ref)
     assert tuple(res.shape) == (2, 2)
     assert res._nnz() == 1
@@ -422,15 +438,9 @@ def test_sparse_bsc_tensor_values_dtype(dtype):
     dev = flag_gems.device
     ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 12, dev)
     values = values.to(dtype)
-    ref = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        [4, 4],
-        dtype=dtype,
-    )
+    ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, [4, 4], dtype=dtype)
     res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-        ccol, row, values, [4, 4], dtype=dtype
+        ccol, row, values, [4, 4], dtype=dtype, device=dev
     )
     _assert_same(res, ref)
     assert res.dtype == dtype
@@ -451,15 +461,9 @@ def test_sparse_bsc_tensor_small_index_and_value_dtypes(value_dtype):
     row = torch.tensor([0, 1], dtype=torch.int16, device=dev)
     values = torch.arange(8, dtype=torch.float32, device=dev).reshape(2, 2, 2)
     values = values.to(value_dtype)
-    ref = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        [4, 4],
-        dtype=value_dtype,
-    )
+    ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, [4, 4], dtype=value_dtype)
     res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-        ccol, row, values, [4, 4], dtype=value_dtype
+        ccol, row, values, [4, 4], dtype=value_dtype, device=dev
     )
     _assert_same(res, ref)
     assert res.values().dtype == value_dtype
@@ -478,7 +482,9 @@ def test_sparse_bsc_tensor_index_dtype_is_preserved():
         ccol, row, values = _bsc_components(
             (4, 4), (2, 2), 2, 13, dev, index_dtype=index_dtype
         )
-        res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values, [4, 4])
+        res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+            ccol, row, values, [4, 4], device=dev
+        )
         assert res.ccol_indices().dtype == index_dtype
         assert res.row_indices().dtype == index_dtype
         assert torch.equal(res.ccol_indices().cpu(), ccol.cpu())
@@ -500,31 +506,30 @@ def test_sparse_bsc_tensor_dtype_none_is_default_dtype():
         torch.set_default_dtype(torch.float32)
         assert (
             flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-                ccol, row, values32, [4, 4]
+                ccol, row, values32, [4, 4], device=dev
             ).dtype
             == torch.float32
         )
         with pytest.raises(RuntimeError, match="dtype of values"):
-            flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values64, [4, 4])
+            flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+                ccol, row, values64, [4, 4], device=dev
+            )
 
         torch.set_default_dtype(torch.float64)
         assert (
             flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-                ccol, row, values64, [4, 4]
+                ccol, row, values64, [4, 4], device=dev
             ).dtype
             == torch.float64
         )
         with pytest.raises(RuntimeError, match="dtype of values"):
-            flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values32, [4, 4])
+            flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+                ccol, row, values32, [4, 4], device=dev
+            )
 
         # The reference overload agrees in both regimes.
         with pytest.raises(RuntimeError, match="dtype of values"):
-            _ROW_VALUE_SIZE(
-                utils.to_reference(ccol),
-                utils.to_reference(row),
-                utils.to_reference(values32),
-                [4, 4],
-            )
+            _ref_call(_ROW_VALUE_SIZE, ccol, row, values32, [4, 4])
     finally:
         torch.set_default_dtype(previous)
 
@@ -549,16 +554,10 @@ def test_sparse_bsc_tensor_values_dtype_mismatch_is_rejected_not_cast():
         v = values.to(value_dtype)
         with pytest.raises(RuntimeError) as res_exc:
             flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-                ccol, row, v, [4, 4], dtype=tensor_dtype
+                ccol, row, v, [4, 4], dtype=tensor_dtype, device=dev
             )
         with pytest.raises(RuntimeError) as ref_exc:
-            _ROW_VALUE_SIZE(
-                utils.to_reference(ccol),
-                utils.to_reference(row),
-                utils.to_reference(v),
-                [4, 4],
-                dtype=tensor_dtype,
-            )
+            _ref_call(_ROW_VALUE_SIZE, ccol, row, v, [4, 4], dtype=tensor_dtype)
         assert str(res_exc.value) == str(ref_exc.value), (
             f"{value_dtype} values with dtype={tensor_dtype}: "
             f"gems={res_exc.value!r} ref={ref_exc.value!r}"
@@ -593,6 +592,22 @@ def test_sparse_bsc_tensor_null_device_rejected_on_cuda():
     assert "same device" in str(ref_exc.value)
     assert str(res_exc.value) == str(ref_exc.value)
 
+    # The inference overload behaves identically.
+    with pytest.raises(RuntimeError, match="same device"):
+        flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    with pytest.raises(RuntimeError, match="same device"):
+        _ROW_VALUE(ccol, row, values)
+
+    # torch.set_default_device does not rescue the call either: the constructor
+    # never falls back to a default device.
+    previous = torch.get_default_device()
+    try:
+        torch.set_default_device(dev)
+        with pytest.raises(RuntimeError, match="same device"):
+            flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values, [4, 4])
+    finally:
+        torch.set_default_device(previous)
+
 
 @pytest.mark.sparse_bsc_tensor
 def test_sparse_bsc_tensor_device_kwarg_is_honoured():
@@ -600,13 +615,7 @@ def test_sparse_bsc_tensor_device_kwarg_is_honoured():
     # device, which is the documented way to use the packet overload.
     dev = flag_gems.device
     ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 17, dev)
-    ref = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        [4, 4],
-        device=utils.to_reference(values).device,
-    )
+    ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, [4, 4])
     res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
         ccol, row, values, [4, 4], device=dev
     )
@@ -627,14 +636,9 @@ def test_sparse_bsc_tensor_size_not_multiple_of_block():
     dev = flag_gems.device
     ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 18, dev)
     for bad_size in ([5, 4], [4, 5], [5, 5], [1, 1]):
-        ref = _ROW_VALUE_SIZE(
-            utils.to_reference(ccol),
-            utils.to_reference(row),
-            utils.to_reference(values),
-            list(bad_size),
-        )
+        ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, bad_size)
         res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-            ccol, row, values, list(bad_size)
+            ccol, row, values, list(bad_size), device=dev
         )
         _assert_same(res, ref)
         assert tuple(res.shape) == tuple(bad_size)
@@ -681,10 +685,10 @@ def test_sparse_bsc_tensor_invalid_structures_accepted_without_invariants():
         ),
     ]
     for label, c, r, v in structures:
-        ref = _ROW_VALUE_SIZE(
-            utils.to_reference(c), utils.to_reference(r), utils.to_reference(v), [4, 4]
+        ref = _ref_call(_ROW_VALUE_SIZE, c, r, v, [4, 4])
+        res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+            c, r, v, [4, 4], device=dev
         )
-        res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(c, r, v, [4, 4])
         _assert_same(res, ref)
         assert torch.equal(res.ccol_indices().cpu(), ref.ccol_indices().cpu())
         assert torch.equal(res.row_indices().cpu(), ref.row_indices().cpu())
@@ -766,15 +770,9 @@ def test_sparse_bsc_tensor_layout_argument():
     dev = flag_gems.device
     ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 21, dev)
 
-    ref = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        [4, 4],
-        layout=torch.sparse_bsc,
-    )
+    ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, [4, 4], layout=torch.sparse_bsc)
     res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-        ccol, row, values, [4, 4], layout=torch.sparse_bsc
+        ccol, row, values, [4, 4], layout=torch.sparse_bsc, device=dev
     )
     _assert_same(res, ref)
 
@@ -787,16 +785,10 @@ def test_sparse_bsc_tensor_layout_argument():
     ):
         with pytest.raises(RuntimeError) as res_exc:
             flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-                ccol, row, values, [4, 4], layout=layout
+                ccol, row, values, [4, 4], layout=layout, device=dev
             )
         with pytest.raises(RuntimeError) as ref_exc:
-            _ROW_VALUE_SIZE(
-                utils.to_reference(ccol),
-                utils.to_reference(row),
-                utils.to_reference(values),
-                [4, 4],
-                layout=layout,
-            )
+            _ref_call(_ROW_VALUE_SIZE, ccol, row, values, [4, 4], layout=layout)
         assert str(res_exc.value) == str(
             ref_exc.value
         ), f"layout={layout}: gems={res_exc.value!r} ref={ref_exc.value!r}"
@@ -806,15 +798,10 @@ def test_sparse_bsc_tensor_layout_argument():
     # The inference overload carries the same guard.
     with pytest.raises(RuntimeError, match="sparse bsc layout must be"):
         flag_gems.sparse_bsc_tensor_ccol_row_value(
-            ccol, row, values, layout=torch.sparse_csr
+            ccol, row, values, layout=torch.sparse_csr, device=dev
         )
     with pytest.raises(RuntimeError, match="sparse bsc layout must be"):
-        _ROW_VALUE(
-            utils.to_reference(ccol),
-            utils.to_reference(row),
-            utils.to_reference(values),
-            layout=torch.sparse_csr,
-        )
+        _ref_call(_ROW_VALUE, ccol, row, values, layout=torch.sparse_csr)
 
 
 @pytest.mark.sparse_bsc_tensor
@@ -829,23 +816,19 @@ def test_sparse_bsc_tensor_inference_estimator_errors():
     cases = [
         (
             "row dim mismatch",
-            lambda i, v: flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, i, values),
-            lambda i, v: _ROW_VALUE(
-                utils.to_reference(ccol),
-                utils.to_reference(i),
-                utils.to_reference(values),
+            lambda i, v: flag_gems.sparse_bsc_tensor_ccol_row_value(
+                ccol, i, values, device=dev
             ),
+            lambda i, v: _ref_call(_ROW_VALUE, ccol, i, values),
             row.unsqueeze(0),
             ["dimensionalities must be equal", "1", "2"],
         ),
         (
             "values too few dims",
-            lambda i, v: flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, v),
-            lambda i, v: _ROW_VALUE(
-                utils.to_reference(ccol),
-                utils.to_reference(row),
-                utils.to_reference(v),
+            lambda i, v: flag_gems.sparse_bsc_tensor_ccol_row_value(
+                ccol, row, v, device=dev
             ),
+            lambda i, v: _ref_call(_ROW_VALUE, ccol, row, v),
             values[0, 0],
             ["values must have dimensionality"],
         ),
@@ -867,13 +850,11 @@ def test_sparse_bsc_tensor_inference_estimator_errors():
     # The class and the operator name are pinned; the dtype spelling comes from
     # a macro and differs in quoting between builds, so it is matched loosely.
     with pytest.raises(RuntimeError) as res_exc:
-        flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row.to(torch.float32), values)
-    with pytest.raises(RuntimeError) as ref_exc:
-        _ROW_VALUE(
-            utils.to_reference(ccol),
-            utils.to_reference(row).to(torch.float32),
-            utils.to_reference(values),
+        flag_gems.sparse_bsc_tensor_ccol_row_value(
+            ccol, row.to(torch.float32), values, device=dev
         )
+    with pytest.raises(RuntimeError) as ref_exc:
+        _ref_call(_ROW_VALUE, ccol, row.to(torch.float32), values)
     assert type(res_exc.value) is type(ref_exc.value)
     assert "estimate_sparse_compressed_tensor_size" in str(res_exc.value)
     assert "estimate_sparse_compressed_tensor_size" in str(ref_exc.value)
@@ -887,10 +868,8 @@ def test_sparse_bsc_tensor_inference_zero_nnz_and_sparse_grid():
     ccol = torch.zeros(4, dtype=torch.int64, device=dev)
     row = torch.empty(0, dtype=torch.int64, device=dev)
     values = torch.empty((0, 2, 2), device=dev)
-    ref = _ROW_VALUE(
-        utils.to_reference(ccol), utils.to_reference(row), utils.to_reference(values)
-    )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    ref = _ref_call(_ROW_VALUE, ccol, row, values)
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values, device=dev)
     _assert_same(res, ref)
     assert tuple(res.shape) == tuple(ref.shape)
     assert res._nnz() == 0
@@ -900,10 +879,8 @@ def test_sparse_bsc_tensor_inference_zero_nnz_and_sparse_grid():
     ccol2 = torch.tensor([0, 1, 1], dtype=torch.int64, device=dev)
     row2 = torch.tensor([0], dtype=torch.int64, device=dev)
     values2 = torch.randn((1, 2, 3), device=dev)
-    ref2 = _ROW_VALUE(
-        utils.to_reference(ccol2), utils.to_reference(row2), utils.to_reference(values2)
-    )
-    res2 = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol2, row2, values2)
+    ref2 = _ref_call(_ROW_VALUE, ccol2, row2, values2)
+    res2 = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol2, row2, values2, device=dev)
     _assert_same(res2, ref2)
     assert tuple(res2.shape) == (2, 3)
     assert tuple(res2.values().shape[-2:]) == (2, 3)
@@ -916,12 +893,8 @@ def test_sparse_bsc_tensor_estimator_dtype_gate():
     # compressed dimension comes from the ccol length rather than a reduction.
     dev = flag_gems.device
     ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 23, dev)
-    ref = _ROW_VALUE(
-        utils.to_reference((ccol > 0)),
-        utils.to_reference(row),
-        utils.to_reference(values),
-    )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol > 0, row, values)
+    ref = _ref_call(_ROW_VALUE, ccol > 0, row, values)
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol > 0, row, values, device=dev)
     _assert_same(res, ref)
 
 
@@ -935,10 +908,8 @@ def test_sparse_bsc_tensor_zero_dim_batch_inference():
     ccol = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1], dtype=torch.int64, device=dev)
     values = torch.randn((2, 2, 2), device=dev)
-    ref = _ROW_VALUE(
-        utils.to_reference(ccol), utils.to_reference(row), utils.to_reference(values)
-    )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    ref = _ref_call(_ROW_VALUE, ccol, row, values)
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values, device=dev)
     _assert_same(res, ref)
     assert res.dense_dim() == 0
 
@@ -952,13 +923,10 @@ def test_sparse_bsc_tensor_dense_dimension():
     row = torch.tensor([0, 1], dtype=torch.int64, device=dev)
     values = torch.randn((2, 2, 2, 3), device=dev)
     size = [4, 4, 3]
-    ref = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        size,
+    ref = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, size)
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+        ccol, row, values, size, device=dev
     )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value_size(ccol, row, values, size)
     _assert_same(res, ref)
     assert res.dense_dim() == 1
     assert res.values().shape == (2, 2, 2, 3)
@@ -974,10 +942,8 @@ def test_sparse_bsc_tensor_batched():
     ccol = torch.tensor([[0, 1], [0, 1], [0, 0]], dtype=torch.int64, device=dev)
     row = torch.tensor([[0], [0], [0]], dtype=torch.int64, device=dev)
     values = torch.randn((3, 1, 2, 2), device=dev)
-    ref = _ROW_VALUE(
-        utils.to_reference(ccol), utils.to_reference(row), utils.to_reference(values)
-    )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    ref = _ref_call(_ROW_VALUE, ccol, row, values)
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values, device=dev)
     _assert_same(res, ref)
     assert res.sparse_dim() == 2
     assert tuple(res.ccol_indices().shape) == tuple(ref.ccol_indices().shape)
@@ -991,14 +957,9 @@ def test_sparse_bsc_tensor_batched():
     # extent (from the first slot's block) collapses to a zero-size row grid
     # only when no slot stores anything at all.
     explicit = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-        ccol, row, values, [3, 4, 4]
+        ccol, row, values, [3, 4, 4], device=dev
     )
-    ref_explicit = _ROW_VALUE_SIZE(
-        utils.to_reference(ccol),
-        utils.to_reference(row),
-        utils.to_reference(values),
-        [3, 4, 4],
-    )
+    ref_explicit = _ref_call(_ROW_VALUE_SIZE, ccol, row, values, [3, 4, 4])
     _assert_same(explicit, ref_explicit)
     assert tuple(explicit.shape) == (3, 4, 4)
     assert explicit.sparse_dim() == 2
@@ -1013,10 +974,8 @@ def test_sparse_bsc_tensor_batched_multiple_batch_slots():
     ccol = torch.tensor([[0, 1], [0, 1]], dtype=torch.int64, device=dev)
     row = torch.tensor([[0], [1]], dtype=torch.int64, device=dev)
     values = torch.randn((2, 1, 2, 2), device=dev)
-    ref = _ROW_VALUE(
-        utils.to_reference(ccol), utils.to_reference(row), utils.to_reference(values)
-    )
-    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    ref = _ref_call(_ROW_VALUE, ccol, row, values)
+    res = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values, device=dev)
     _assert_same(res, ref)
     assert tuple(res.shape) == (2, 4, 2)
     assert res._nnz() == 1
