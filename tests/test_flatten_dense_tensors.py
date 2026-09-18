@@ -381,40 +381,44 @@ def test_accuracy_flatten_dense_tensors_metadata_path(count, size):
 # skipped in the quick phase because it needs ~16 GiB of inputs plus the
 # equally large output and reference.
 BOUNDARY_TOTAL = (1 << 32) - 4
-WAVE = [
-    BOUNDARY_TOTAL // 4,
-    BOUNDARY_TOTAL // 4 + 1,
-    BOUNDARY_TOTAL // 4 + 1,
-    BOUNDARY_TOTAL // 4 + 2,
-]
+WAVE = [BOUNDARY_TOTAL // 4] + [BOUNDARY_TOTAL // 4 + 1] * 3
+assert sum(WAVE) == BOUNDARY_TOTAL
 
 
 @pytest.mark.flatten_dense_tensors
 @pytest.mark.skipif(
-    cfg.QUICK_MODE, reason="needs ~16 GiB of inputs plus the output/reference"
+    cfg.QUICK_MODE,
+    reason="needs ~16 GiB of inputs plus the equally large output and reference",
 )
 def test_accuracy_flatten_dense_tensors_over_32bit_offsets():
     dtype = torch.float32
-    assert sum(WAVE) == BOUNDARY_TOTAL
     tensors = [
         torch.zeros((size,), dtype=dtype, device=flag_gems.device) for size in WAVE
     ]
-    # identify each wave with two markers and check the two tensors that begin
-    # before / after the 2**32 element boundary
+    # Two markers per wave: the first wave starts before the 2**32 element
+    # offset of the later waves, so a 32-bit offset field would corrupt them.
     for i, tensor in enumerate(tensors):
         tensor[0] = float(i + 1)
         tensor[-1] = float(-(i + 1))
     res = flag_gems.flatten_dense_tensors(tensors)
-    ref = torch.ops.aten.flatten_dense_tensors([utils.to_reference(t) for t in tensors])
-    assert res.shape == ref.shape == torch.Size([BOUNDARY_TOTAL])
+    assert res.shape == torch.Size([BOUNDARY_TOTAL])
     pos = 0
     for i, size in enumerate(WAVE):
         assert float(res[pos]) == float(i + 1)
         assert float(res[pos + size - 1]) == float(-(i + 1))
         assert float(res[pos + size // 2]) == 0.0
         pos += size
-    utils.gems_assert_equal(res, ref)
-    del tensors, ref
+    # Reference in chunks: a single CPU flatten of the same 16 GiB would need
+    # another ~16 GiB of host memory. Each chunk covers one wave and is built
+    # from that wave's own converted tensor, so the --ref=cpu contract holds.
+    for i, size in enumerate(WAVE):
+        ref_part = torch.ops.aten.flatten_dense_tensors(
+            [utils.to_reference(tensors[i])]
+        )
+        assert ref_part.shape == torch.Size([size])
+        utils.gems_assert_equal(res[sum(WAVE[:i]) : sum(WAVE[: i + 1])], ref_part)
+        del ref_part
+    del tensors, res
 
 
 # ---------------------------------------------------------------------------
@@ -431,6 +435,10 @@ def test_accuracy_flatten_dense_tensors_fresh_storage():
     utils.gems_assert_equal(res, before)
     # the flat buffer has exactly one storage of its own
     assert res.untyped_storage().nbytes() == 3 * 64 * res.element_size()
+    # equivalent work on the reference side: same list length and dtype, so the
+    # comparison is against a reference that ran the same scope.
+    ref = torch.ops.aten.flatten_dense_tensors(_to_ref_list(tensors))
+    utils.gems_assert_close(res, ref, dtype)
 
 
 @pytest.mark.flatten_dense_tensors
@@ -456,30 +464,42 @@ def test_accuracy_flatten_dense_tensors_empty_list():
 
 
 # ---------------------------------------------------------------------------
-# Autograd grammar of the submitted implementation (measured, container build).
+# Autograd grammar of the submitted implementation (measured on GPU).
 #
-# The kernels use raw `t.data_ptr()` / `tri_dt`, and the fast path returns
-# `t0.view(-1)`; the measured result (container torch 2.8.0a0) is that the
-# op is NOT differentiable through the registered implementation: an output
-# from requires_grad inputs has requires_grad=False and grads never reach the
-# inputs. This is pinned as observed so a future change to that grammar is a
-# loud failure, not a silent one. No gradient VALUE is asserted because none is
-# produced.
+# The op is registered on the CUDA backend key, so autograd runs above it.
+# Measured, both paths:
+#   - single contiguous input: the implementation returns `t0.view(-1)` and
+#     native returns `tensors[0].contiguous().view(-1)`, so BOTH produce a
+#     grad-carrying view; the relation is asserted against the reference.
+#   - two or more inputs: the implementation allocates `out` with
+#     torch.empty and the kernels write through raw data pointers, so the
+#     output is a plain leaf (requires_grad False, grad_fn None) while native
+#     builds a CatBackward0 graph. This is the ONE autograd difference of this
+#     integration and is pinned here as measured (it is inherent to a
+#     backend-key registration, not to this operator's code).
 # ---------------------------------------------------------------------------
 @pytest.mark.flatten_dense_tensors
 def test_accuracy_flatten_dense_tensors_autograd_contract():
     dtype = torch.float32
+    single = torch.randn(9, dtype=dtype, device=flag_gems.device, requires_grad=True)
+    res = flag_gems.flatten_dense_tensors([single])
+    ref = torch.ops.aten.flatten_dense_tensors([utils.to_reference(single)])
+    assert res.requires_grad == ref.requires_grad
+    assert res.grad_fn is not None
+    utils.gems_assert_close(res, ref, dtype)
+
     tensors = [
         torch.randn(5, dtype=dtype, device=flag_gems.device, requires_grad=True)
         for _ in range(3)
     ]
-    res = flag_gems.flatten_dense_tensors(tensors)
-    assert res.requires_grad is False
-    assert res.grad_fn is None
-    loss = (res * 2.0).sum()
-    loss.backward()
-    for tensor in tensors:
-        assert tensor.grad is None
+    res2 = flag_gems.flatten_dense_tensors(tensors)
+    assert res2.requires_grad is False
+    assert res2.grad_fn is None
+    utils.gems_assert_close(
+        res2,
+        torch.ops.aten.flatten_dense_tensors(_to_ref_list(tensors)),
+        dtype,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -489,9 +509,12 @@ def test_accuracy_flatten_dense_tensors_autograd_contract():
 def test_accuracy_flatten_dense_tensors_repeat_dispatch():
     dtype = torch.float32
     tensors = [torch.randn(300, dtype=dtype, device=flag_gems.device) for _ in range(3)]
+    ref = torch.ops.aten.flatten_dense_tensors(_to_ref_list(tensors))
     first = flag_gems.flatten_dense_tensors(tensors).clone()
     for _ in range(4):
+        utils.gems_assert_close(flag_gems.flatten_dense_tensors(tensors), ref, dtype)
         utils.gems_assert_equal(flag_gems.flatten_dense_tensors(tensors), first)
     # an unrelated op in between must not perturb the result
     torch.ops.aten.dim(tensors[0])
+    utils.gems_assert_close(flag_gems.flatten_dense_tensors(tensors), ref, dtype)
     utils.gems_assert_equal(flag_gems.flatten_dense_tensors(tensors), first)
