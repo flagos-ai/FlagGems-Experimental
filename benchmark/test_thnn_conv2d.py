@@ -26,12 +26,14 @@ from . import base, consts
 # pinned rather than drawn from core_shapes.yaml because thnn_conv2d takes
 # kernel_size/stride/padding as call arguments: the harness has no way to
 # derive them from the shape tuple, and the compute is the same square-GEMM
-# problem as conv2d's, so the same size ladder applies.
+# problem as conv2d's, so the same size ladder applies. The 1x1 entry is the
+# implementation's separate fast path (BLOCK_M=128, no padding mask).
 THNN_CONV2D_SHAPES = [
     (32, 64, 128, 128, 32, 3, 3, 1, 1),
     (32, 64, 210, 210, 16, 5, 5, 2, 1),
     (16, 32, 12, 12, 24, 3, 3, 2, 2),
     (32, 64, 128, 128, 32, 3, 3, 2, 1),
+    (32, 64, 128, 128, 64, 1, 1, 1, 0),
 ]
 
 
