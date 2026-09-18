@@ -50,7 +50,12 @@ def sparse_resize_and_clear_(
       new metadata;
     - a dimension-count mismatch raises ``RuntimeError`` naming both counts
       and the given length and leaves the tensor untouched; a negative size
-      raises ``RuntimeError: numel: integer multiplication overflow``.
+      raises ``RuntimeError: numel: integer multiplication overflow``. On that
+      negative-size path the reference sets the requested (invalid) sizes
+      before the validator raises, so native leaves the input carrying an
+      invalid shape. This implementation validates before rebinding and
+      therefore leaves the input entirely untouched -- a deliberate, disclosed
+      difference on a rejected call (the tests pin both post-states).
 
     Two behaviours of the supplied source do not survive integration and are
     corrected here, both disclosed:
