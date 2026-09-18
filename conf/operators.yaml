@@ -13101,6 +13101,14 @@ ops:
     '
   for:
   - sparse_resize_
+- id: sparse_resize_and_clear_
+  description: 'Resizes a sparse COO tensor in place to the given size with
+    the requested sparse/dense dimension split and discards all stored
+    entries, leaving an empty tensor with the requested shape.
+
+    '
+  for:
+  - sparse_resize_and_clear_
   labels:
   - aten
   - KernelGen
@@ -13108,6 +13116,7 @@ ops:
   - Tensor
   stages:
   - alpha: '5.5'
+  - alpha: '5.4'
 - id: sparse_sampled_addmm
   description: 'Computes alpha * (mat1 @ mat2) * spy(input) + beta * input, where
     input is a sparse CSR tensor
