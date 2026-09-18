@@ -32,8 +32,10 @@ Branches of the submitted implementation that are exercised here:
     (dim check for every element, then non-empty, then dtype, device and
     shape compatibility) — see `_check_matrices` in the implementation.
 
-Reference values come from `torch.ops.aten.chain_matmul` (native), never
-from the submitted code.
+Reference values come from `torch.ops.aten.chain_matmul` (native) computed on
+fp64-upcast inputs -- the repo's mm/bmm convention -- never from the
+submitted code. The atol budget per dtype is from the GPU probes listed in
+the `_ATOL_BUDGET` comment below.
 """
 
 import pytest
@@ -62,23 +64,6 @@ ATEN_OUT = torch.ops.aten.chain_matmul.out
 # (dims[i], dims[i + 1]).
 # ---------------------------------------------------------------------------
 
-# general path: 2-, 3-, 4-, 5- and 6-matrix chains, including multi-program
-# grids (256x512 @ 512x300 and the 4-chain below) and zero-sized dims.
-GENERAL_DIMS = [
-    [3, 4, 5],
-    [16, 8, 24],
-    [64, 32, 48, 96],
-    [256, 512, 300],
-    [300, 400, 128, 200, 512],
-    [2, 3, 5, 7, 11, 13],
-    [2, 3, 5, 7, 11, 13, 17],
-    [3, 0, 5],
-    [0, 4, 5],
-    [3, 4, 0],
-]
-if QUICK_MODE:
-    GENERAL_DIMS = [[3, 4, 5], [16, 8, 24], [256, 512, 300], [3, 0, 5], [0, 4, 5]]
-
 # tiny 3-matrix chains -> the fused _chain3_kernel (max dim <= 16).
 # dims chosen so that both LEFT and RIGHT roots occur (measured with the
 # implementation's own DP: [(0,1),(3,2)] -> LEFT, [(1,2),(0,3)] -> RIGHT).
@@ -89,32 +74,6 @@ TINY3_DIMS = [
     [4, 16, 16, 4],  # RIGHT
     [1, 1, 1, 1],  # RIGHT, size-1 everywhere
 ]
-if QUICK_MODE:
-    TINY3_DIMS = [[3, 5, 7, 4], [16, 16, 16, 16], [1, 1, 1, 1]]
-
-# n == 3 with a dimension above 16 stays on the general path.
-BIG3_DIMS = [[17, 5, 7, 4], [64, 17, 5, 64]]
-
-# 4-matrix fp16/bf16 chains whose optimal plan is [(2,3),(1,4),(0,5)] AND
-# whose shapes satisfy the fused-last2 envelope (b.shape[0] <= 128,
-# d.shape[1] <= 64, a.shape[0] <= 64) -> one _mm + one fused launch.
-FUSED4_DIMS = [
-    [17, 59, 123, 287, 10],
-    [36, 55, 53, 384, 3],
-    [61, 92, 180, 160, 5],
-]
-if QUICK_MODE:
-    FUSED4_DIMS = [
-        [17, 59, 123, 287, 10],
-        [61, 92, 180, 160, 5],
-    ]
-
-# 4-matrix chains with the same plan shape but a shape outside the fused
-# envelope (b.shape[0] = 200 > 128) -> the general path.
-FUSED4_ESCAPE_DIMS = [[5, 71, 200, 143, 9]]
-
-# 4-matrix chain with a completely different optimal plan -> general path.
-OTHER4_DIMS = [[64, 16, 128, 256, 32]]
 
 FP16 = torch.float16
 BF16 = torch.bfloat16
@@ -124,42 +83,70 @@ FP64 = torch.float64
 # (dims, dtype, label). Split into a FULL list and a QUICK list that is written
 # out explicitly -- never indexed out of a QUICK_MODE-trimmed shape list.
 _FULL_DTYPE_CASES = [
-    (GENERAL_DIMS[0], FP32, "general-2chain-fp32"),
-    (GENERAL_DIMS[1], FP16, "general-2chain-fp16"),
-    (GENERAL_DIMS[1], BF16, "general-2chain-bf16"),
-    (GENERAL_DIMS[2], FP32, "general-4chain-fp32"),
-    (GENERAL_DIMS[3], FP32, "general-large-fp32"),
-    (GENERAL_DIMS[3], BF16, "general-large-bf16"),
-    (GENERAL_DIMS[4], FP32, "general-4chain-large-fp32"),
-    (GENERAL_DIMS[5], FP32, "general-5chain-fp32"),
-    (GENERAL_DIMS[6], FP32, "general-6chain-fp32"),
-    (GENERAL_DIMS[0], FP64, "general-2chain-fp64"),
-    (GENERAL_DIMS[2], FP64, "general-4chain-fp64"),
-    (BIG3_DIMS[0], FP32, "big3-fp32"),
-    (BIG3_DIMS[1], FP16, "big3-fp16"),
-    (FUSED4_ESCAPE_DIMS[0], FP16, "fused4-escape-fp16"),
-    (OTHER4_DIMS[0], FP16, "other4-fp16"),
+    ([3, 4, 5], FP32, "general-2chain-fp32"),
+    ([16, 8, 24], FP16, "general-2chain-fp16"),
+    ([16, 8, 24], BF16, "general-2chain-bf16"),
+    ([64, 32, 48, 96], FP32, "general-4chain-fp32"),
+    ([256, 512, 300], FP32, "general-large-fp32"),
+    ([256, 512, 300], BF16, "general-large-bf16"),
+    ([300, 400, 128, 200, 512], FP32, "general-4chain-large-fp32"),
+    ([2, 3, 5, 7, 11, 13], FP32, "general-5chain-fp32"),
+    ([2, 3, 5, 7, 11, 13, 17], FP32, "general-6chain-fp32"),
+    ([3, 4, 5], FP64, "general-2chain-fp64"),
+    ([64, 32, 48, 96], FP64, "general-4chain-fp64"),
+    ([17, 5, 7, 4], FP32, "big3-fp32"),
+    ([64, 17, 5, 64], FP16, "big3-fp16"),
+    ([5, 71, 200, 143, 9], FP16, "fused4-escape-fp16"),
+    ([64, 16, 128, 256, 32], FP16, "other4-fp16"),
+    ([3, 0, 5], FP32, "general-empty-mid-fp32"),
+    ([0, 4, 5], FP32, "general-empty-first-fp32"),
+    ([3, 4, 0], FP32, "general-empty-last-fp32"),
 ]
-# QUICK mode keeps one case per branch kind -- the general path at fp16/bf16/
-# fp32/fp64, the fused tiny-3 path and the fused-last2 escape hatch.
+# QUICK mode keeps one case per branch kind -- the general path at fp32, fp16
+# and fp64, a zero-sized dimension, the fused tiny-3 path and the fused-last2
+# escape hatch. Every branch and dtype class the implementation has stays.
 _QUICK_DTYPE_CASES = [
     ([3, 4, 5], FP32, "general-2chain-fp32"),
     ([16, 8, 24], FP16, "general-2chain-fp16"),
     ([64, 32, 48, 96], FP32, "general-4chain-fp32"),
     ([3, 4, 5], FP64, "general-2chain-fp64"),
+    ([3, 0, 5], FP32, "general-empty-mid-fp32"),
     ([5, 71, 200, 143, 9], FP16, "fused4-escape-fp16"),
 ]
 DTYPE_CASES = _QUICK_DTYPE_CASES if QUICK_MODE else _FULL_DTYPE_CASES
 
-TINY3_FP16_DIMS = [TINY3_DIMS[0], TINY3_DIMS[1]]
-TINY3_FP32_DIMS = [TINY3_DIMS[2], [16, 3, 5, 16]]
-TINY3_FP64_DIMS = [TINY3_DIMS[3]]
+TINY3_FP16_DIMS = [[3, 5, 7, 4], [16, 16, 16, 16]]
+TINY3_FP32_DIMS = [[16, 7, 5, 16], [16, 3, 5, 16]]
+TINY3_FP64_DIMS = [[4, 16, 16, 4]]
+TINY3_BF16_DIMS = [
+    [3, 5, 7, 4],
+    [16, 16, 16, 16],
+    [16, 7, 5, 16],
+    [4, 16, 16, 4],
+    [1, 1, 1, 1],
+]
 if QUICK_MODE:
-    # both fused-tiny3 roots (LEFT [3,5,7,4] and RIGHT [16,16,16,16]) and
-    # the fp64 lane must stay: they are the only coverage of those branches.
-    TINY3_FP16_DIMS = [TINY3_DIMS[0], TINY3_DIMS[1]]
-    TINY3_FP32_DIMS = [TINY3_DIMS[2]]
-    TINY3_FP64_DIMS = [TINY3_DIMS[3]]
+    # both fused-tiny3 roots (LEFT [3,5,7,4] and RIGHT [16,16,16,16]) and the
+    # fp16/fp32/fp64 lanes must stay: they are the only coverage of those
+    # branches. bf16 keeps one shape (the dtype is covered there).
+    TINY3_FP16_DIMS = [[3, 5, 7, 4], [16, 16, 16, 16]]
+    TINY3_FP32_DIMS = [[16, 7, 5, 16]]
+    TINY3_FP64_DIMS = [[4, 16, 16, 4]]
+    TINY3_BF16_DIMS = [[16, 16, 16, 16]]
+
+FUSED4_CASES = [
+    ([17, 59, 123, 287, 10], FP16),
+    ([36, 55, 53, 384, 3], FP16),
+    ([61, 92, 180, 160, 5], FP16),
+    ([17, 59, 123, 287, 10], BF16),
+    ([36, 55, 53, 384, 3], BF16),
+    ([61, 92, 180, 160, 5], BF16),
+]
+if QUICK_MODE:
+    FUSED4_CASES = [
+        ([17, 59, 123, 287, 10], FP16),
+        ([61, 92, 180, 160, 5], BF16),
+    ]
 
 
 def _make_matrices(dims, dtype, device=None):
@@ -284,7 +271,7 @@ def test_accuracy_chain_matmul_tiny3_fp16(dims):
 
 
 @pytest.mark.chain_matmul
-@pytest.mark.parametrize("dims", TINY3_DIMS)
+@pytest.mark.parametrize("dims", TINY3_BF16_DIMS)
 def test_accuracy_chain_matmul_tiny3_bf16(dims):
     matrices = _make_matrices(dims, BF16)
     ref_out = ATEN(_to_reference_list(matrices))
@@ -327,9 +314,8 @@ def test_accuracy_chain_matmul_tiny3_plan_is_left(dims):
 
 
 @pytest.mark.chain_matmul
-@pytest.mark.parametrize("dims", FUSED4_DIMS)
-@pytest.mark.parametrize("dtype", [FP16, BF16])
-def test_accuracy_chain_matmul_fused_last2_fp16_bf16(dims, dtype):
+@pytest.mark.parametrize("dims,dtype", FUSED4_CASES)
+def test_accuracy_chain_matmul_fused_last2(dims, dtype):
     from flag_gems.ops.chain_matmul import _plan
 
     plan = _plan(list(dims))
@@ -350,7 +336,7 @@ def test_accuracy_chain_matmul_fused_last2_fp16_bf16(dims, dtype):
 def test_accuracy_chain_matmul_fused_last2_fp32_uses_general_path():
     # fp32 is excluded from the fused path by the source's dtype guard: the
     # same shapes must still be correct through the general path.
-    dims = OTHER4_DIMS[0]
+    dims = [64, 16, 128, 256, 32]
     matrices = _make_matrices(dims, FP32)
     ref_out = ATEN(_to_reference_list(matrices))
     res_out = flag_gems.chain_matmul(matrices)
