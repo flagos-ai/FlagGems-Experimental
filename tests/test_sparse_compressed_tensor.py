@@ -903,24 +903,29 @@ def test_sparse_compressed_tensor_invariants_mode_validation():
     # same rejection from a different validator with different wording.
     dev = torch.device("cpu")
     c, p, v = _gen_components(torch.sparse_csr, (4, 4), 3, None, None, seed=12)
+    # A valid (3, 4) CSR structure needs a compressed index of exactly
+    # size[0] + 1 = 5 entries whose last entry equals nnz = 3 (the generated
+    # ``c`` satisfies this). Each malformed case keeps the length legal so the
+    # rejection comes from the check under test rather than from the length
+    # validator that runs first.
     cases = [
         (
             "non-monotonic compressed",
-            torch.tensor([0, 3, 2, 3], dtype=torch.int64),
+            torch.tensor([0, 3, 2, 3, 3], dtype=torch.int64),
             p,
             v,
             ["crow_indices"],
         ),
         (
             "bad terminator",
-            torch.tensor([0, 1, 2, 5], dtype=torch.int64),
+            torch.tensor([0, 1, 2, 3, 5], dtype=torch.int64),
             p,
             v,
             ["nnz"],
         ),
         (
             "compressed first not zero",
-            torch.tensor([1, 2, 3, 3], dtype=torch.int64),
+            torch.tensor([1, 2, 3, 3, 3], dtype=torch.int64),
             p,
             v,
             ["crow_indices"],
@@ -986,7 +991,14 @@ def test_sparse_compressed_tensor_reference_table():
     assert torch.equal(
         explicit.to_dense().cpu(),
         torch.tensor(
-            [[1.0, 2.0, 0.0, 0.0], [0.0, 0.0, 3.0, 0.0], [0.0, 0.0, 0.0, 4.0]]
+            [
+                # row 0 stores cols [0, 2] with values [1, 2]
+                [1.0, 0.0, 2.0, 0.0],
+                # row 1 stores col [1] with value [3]
+                [0.0, 3.0, 0.0, 0.0],
+                # row 2 stores col [2] with value [4]
+                [0.0, 0.0, 4.0, 0.0],
+            ]
         ),
     )
 
@@ -1039,11 +1051,15 @@ def test_sparse_compressed_tensor_dense_dimensions():
 def test_sparse_compressed_tensor_batched():
     # A multi-dimensional compressed index selects the batched branch of the
     # estimator (batch_ndim > 0). The batch extents come from the leading shape
-    # of the compressed index.
+    # of the compressed index, and the estimator's max() runs over the whole
+    # plain-index tensor rather than per batch slot (measured: native's
+    # _estimate_sparse_compressed_tensor_size reduces the full tensor).
     dev = flag_gems.device
-    crow = torch.tensor([[0, 1], [0, 2]], dtype=torch.int64, device=dev)
-    col = torch.tensor([[0], [0, 1]], dtype=torch.int64, device=dev)
-    values = torch.randn((2, 2), device=dev)
+    # Both batch slots have a 2-entry crow vector, so the compressed extent is
+    # (2 - 1) = 1 row per batch slot; the plain extent is max(col) + 1 = 2.
+    crow = torch.tensor([[0, 1], [0, 1]], dtype=torch.int64, device=dev)
+    col = torch.tensor([[0], [1]], dtype=torch.int64, device=dev)
+    values = torch.randn((2, 1), device=dev)
 
     ref = _call_value(
         _VALUE,
@@ -1058,6 +1074,9 @@ def test_sparse_compressed_tensor_batched():
     _assert_same(res, ref, "batched")
     assert res.sparse_dim() == 2
     assert tuple(res.shape) == tuple(ref.shape)
+    # The leading extent is the batch size from crow's leading shapes, the two
+    # per-slot extents are 1*1 and (max(col) + 1)*1 = 2 rows/cols.
+    assert tuple(res.shape) == (2, 1, 2)
 
     ref_explicit = _call_size(
         _VALUE_SIZE,
@@ -1072,6 +1091,7 @@ def test_sparse_compressed_tensor_batched():
     )
     _assert_same(explicit, ref_explicit, "batched explicit")
     assert tuple(explicit.shape) == (2, 3, 3)
+    assert explicit.sparse_dim() == 2
 
 
 @pytest.mark.sparse_compressed_tensor
