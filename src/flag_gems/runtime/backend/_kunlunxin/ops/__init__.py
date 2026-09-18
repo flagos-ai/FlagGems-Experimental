@@ -293,6 +293,7 @@ from .sort import sort, sort_stable
 from .special_log_softmax import special_log_softmax
 from .special_logsumexp import special_logsumexp
 from .sqrt import sqrt, sqrt_
+from .square_ import square_
 from .stack import stack
 from .std import std
 from .sub import sub, sub_, subtract_
@@ -725,6 +726,7 @@ __all__ = [
     "special_logsumexp",
     "sqrt",
     "sqrt_",
+    "square_",
     "stack",
     "std",
     "sub",
