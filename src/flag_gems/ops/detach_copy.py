@@ -89,7 +89,11 @@ def detach_copy(self: torch.Tensor) -> torch.Tensor:
         for i in range(nd):
             meta[2 * i] = shape[i]
             meta[2 * i + 1] = stride[i]
-        BLOCK = 1024
+        # Tuning measured on H20 (see the task report): the strided kernel's
+        # per-element div/mod address computation prefers narrower blocks than
+        # the flat path — BLOCK=256 beats the shared 1024 default by 10-58%
+        # across the shapes swept, with num_warps=4 at the knee.
+        BLOCK = 256
         grid = (triton.cdiv(n, BLOCK),)
         with torch_device_fn.device(self.device):
             _detach_copy_strided[grid](
