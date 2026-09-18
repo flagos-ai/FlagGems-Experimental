@@ -129,6 +129,7 @@ from .elu import elu, elu_, elu_backward
 from .embedding import embedding, embedding_backward
 from .eq import eq, eq_scalar
 from .erf import erf, erf_
+from .erfc import erfc
 from .exp import exp, exp_, exp_out
 from .exp2 import exp2, exp2_
 from .expm1 import expm1, expm1_, expm1_out
@@ -181,6 +182,7 @@ from .lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
 from .less_equal import less_equal, less_equal_scalar
 from .lgamma import lgamma
 from .lift_fresh_copy import lift_fresh_copy
+from .linalg_slogdet import linalg_slogdet
 from .linspace import linspace
 from .log import log
 from .log1p import log1p, log1p_
@@ -306,6 +308,7 @@ from .softmax import softmax, softmax_backward
 from .softplus import softplus
 from .softshrink import softshrink, softshrink_out
 from .sort import sort, sort_stable
+from .special_erfc import special_erfc
 from .special_gammaln_out import special_gammaln_out
 from .special_log_softmax import special_log_softmax
 from .special_logsumexp import special_logsumexp
@@ -509,6 +512,7 @@ __all__ = [
     "eq_scalar",
     "erf",
     "erf_",
+    "erfc",
     "exp",
     "exp2",
     "exp2_",
@@ -590,6 +594,7 @@ __all__ = [
     "less_equal_scalar",
     "lgamma",
     "lift_fresh_copy",
+    "linalg_slogdet",
     "linspace",
     "log",
     "log1p",
@@ -763,9 +768,10 @@ __all__ = [
     "softshrink_out",
     "sort",
     "sort_stable",
+    "special_erfc",
+    "special_gammaln_out",
     "special_log_softmax",
     "special_logsumexp",
-    "special_gammaln_out",
     "special_xlog1py",
     "sqrt",
     "sqrt_",
