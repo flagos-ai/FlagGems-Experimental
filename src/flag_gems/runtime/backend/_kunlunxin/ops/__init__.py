@@ -339,6 +339,7 @@ from .zeros import zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "_batch_norm_no_update",
     "_conv_depthwise2d",
     "_euclidean_dist",
     "_functional_sym_constrain_range",
