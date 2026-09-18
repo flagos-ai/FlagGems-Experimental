@@ -415,15 +415,28 @@ def test_accuracy__choose_qparams_subnormal_scale_window(reduce_range):
     floor = float.fromhex("0x1.ffb4800000000p-15")
     assert float(torch.tensor(6.1e-5, dtype=torch.float32)) == floor
 
-    # Above the boundary: both sides return the floor (native clamps to the
-    # same threshold, so here they coincide). The measured crossing sits
-    # between 5e-37 and 1e-36.
-    for hi in (1e-36, 1e-35, 1e-4, 1e-3, 1e-2, 1.0):
+    # At and above the measured boundary (the crossing sits between 5e-37 and
+    # 1e-36) the two sides agree again. Whether the agreed scale is the floor
+    # itself or the raw scale depends on the range: for [0, 1e-4] and up the
+    # raw scale 1/255 (or 1/127) is already above the floor and is returned
+    # un-floored by both sides (measured: [0, 1.0] gives 0.00392156862745098
+    # with rr=False and 0.007874015748031496 with rr=True), so the floor is
+    # only asserted for the window immediately above the crossing.
+    for hi in (1e-36, 1e-35, 1e-4):
         x = torch.tensor([0.0, hi], dtype=torch.float32, device=_DEVICE)
         ref = _ATEN(x, reduce_range)
         res = flag_gems._choose_qparams_per_tensor(x, reduce_range)
         _assert_same_result(res, ref, f"[0,{hi}]/rr={reduce_range}")
         assert res[0] == floor, res
+
+    # Ranges whose raw scale is comfortably above the floor: exact parity, no
+    # flooring involved on either side.
+    for hi in (1e-3, 1e-2, 1.0):
+        x = torch.tensor([0.0, hi], dtype=torch.float32, device=_DEVICE)
+        ref = _ATEN(x, reduce_range)
+        res = flag_gems._choose_qparams_per_tensor(x, reduce_range)
+        _assert_same_result(res, ref, f"[0,{hi}]/rr={reduce_range}")
+        assert res[0] > floor, res
 
     # Below the boundary the scales differ by the fixed replacement; pin both
     # sides so neither one moves.
