@@ -224,8 +224,10 @@ def test_accuracy_slow_conv_dilated2d_non_contiguous_weight(in_shape, w_shape):
 @pytest.mark.parametrize(
     "in_shape, w_shape, kernel",
     [
+        # N == 0 and C_out == 0 are answered by the CUDA native kernel; C_in == 0
+        # is NOT (see the dedicated test below - the CUDA native kernel trips an
+        # internal launch assertion for it, measured).
         ((0, 2, 5, 5), (4, 2, 3, 3), (3, 3)),
-        ((2, 0, 5, 5), (4, 0, 3, 3), (3, 3)),
         ((2, 2, 5, 5), (0, 2, 3, 3), (3, 3)),
     ],
 )
@@ -252,25 +254,27 @@ def test_accuracy_slow_conv_dilated2d_empty_zero_dim(in_shape, w_shape, kernel):
 @pytest.mark.slow_conv_dilated2d
 @pytest.mark.parametrize("bias_present", [True, False])
 def test_accuracy_slow_conv_dilated2d_cin_zero_fills_bias(bias_present):
-    # C_in == 0 is a legal native input with a NON-empty output: measured, the
-    # native kernel fills every element with that channel's bias (zeros when
-    # bias is None). The source's plain early return left the fresh buffer
-    # uninitialized, which contradicted that; the short-circuit now writes the
-    # value the empty reduction implies (disclosed in the report).
+    # C_in == 0 with a positive-sized output: the CUDA native kernel TRIPS AN
+    # INTERNAL LAUNCH ASSERT for it (measured on this build: "CUDA kernel launch
+    # blocks must be positive, but got N=0"), so the CUDA reference is
+    # unavailable. The CPU native kernel answers it, and is the frozen
+    # reference used here (the same device split the int64 test uses): measured
+    # on CPU, every element carries that channel's bias, or zeros without one.
+    # The supplied code's plain early return left the fresh buffer
+    # uninitialized, which contradicted the answering kernel; the short-circuit
+    # now writes that value (A5: measure, then fix with a disclosed reason).
     in_shape, w_shape = (2, 0, 5, 5), (4, 0, 3, 3)
     bias = torch.randn(w_shape[0], device=flag_gems.device) if bias_present else None
     inp = torch.randn(in_shape, device=flag_gems.device)
     weight = torch.randn(w_shape, device=flag_gems.device)
 
     ref_out = torch.ops.aten.slow_conv_dilated2d(
-        utils.to_reference(inp),
-        utils.to_reference(weight),
-        (3, 3),
-        utils.to_reference(bias),
+        inp.cpu(), weight.cpu(), (3, 3), None if bias is None else bias.cpu()
     )
     res_out = flag_gems.slow_conv_dilated2d(inp, weight, (3, 3), bias)
 
     assert res_out.shape == tuple(ref_out.shape) == (2, 4, 3, 3)
+    assert res_out.device.type == flag_gems.device
     utils.gems_assert_equal(res_out, ref_out)
 
 
@@ -308,12 +312,18 @@ def test_accuracy_slow_conv_dilated2d_strided_input_and_bias(shift):
 
 @pytest.mark.slow_conv_dilated2d
 @pytest.mark.parametrize(
-    "in_shape, w_shape, kernel", [((2, 2, 2, 20), (4, 2, 5, 3), (5, 3))]
+    "in_shape, w_shape, kernel",
+    [
+        # H_out = (3 - 1*(4-1) - 1) + 1 = 0, W_out = 15.
+        ((2, 2, 3, 17), (4, 2, 4, 3), (4, 3)),
+        # H_out = (4 - 1*(5-1) - 1) + 1 = 0 with a symmetric kernel, W_out = 11.
+        ((2, 2, 4, 15), (4, 2, 5, 5), (5, 5)),
+    ],
 )
 def test_accuracy_slow_conv_dilated2d_zero_spatial_output(in_shape, w_shape, kernel):
-    # A kernel taller than the input gives H_out == 0 (0 x 18 output) on both
-    # sides; W stays positive, so the empty-spatial guard must not swallow
-    # the whole output shape.
+    # A kernel exactly two taller than the input (H_in == KH - 2) gives
+    # H_out == 0 with a positive W, on both sides; the empty-spatial guard must
+    # short-circuit without swallowing the whole output shape.
     inp = torch.randn(in_shape, device=flag_gems.device)
     weight = torch.randn(w_shape, device=flag_gems.device)
 
@@ -356,7 +366,12 @@ def test_accuracy_slow_conv_dilated2d_list_arg_forms(shape, dtype):
 @pytest.mark.slow_conv_dilated2d
 @pytest.mark.parametrize(
     "in_shape, w_shape",
-    [((1, 2, 2, 2), (4, 2, 3, 3)), ((1, 2, 2, 20), (4, 2, 5, 3))],
+    [
+        # H_out = (2 - 1*(4-1) - 1) + 1 = -1 (W stays positive).
+        ((1, 2, 2, 20), (4, 2, 4, 3)),
+        # H_out = (3 - 1*(5-1) - 1) + 1 = -1 with a symmetric kernel.
+        ((1, 2, 3, 20), (4, 2, 5, 5)),
+    ],
 )
 def test_accuracy_slow_conv_dilated2d_output_too_small_raises(in_shape, w_shape):
     # When the spatial output would be NEGATIVE, native raises
