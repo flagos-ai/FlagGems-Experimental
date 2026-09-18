@@ -91,7 +91,7 @@ from .clamp import (
     clamp_tensor_,
 )
 from .clip import clip, clip_
-from .concatenate_kernelgen import concatenate
+from .concatenate import concatenate
 from .contiguous import contiguous
 from .conv1d import conv1d
 from .conv2d import conv2d
