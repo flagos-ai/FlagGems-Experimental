@@ -278,7 +278,20 @@ def test_sparse_resize_and_clear__errors(tag, size, nnd, nnz, target, sp, dn):
     except Exception as e:  # noqa: BLE001 - the class is the assertion
         ref_err = e
     assert ref_err is not None, f"{tag}: reference accepted an invalid resize"
-    assert _state(ref_inp) == ref_before
+    if tag.startswith("neg-size"):
+        # Measured native quirk: on the negative-size path the reference sets
+        # the requested (invalid) sizes before the numel validator raises, so a
+        # rejected call leaves the tensor carrying an invalid shape. The stored
+        # entries and every other field survive. This is pinned here rather
+        # than reproduced: leaving a caller's tensor with a negative shape
+        # after a failed call is strictly worse than leaving it untouched, and
+        # the implementation validates before rebinding (asserted below).
+        assert tuple(ref_inp.shape) == tuple(target)
+        assert tuple(ref_inp.shape)[0] < 0
+        assert ref_inp._nnz() == nnz
+        assert _state(ref_inp)[2:] == ref_before[2:]
+    else:
+        assert _state(ref_inp) == ref_before
 
     inp = _make_coo(size, nnd, nnz, seed=5).to(flag_gems.device)
     before = _state(inp)
@@ -296,7 +309,11 @@ def test_sparse_resize_and_clear__errors(tag, size, nnd, nnz, target, sp, dn):
     else:
         # The numel overflow comes from the shared size validator.
         assert "numel" in msg or "overflow" in msg, msg
+    # The implementation leaves the input completely untouched on every
+    # rejection, including the negative-size path where the reference leaves
+    # its invalid target shape behind (disclosed above).
     assert _state(inp) == before, f"{tag}: implementation mutated the input"
+    assert tuple(inp.shape) == tuple(size), tag
     assert torch.equal(inp._indices(), idx_before)
     assert torch.equal(inp._values(), vals_before)
 
