@@ -907,6 +907,7 @@ from flag_gems.ops.tan import tan, tan_
 from flag_gems.ops.tanh import tanh, tanh_, tanh_backward
 from flag_gems.ops.te_rmsnorm import te_rmsnorm_bwd, te_rmsnorm_fwd
 from flag_gems.ops.tensor_split import tensor_split
+from flag_gems.ops.thnn_conv2d import thnn_conv2d
 from flag_gems.ops.threshold import threshold, threshold_backward
 from flag_gems.ops.threshold_ import threshold_
 from flag_gems.ops.tile import tile
@@ -1958,6 +1959,7 @@ __all__ = [
     "te_rmsnorm_bwd",
     "te_rmsnorm_fwd",
     "tensor_split",
+    "thnn_conv2d",
     "threshold",
     "threshold_",
     "threshold_backward",
