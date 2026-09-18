@@ -2509,6 +2509,12 @@ ops:
     '
   for:
   - can_cast
+- id: cartesian_prod
+  description: 'Computes the outer product of the given sequences of 1-D tensors.
+
+    '
+  for:
+  - cartesian_prod
   labels:
   - aten
   - KernelGen
@@ -2516,6 +2522,9 @@ ops:
   - Logic
   stages:
   - alpha: '5.5'
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: cat
   description: Concatenates the given sequence of tensors in tensors in the given
     dimension.
