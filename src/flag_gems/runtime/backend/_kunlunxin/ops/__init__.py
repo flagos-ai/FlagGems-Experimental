@@ -56,6 +56,7 @@ from .attention import (
 from .avg_pool2d import avg_pool2d, avg_pool2d_backward
 from .baddbmm import baddbmm
 from .batch_norm import batch_norm, batch_norm_backward
+from .batch_norm_no_update import _batch_norm_no_update, batch_norm_no_update
 from .bernoulli_ import bernoulli_
 from .bitwise_and import (
     bitwise_and_scalar,
@@ -401,6 +402,7 @@ __all__ = [
     "baddbmm",
     "batch_norm",
     "batch_norm_backward",
+    "batch_norm_no_update",
     "bernoulli_",
     "bitwise_and_scalar",
     "bitwise_and_scalar_",
