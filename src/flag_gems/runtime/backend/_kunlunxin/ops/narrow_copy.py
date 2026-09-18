@@ -1,4 +1,5 @@
 import logging
+import math
 
 import torch
 import triton
@@ -129,7 +130,6 @@ Performance strategy
     head dims are an affine multiple), otherwise a fully general per-dim
     digit-decomposition kernel (device int64 size/stride arrays).
 """
-import math
 
 # ---------------------------------------------------------------------------
 # fast paths: contiguous single-segment copies
