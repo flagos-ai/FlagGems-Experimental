@@ -56,6 +56,7 @@ from .attention import (
 from .avg_pool2d import avg_pool2d, avg_pool2d_backward
 from .baddbmm import baddbmm
 from .batch_norm import batch_norm, batch_norm_backward
+from .batch_norm_no_update import _batch_norm_no_update, batch_norm_no_update
 from .bernoulli_ import bernoulli_
 from .bitwise_and import (
     bitwise_and_scalar,
@@ -74,6 +75,7 @@ from .bitwise_or import (
     bitwise_or_tensor_,
 )
 from .bitwise_right_shift import bitwise_right_shift
+from .bitwise_xor_tensor_ import bitwise_xor_tensor_
 from .bmm import bmm, bmm_out
 from .broadcast_to import broadcast_to
 from .cat import cat, cat_out
@@ -108,6 +110,7 @@ from .deg2rad import deg2rad, deg2rad_, deg2rad_out
 from .diag import diag
 from .diag_embed import diag_embed
 from .diagonal import diagonal_backward
+from .digamma import digamma
 from .digamma_ import digamma_
 from .div import (
     div_mode,
@@ -165,19 +168,27 @@ from .isfinite import isfinite
 from .isin import isin
 from .isinf import isinf
 from .isnan import isnan
+from .ixor import ixor, xor_, xor_scalar_
+from .jagged_to_padded_dense_forward import (
+    _jagged_to_padded_dense_forward,
+    jagged_to_padded_dense_forward,
+)
 from .kron import kron
 from .layernorm import layer_norm, layer_norm_backward
 from .le import le, le_scalar
 from .leaky_relu import leaky_relu, leaky_relu_, leaky_relu_out
 from .lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
 from .less_equal import less_equal, less_equal_scalar
+from .lgamma import lgamma
 from .lift_fresh_copy import lift_fresh_copy
 from .linspace import linspace
 from .log import log
 from .log1p import log1p, log1p_
 from .log_sigmoid import log_sigmoid
+from .log_sigmoid_forward import log_sigmoid_forward
 from .log_softmax import log_softmax, log_softmax_backward
-from .logaddexp2 import logaddexp2, logaddexp2_out
+from .logaddexp2 import logaddexp2
+from .logaddexp2_out import logaddexp2_out
 from .logical_and import logical_and, logical_and_
 from .logical_not import logical_not, logical_not_
 from .logical_or import logical_or, logical_or_
@@ -206,6 +217,10 @@ from .mvlgamma import mvlgamma
 from .nan_to_num import nan_to_num
 from .nanmedian import nanmedian, nanmedian_dim, nanmedian_dim_values, nanmedian_out
 from .narrow_copy import narrow_copy
+from .native_batch_norm_legit_no_training import (
+    _native_batch_norm_legit_no_training,
+    native_batch_norm_legit_no_training,
+)
 from .ne import ne, ne_scalar
 from .neg import neg, neg_
 from .negative import negative
@@ -229,6 +244,7 @@ from .not_equal import not_equal, not_equal_scalar
 from .ones import ones
 from .ones_like import ones_like
 from .pad import constant_pad_nd, pad
+from .pdist_forward import _pdist_forward, pdist_forward
 from .per_token_group_quant_fp8 import SUPPORTED_FP8_DTYPE, per_token_group_quant_fp8
 from .permute_copy import permute_copy
 from .pixel_unshuffle import pixel_unshuffle, pixel_unshuffle_out
@@ -290,9 +306,13 @@ from .softmax import softmax, softmax_backward
 from .softplus import softplus
 from .softshrink import softshrink, softshrink_out
 from .sort import sort, sort_stable
+from .special_gammaln_out import special_gammaln_out
 from .special_log_softmax import special_log_softmax
 from .special_logsumexp import special_logsumexp
+from .special_xlog1py import special_xlog1py
 from .sqrt import sqrt, sqrt_
+from .square_ import square_
+from .squeeze_copy import squeeze_copy
 from .stack import stack
 from .std import std
 from .sub import sub, sub_, subtract_
@@ -314,6 +334,14 @@ from .upsample_bicubic2d_aa import _upsample_bicubic2d_aa
 from .upsample_linear1d import upsample_linear1d
 from .upsample_nearest1d import upsample_nearest1d
 from .upsample_nearest2d import upsample_nearest2d
+from .upsample_nearest_exact1d import (
+    _upsample_nearest_exact1d,
+    upsample_nearest_exact1d,
+)
+from .upsample_nearest_exact2d_backward import (
+    _upsample_nearest_exact2d_backward,
+    upsample_nearest_exact2d_backward,
+)
 from .upsample_trilinear3d import upsample_trilinear3d
 from .var_mean import var_mean
 from .vdot import vdot
@@ -335,15 +363,21 @@ from .zeros import zeros
 from .zeros_like import zeros_like
 
 __all__ = [
+    "_batch_norm_no_update",
     "_conv_depthwise2d",
     "_euclidean_dist",
     "_functional_sym_constrain_range",
     "_functional_sym_constrain_range_for_size",
     "_is_all_true",
+    "_pdist_forward",
+    "_jagged_to_padded_dense_forward",
+    "_native_batch_norm_legit_no_training",
     "_safe_softmax",
     "_thnn_fused_lstm_cell_backward_impl",
     "_unique2",
     "_upsample_bicubic2d_aa",
+    "_upsample_nearest_exact2d_backward",
+    "_upsample_nearest_exact1d",
     "abs",
     "abs_",
     "absolute",
@@ -397,6 +431,7 @@ __all__ = [
     "baddbmm",
     "batch_norm",
     "batch_norm_backward",
+    "batch_norm_no_update",
     "bernoulli_",
     "bitwise_and_scalar",
     "bitwise_and_scalar_",
@@ -412,6 +447,7 @@ __all__ = [
     "bitwise_or_tensor",
     "bitwise_or_tensor_",
     "bitwise_right_shift",
+    "bitwise_xor_tensor_",
     "bmm",
     "bmm_out",
     "broadcast_to",
@@ -457,6 +493,7 @@ __all__ = [
     "diag",
     "diag_embed",
     "diagonal_backward",
+    "digamma",
     "digamma_",
     "div_mode",
     "div_mode_",
@@ -535,6 +572,8 @@ __all__ = [
     "isin",
     "isinf",
     "isnan",
+    "ixor",
+    "jagged_to_padded_dense_forward",
     "kron",
     "layer_norm",
     "layer_norm_backward",
@@ -549,12 +588,14 @@ __all__ = [
     "lerp_tensor_",
     "less_equal",
     "less_equal_scalar",
+    "lgamma",
     "lift_fresh_copy",
     "linspace",
     "log",
     "log1p",
     "log1p_",
     "log_sigmoid",
+    "log_sigmoid_forward",
     "log_softmax",
     "log_softmax_backward",
     "logaddexp2",
@@ -606,6 +647,7 @@ __all__ = [
     "nanmedian_dim_values",
     "nanmedian_out",
     "narrow_copy",
+    "native_batch_norm_legit_no_training",
     "ne",
     "ne_scalar",
     "neg",
@@ -629,6 +671,7 @@ __all__ = [
     "ones",
     "ones_like",
     "pad",
+    "pdist_forward",
     "per_token_group_quant_fp8",
     "permute_copy",
     "pixel_unshuffle",
@@ -722,8 +765,12 @@ __all__ = [
     "sort_stable",
     "special_log_softmax",
     "special_logsumexp",
+    "special_gammaln_out",
+    "special_xlog1py",
     "sqrt",
     "sqrt_",
+    "squeeze_copy",
+    "square_",
     "stack",
     "std",
     "sub",
@@ -762,6 +809,8 @@ __all__ = [
     "upsample_linear1d",
     "upsample_nearest1d",
     "upsample_nearest2d",
+    "upsample_nearest_exact2d_backward",
+    "upsample_nearest_exact1d",
     "upsample_trilinear3d",
     "var_mean",
     "vdot",
@@ -780,6 +829,8 @@ __all__ = [
     "xlogy_scalar_tensor_out",
     "xlogy_tensor_scalar",
     "xlogy_tensor_scalar_out",
+    "xor_",
+    "xor_scalar_",
     "zero",
     "zero_",
     "zero_out",
