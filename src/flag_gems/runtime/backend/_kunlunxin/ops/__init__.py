@@ -331,6 +331,10 @@ from .upsample_nearest_exact1d import (
     _upsample_nearest_exact1d,
     upsample_nearest_exact1d,
 )
+from .upsample_nearest_exact2d_backward import (
+    _upsample_nearest_exact2d_backward,
+    upsample_nearest_exact2d_backward,
+)
 from .upsample_trilinear3d import upsample_trilinear3d
 from .var_mean import var_mean
 from .vdot import vdot
@@ -364,6 +368,7 @@ __all__ = [
     "_thnn_fused_lstm_cell_backward_impl",
     "_unique2",
     "_upsample_bicubic2d_aa",
+    "_upsample_nearest_exact2d_backward",
     "_upsample_nearest_exact1d",
     "abs",
     "abs_",
@@ -789,6 +794,7 @@ __all__ = [
     "upsample_linear1d",
     "upsample_nearest1d",
     "upsample_nearest2d",
+    "upsample_nearest_exact2d_backward",
     "upsample_nearest_exact1d",
     "upsample_trilinear3d",
     "var_mean",
