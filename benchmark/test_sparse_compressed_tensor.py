@@ -103,16 +103,20 @@ def _input_fn(layout):
         # target device from the keyword only (measured -- a CUDA component set
         # with device=None raises "need to be on the same device"), and the
         # dtype kwarg is the *tensor* dtype, which must match the values dtype
-        # or the constructor rejects rather than casting.
+        # or the constructor rejects rather than casting. The dict is yielded
+        # as a 1-tuple: the harness unpacks each yielded item as an argument
+        # list, and iterating a bare dict would pass its keys.
         c, p, v = _gen_components(layout, shape, dtype, device)
-        yield {
-            "compressed_indices": c,
-            "plain_indices": p,
-            "values": v,
-            "dtype": dtype,
-            "layout": layout,
-            "device": device,
-        }
+        yield (
+            {
+                "compressed_indices": c,
+                "plain_indices": p,
+                "values": v,
+                "dtype": dtype,
+                "layout": layout,
+                "device": device,
+            },
+        )
 
     return input_fn
 
