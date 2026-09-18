@@ -55,6 +55,7 @@ from flag_gems.ops._convolution_mode import _convolution_mode
 from flag_gems.ops._cummin_helper import _cummin_helper
 from flag_gems.ops._dim_arange import _dim_arange
 from flag_gems.ops._dyn_quant_pack_4bit_weight import _dyn_quant_pack_4bit_weight
+from flag_gems.ops._efficientzerotensor import _efficientzerotensor
 from flag_gems.ops._embedding_bag_dense_backward import _embedding_bag_dense_backward
 from flag_gems.ops._embedding_bag_per_sample_weights_backward import (
     _embedding_bag_per_sample_weights_backward,
@@ -1016,6 +1017,7 @@ __all__ = [
     "_cummin_helper",
     "_dim_arange",
     "_dyn_quant_pack_4bit_weight",
+    "_efficientzerotensor",
     "_embedding_bag_dense_backward",
     "_embedding_bag_per_sample_weights_backward",
     "_euclidean_dist",
