@@ -54,7 +54,7 @@ class SlowConv2dForwardBenchmark(base.Benchmark):
 
     def get_input_iter(self, cur_dtype):
         for shape in self.shapes:
-            (n, c_in, h, w, c_out, kh, kw, stride, padding) = shape
+            n, c_in, h, w, c_out, kh, kw, stride, padding = shape
             inp = torch.randn(n, c_in, h, w, device=self.device, dtype=cur_dtype)
             weight = torch.randn(
                 c_out, c_in, kh, kw, device=self.device, dtype=cur_dtype
