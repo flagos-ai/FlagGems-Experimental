@@ -12651,6 +12651,22 @@ ops:
   - NeuralNetwork
   stages:
   - beta: '5.3'
+- id: sparse_bsr_tensor
+  description: 'Host-side sparse BSR constructor: validates the block-row and block-column
+    indices plus the 3-D values tensor and wires them into a BSR tensor that aliases
+    all three component tensors. Covers the explicit-size and size-inference overloads.
+
+    '
+  for:
+  - sparse_bsr_tensor.crow_col_value
+  - sparse_bsr_tensor.crow_col_value_size
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: sparse_dim
   description: 'Returns the number of sparse dimensions of a tensor: 0 for strided
     tensors, the index count for sparse COO, 2 for compressed layouts.

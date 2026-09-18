@@ -1106,6 +1106,18 @@ _FULL_CONFIG = (
     ("sort", sort),
     ("sort.stable", sort_stable),
     (
+        "sparse_bsr_tensor.crow_col_value",
+        sparse_bsr_tensor_crow_col_value,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_bsr_tensor.crow_col_value_size",
+        sparse_bsr_tensor_crow_col_value_size,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
         "sparse_dim",
         sparse_dim,
         None,
