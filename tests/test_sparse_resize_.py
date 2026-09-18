@@ -268,10 +268,15 @@ def test_sparse_resize__errors(tag, size, nnd, nnz, target, sp, dn):
         flag_gems.sparse_resize_(inp, target, sp, dn)
 
     # Semantic fragments only (never the full sentence, which is build-specific).
+    # The impl raises the count-validator rejection whenever
+    # sparse_dim + dense_dim != len(size) -- that order is our documented
+    # behaviour (the count check precedes the grow-only checks). The
+    # REFERENCE build, however, reaches the two checks in a build-dependent
+    # order (the CI torch build raises the grow-only message for this same
+    # input where this build raises the count message), so the branch must be
+    # chosen from the IMPL message, never from ref_err's wording.
     msg = str(excinfo.value)
-    if "number of dimensions" in str(ref_err):
-        # The count validator is the same on both paths and names the three
-        # values, so pin the fragment, not the sentence.
+    if sp + dn != len(target):
         assert "sparse_dim (" + str(sp) + ") + dense_dim (" + str(dn) + ")" in msg, msg
         assert "but got " + str(len(target)) in msg, msg
     else:
