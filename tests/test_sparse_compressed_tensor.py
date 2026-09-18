@@ -493,7 +493,7 @@ def test_sparse_compressed_tensor_zero_nnz(layout, size, nnz, block, dense):
 
 
 @pytest.mark.sparse_compressed_tensor
-@pytest.mark.parametrize("layout", [l for l, *_ in INFER_CASES])
+@pytest.mark.parametrize("layout", [layout for layout, *_ in INFER_CASES])
 def test_sparse_compressed_tensor_inference_empty_plain_index(layout):
     # Inference with no stored entries has no plain extent to infer from: the
     # plain dimension collapses to zero (measured). The compressed extent still
@@ -547,7 +547,7 @@ def test_sparse_compressed_tensor_single_element_compressed_index():
 
 @pytest.mark.sparse_compressed_tensor
 @pytest.mark.parametrize("index_dtype", INDEX_DTYPES)
-@pytest.mark.parametrize("layout", [l for l, *_ in SIZE_CASES])
+@pytest.mark.parametrize("layout", [layout for layout, *_ in SIZE_CASES])
 def test_sparse_compressed_tensor_index_dtype_preserved(layout, index_dtype):
     # The packet overloads store the index dtypes verbatim -- the int32 -> int64
     # promotion lives in the Python builtin's argument parser, a different call
@@ -901,7 +901,6 @@ def test_sparse_compressed_tensor_invariants_mode_validation():
     # so the semantics stay pinned. Class plus semantic fragments only
     # (addendum A1): the CI runner is a different torch build and can raise the
     # same rejection from a different validator with different wording.
-    dev = torch.device("cpu")
     c, p, v = _gen_components(torch.sparse_csr, (4, 4), 3, None, None, seed=12)
     # A valid (3, 4) CSR structure needs a compressed index of exactly
     # size[0] + 1 = 5 entries whose last entry equals nnz = 3 (the generated
@@ -1095,7 +1094,7 @@ def test_sparse_compressed_tensor_batched():
 
 
 @pytest.mark.sparse_compressed_tensor
-@pytest.mark.parametrize("layout", [l for l, *_ in SIZE_CASES])
+@pytest.mark.parametrize("layout", [layout for layout, *_ in SIZE_CASES])
 def test_sparse_compressed_tensor_non_contiguous_components(layout):
     # The constructor stores the components by reference regardless of their
     # strides: a non-contiguous slice must survive with its own stride and still
