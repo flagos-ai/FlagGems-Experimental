@@ -68,6 +68,14 @@ registrar = GeneralOpRegistrar
 current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
+# sparse_coo_tensor.indices / .indices_size are tensor-input factories whose
+# native kernels live on CompositeImplicitAutograd only (no backend key at
+# all), so a device-key registration would never be selected for the Python
+# builtin torch.sparse_coo_tensor(...); the extra key below is the key the
+# native composite occupies (same reasoning as can_cast).
+COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
+    torch._C.DispatchKey.CompositeImplicitAutograd.name
+)
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
 SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 
@@ -1075,6 +1083,41 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    # sparse_coo_tensor: four ATen overloads, measured per key with sentinel
+    # probes (runs/sparse_coo_tensor/native_probe_u.log + GPU probe log) and
+    # poison-verified through flag_gems.enable() (verify_enable5.log):
+    #   .indices / .indices_size are pure composites whose native kernel sits
+    #     on CompositeImplicitAutograd only (no backend key) — a device-key
+    #     registration would never be selected;
+    #   .size is a factory reached on BOTH backend keys: the packet form
+    #     (layout=None) computes the plain device key, while the Python
+    #     builtin passes layout=kSparse explicitly and computes the Sparse key;
+    #   .size_out receives a sparse COO `out` tensor, so its computed dispatch
+    #     key is the Sparse backend key (the plain device key is never hit).
+    (
+        "sparse_coo_tensor.indices",
+        sparse_coo_tensor_indices,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_coo_tensor.indices_size",
+        sparse_coo_tensor_indices_size,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_coo_tensor.size",
+        sparse_coo_tensor_size,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_coo_tensor.size_out",
+        sparse_coo_tensor_size_out,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
     ("sparse_sampled_addmm", sparse_sampled_addmm, None, (SPARSE_CSR_DISPATCH_KEY,)),
     (
         "sparse_sampled_addmm.out",
