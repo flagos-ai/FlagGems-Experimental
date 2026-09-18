@@ -1300,6 +1300,8 @@ _FULL_CONFIG = (
         None,
         (SPARSE_DISPATCH_KEY,),
     ),
+    ("sparse_csc_tensor.ccol_row_value", sparse_csc_tensor_ccol_row_value),
+    ("sparse_csc_tensor.ccol_row_value_size", sparse_csc_tensor_ccol_row_value_size),
     (
         "sparse_csr_tensor.crow_col_value",
         sparse_csr_tensor_crow_col_value,

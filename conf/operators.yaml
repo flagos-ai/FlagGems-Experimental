@@ -13405,6 +13405,24 @@ ops:
   - Tensor
   stages:
   - alpha: '5.5'
+- id: sparse_csc_tensor
+  description: 'Host-side sparse CSC constructor: aliases the ccol/row index and value
+    components and stores them verbatim. The explicit-size overload takes the shape
+    as given; the size-inferred overload derives it as max(row) + 1 by row and ccol.size(-1)
+    - 1 by column, with an nnz == 0 tensor inferring an empty row dimension.
+
+    '
+  for:
+  - sparse_csc_tensor.ccol_row_value
+  - sparse_csc_tensor.ccol_row_value_size
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+  - alpha: '5.4'
 - id: sparse_csr_tensor
   description: 'Host-side sparse CSR constructor: stores the crow/col index vectors
     and values verbatim (the result aliases all three component tensors), infers the
