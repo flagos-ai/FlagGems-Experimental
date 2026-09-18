@@ -300,10 +300,16 @@ def test_sparse_resize_and_clear__errors(tag, size, nnd, nnz, target, sp, dn):
     with pytest.raises(type(ref_err)) as excinfo:
         flag_gems.sparse_resize_and_clear_(inp, target, sp, dn)
 
+    # Semantic fragments only (never the full sentence, which is build-specific).
+    # Branch on the IMPLEMENTATION's own validation order, not on the reference
+    # wording: the reference build reaches the count and numel validators in a
+    # build-dependent order (the CI torch build raises the grow-only message for
+    # a count mismatch where this build raises the count message), so choosing
+    # the branch from ref_err's wording can assert the wrong fragment against
+    # our message. Our order is documented: the count check precedes the numel
+    # check, so sp + dn != len(target) always yields the count message here.
     msg = str(excinfo.value)
-    if "number of dimensions" in str(ref_err):
-        # The count validator is the same on both paths and names the three
-        # values, so pin the fragment, not the sentence.
+    if sp + dn != len(target):
         assert "sparse_dim (" + str(sp) + ") + dense_dim (" + str(dn) + ")" in msg, msg
         assert "but got " + str(len(target)) in msg, msg
     else:
