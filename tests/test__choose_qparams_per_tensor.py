@@ -442,8 +442,16 @@ def test_accuracy__choose_qparams_subnormal_scale_window(reduce_range):
         _assert_same_result(res, ref, f"[0,{hi}]/rr={reduce_range}")
 
     # Below the boundary the scales differ by the fixed replacement; pin both
-    # sides so neither one moves.
-    for hi in (1e-45, 1e-40, 1e-38, 1.2e-38, 1e-37, 5e-37):
+    # sides so neither one moves. The native 0.1-replacement boundary tracks
+    # the raw scale, which is hi/255 (rr=False) or hi/127 (rr=True), so the
+    # window sits at a different hi for the two modes (measured: 5e-37 is
+    # already above the rr=True crossing but below the rr=False one).
+    window = (
+        (1e-45, 1e-40, 1e-38, 1.2e-38, 1e-37, 5e-37)
+        if not reduce_range
+        else (1e-45, 1e-40, 1e-38, 1.2e-38, 1e-37)
+    )
+    for hi in window:
         x = torch.tensor([0.0, hi], dtype=torch.float32, device=_DEVICE)
         ref = _ATEN(x, reduce_range)
         res = flag_gems._choose_qparams_per_tensor(x, reduce_range)
