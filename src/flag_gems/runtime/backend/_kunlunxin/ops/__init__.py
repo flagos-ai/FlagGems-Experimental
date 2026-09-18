@@ -305,6 +305,7 @@ from .softmax import softmax, softmax_backward
 from .softplus import softplus
 from .softshrink import softshrink, softshrink_out
 from .sort import sort, sort_stable
+from .special_erfc import special_erfc
 from .special_gammaln_out import special_gammaln_out
 from .special_log_softmax import special_log_softmax
 from .special_logsumexp import special_logsumexp
@@ -761,6 +762,7 @@ __all__ = [
     "softshrink_out",
     "sort",
     "sort_stable",
+    "special_erfc",
     "special_gammaln_out",
     "special_log_softmax",
     "special_logsumexp",
