@@ -18,220 +18,116 @@
 ``sparse_csc_tensor`` is a host-side constructor: it wires raw
 ``(ccol_indices, row_indices, values)`` components into a ``torch.sparse_csc``
 tensor.  There is no elementwise arithmetic over the stored elements and no
-device-side data movement: the constructor *aliases* the three component
-tensors (verified with ``data_ptr``/storage identity on this build, CPU and
-CUDA, through both the public and the internal constructor).
+device-side data movement, so the operator contract is *which arguments are
+accepted or rejected* and *what the resulting tensor's metadata and aliasing
+are*.
 
-Two device-side computations do exist in the supplied implementation and are
-kept here with their Triton kernels:
+The two overloads and the keys that intercept them, measured per key on this
+build in fresh processes (run log ``coord/sched/logs/sparse_csc_tensor-other-
+a1-156c17bf.log``): plain dense component tensors compute the plain backend
+key (``CUDA``/``CPU``), which the ``_FULL_CONFIG`` device-key registration
+covers; ``SparseCUDA`` / ``SparseCsrCUDA`` / ``BackendSelect`` / ``Autograd``
+/ ``CompositeExplicitAutograd`` all miss, and ``CompositeImplicitAutograd``
+also intercepts (it is the native kernel's own key, reached when the device
+key misses).  No sparse backend key is involved: CSC here is the *output*
+layout, while every input is a plain strided tensor.
 
-* the dtype conversion, run only when ``dtype`` disagrees with
-  ``values.dtype``;
-* the ``size`` inference, run only when ``size`` is omitted: ``nrows`` is
-  ``row_indices.max() + 1`` and ``ncols`` is the compressed dimension size,
-  reproducing native ``_estimate_sparse_compressed_tensor_size``.
+Delegation, not re-dispatch: each implementation calls the ATen op that
+computes its own result natively, never the overload it implements (which
+would recurse):
 
-Components are handed to the internal zero-copy constructor
-``_sparse_csc_tensor_unsafe`` -- the same call native's
-``sparse_compressed_tensor`` makes.  ``layout`` (a non-CSC request is rejected
-by the same check with the same wording from inside that call) and
-``pin_memory`` (``True`` pins a copy of the components, losing the alias, for
-CPU components) therefore behave identically without duplicating any checks.
-Validation of the index structure happens only while
-``torch.sparse.check_sparse_tensor_invariants`` is enabled, exactly as on the
-native public path: with invariants off, native accepts out-of-bounds row
-indices, a non-monotonic ``ccol_indices`` and a ``ccol_indices[-1] != nnz``
-and stores them verbatim.
+- ``.ccol_row_value_size`` delegates to ``aten::sparse_compressed_tensor.
+  comp_plain_value_size`` with ``layout=torch.sparse_csc`` -- the shared
+  composite ``at::native::sparse_compressed_tensor`` that ATen's generated
+  CSC wrapper calls after its layout guard
+  (``SPARSE_COMPRESSED_TENSOR(csc, kSparseCsc)`` in
+  ``aten/src/ATen/native/sparse/SparseCsrTensor.cpp``).
+- ``.ccol_row_value`` delegates to the size-inferred
+  ``comp_plain_value`` overload, whose inference branch runs ATen's own
+  ``_estimate_sparse_compressed_tensor_size`` -- so the batch dimensions,
+  the trailing dense dimensions, the negative-row arithmetic, the row-index
+  dtype gate and every estimator sentence are reproduced *by construction*,
+  instead of mirrored in Python.
 
-``device`` is resolved to ``values.device`` when omitted.  That is what the
-native *python* entry point does (``torch.sparse_csc_tensor`` passes
-``values.options()`` down, so a user never sees a device-less call) and what
-the supplied implementation does; note the packet form reached through
-``torch.ops.aten`` is stricter -- with CUDA components and no ``device`` it
-falls back to CPU and raises "Values and compressed tensor instance need to be
-on the same device." -- so this integration is the more permissive of the two.
+This mirrors the accepted ``sparse_csr_tensor`` / ``sparse_bsc_tensor``
+integrations.  The supplied competition source instead re-implemented the
+estimator in Python and launched two Triton kernels (a dtype cast and a
+max-reduction).  Both kernels are dropped here with measured reasons:
 
-The inferred-size path reproduces native's shape arithmetic and its three
-dimension checks.  Two behaviours of the supplied implementation that cannot
-match native on inputs native accepts are pinned by the tests and disclosed
-here:
+- the cast kernel was never part of the packet contract: native's packet
+  overloads do **not** cast -- a ``dtype``/``values.dtype`` mismatch raises
+  ``dtype of values (Float) must match dtype of sparse tensor (Double)``
+  (probe H A) -- and its flat-offset addressing read a strided ``values``
+  as if it were contiguous (probe G: ``[0,1,2]`` vs native ``[0,2,4]``).
+  The cast lives one level up, in the Python builtin
+  ``torch.sparse_csc_tensor``, which materialises the components with
+  ``Tensor.to`` before calling the shared constructor; the tests exercise
+  the builtin's cast separately.
+- the max-reduction padded masked lanes with ``other=0``, so an
+  all-negative ``row_indices`` inferred ``nrows = 1`` where native infers
+  ``0`` (probe G/H), dropped the batch and dense dimensions from the
+  inferred shape (probes G/H), and cost a device round trip per call (the
+  CSR sibling measured ~18 us and switched to this same delegation).
 
-* ``_max_kernel`` pads masked lanes with ``other=0``, so an all-negative
-  ``row_indices`` yields ``nrows = 1`` where native's ``max().item() + 1``
-  yields ``0``;
-* ``_cast_kernel`` addresses ``src`` with flat offsets, so a non-contiguous
-  ``values`` is read as if it were contiguous, where ``Tensor.to`` (used by
-  the native builtin) reads through the strides.
+The layout guard is the one behaviour the shared composite does not carry:
+the generated CSC wrapper rejects a mismatching ``layout=`` *before*
+delegating, with the layout's own name in the message ("sparse csc layout
+must be SparseCsc but got SparseCsr"), while the shared composite would
+accept some of those layouts and build a differently-shaped tensor.
+``_check_csc_layout`` reproduces that single check so the rejected inputs
+stay rejected with the native wording.
 
-Both are reachable only through the inferred-size / dtype-cast branches.  An
-nnz == 0 result's buffers are neither initialized nor zero-filled on either
-side: the components are the caller's own tensors, stored verbatim.
+dtype semantics, measured rather than assumed: ``dtype=None`` resolves to
+the *default dtype* (not the values dtype), so a ``float64`` ``values``
+with ``dtype=None`` raises the mismatch sentence above; an explicit
+``dtype=values.dtype`` is the no-cast aliasing path.  ``device=None`` is
+forwarded untouched: the shared composite resolves it (a CPU instance for
+device-less CUDA components, then its own "Values and compressed tensor
+instance need to be on the same device." rejection), and pre-resolving it
+here would relabel native rejections as ours.
 """
 
 import logging
 
 import torch
-import triton
-import triton.language as tl
-
-from flag_gems.runtime import torch_device_fn
 
 logger = logging.getLogger(__name__)
 
-
-@triton.jit
-def _cast_kernel(src, dst, n, BLOCK: tl.constexpr):
-    """Elementwise dtype cast (only exercised when dtype != values.dtype)."""
-    pid = tl.program_id(0)
-    offs = pid * BLOCK + tl.arange(0, BLOCK)
-    mask = offs < n
-    x = tl.load(src + offs, mask=mask)
-    tl.store(dst + offs, x.to(dst.dtype.element_ty), mask=mask)
-
-
-@triton.jit
-def _max_kernel(src, dst, n, BLOCK: tl.constexpr):
-    """Row-index maximum via atomic max (only exercised when size is omitted)."""
-    pid = tl.program_id(0)
-    offs = pid * BLOCK + tl.arange(0, BLOCK)
-    mask = offs < n
-    x = tl.load(src + offs, mask=mask, other=0)
-    m = tl.max(x, axis=0)
-    tl.atomic_max(dst, m)
-
-
-# The integral dtypes AT_DISPATCH_INTEGRAL_TYPES covers in native's
-# _estimate_sparse_compressed_tensor_size; every other row-index dtype is
-# rejected there. Spelled the way ATen prints scalar types so the message is
-# recognisable across builds.
-_TYPE_NAMES = {
-    torch.float32: "Float",
-    torch.float64: "Double",
-    torch.float16: "Half",
-    torch.bfloat16: "BFloat16",
-    torch.bool: "Bool",
-    torch.complex64: "ComplexFloat",
-    torch.complex128: "ComplexDouble",
-    torch.int8: "Char",
-    torch.uint8: "Byte",
-    torch.int16: "Short",
-    torch.int32: "Int",
-    torch.int64: "Long",
+# Layout spellings as ATen prints them ("Sparse", "Strided", "SparseCsr",
+# ...), so a rejected ``layout=`` argument produces the native sentence.
+_LAYOUT_NAMES = {
+    torch.strided: "Strided",
+    torch.sparse_coo: "Sparse",
+    torch.sparse_csr: "SparseCsr",
+    torch.sparse_csc: "SparseCsc",
+    torch.sparse_bsr: "SparseBsr",
+    torch.sparse_bsc: "SparseBsc",
 }
 
-_ROW_INDEX_DTYPES = (torch.int8, torch.uint8, torch.int16, torch.int32, torch.int64)
+
+def _layout_name(layout):
+    return _LAYOUT_NAMES.get(layout, str(layout))
 
 
-def _type_name(dtype):
-    name = _TYPE_NAMES.get(dtype)
-    if name is not None:
-        return name
-    # Fall back to ATen's spelling: torch.float8_e4m3fn -> Float8_e4m3fn.
-    short = str(dtype).split(".")[-1]
-    return short[:1].upper() + short[1:]
+# The delegates are spelled per call (not bound at module scope) so a test can
+# poison them and prove the shipped code runs; the lookup cost is not
+# measurable next to the constructor's own dispatch.
 
 
-def _cast_values(values: torch.Tensor, dtype) -> torch.Tensor:
-    """Dtype conversion branch, only taken when ``dtype`` differs.
+def _check_csc_layout(layout) -> None:
+    """Reproduce the generated CSC wrapper's layout guard.
 
-    ``empty_like`` allocates fresh contiguous storage, so the converted values
-    never alias the input -- matching the native builtin, which casts with
-    ``Tensor.to``.  The kernel addresses ``src`` with flat offsets, so a
-    non-contiguous ``values`` is read as if it were contiguous (see the module
-    docstring); that is the one input class where this branch differs from
-    native, and the tests pin both sides.
+    ``SPARSE_COMPRESSED_TENSOR(csc, kSparseCsc)`` checks the requested layout
+    *before* delegating to the shared composite, so an absent (``None``)
+    layout is accepted and any other explicit layout is rejected with exactly
+    this sentence.  Without the guard the shared composite would happily
+    build a differently-shaped tensor for some of those layouts.
     """
-    out = torch.empty_like(values, dtype=dtype)
-    n = values.numel()
-    if n == 0:
-        return out
-    grid = (triton.cdiv(n, 1024),)
-    with torch_device_fn.device(values.device):
-        _cast_kernel[grid](values, out, n, BLOCK=1024)
-    return out
-
-
-def _infer_size(
-    ccol_indices: torch.Tensor, row_indices: torch.Tensor, values: torch.Tensor
-):
-    """Infer ``(nrows, ncols)`` the way native does.
-
-    Reproduces ``_estimate_sparse_compressed_tensor_size`` for CSC in its
-    original order: the three dimension checks first (carrying native's own
-    parameter values in the messages), then the row-dtype dispatch, then
-    ``nrows = row_indices.max() + 1`` computed on the device by the supplied
-    max-reduction, with ``ncols = max(ccol_indices.size(-1) - 1, 0)``.  An
-    empty ``row_indices`` infers ``nrows = 0`` (native's empty-max
-    convention), which is the nnz == 0 / fresh-tensor case.
-    """
-    batch_ndim = ccol_indices.dim() - 1
-    if batch_ndim < 0:
+    if layout is not None and layout != torch.sparse_csc:
         raise RuntimeError(
-            f"ccol_indices must have dimensionality >= 1 but got {ccol_indices.dim()}"
+            f"sparse csc layout must be {_LAYOUT_NAMES[torch.sparse_csc]} "
+            f"but got {_layout_name(layout)}"
         )
-    if ccol_indices.dim() != row_indices.dim():
-        raise RuntimeError(
-            "ccol_indices and row_indices dimensionalities must be equal but got "
-            f"{ccol_indices.dim()} and {row_indices.dim()}, respectively"
-        )
-    if values.dim() - batch_ndim - 1 < 0:
-        raise RuntimeError(
-            "values must have dimensionality > sum of batch and block "
-            f"dimensionalities (={batch_ndim} + 0) but got {values.dim()}"
-        )
-    if row_indices.dtype not in _ROW_INDEX_DTYPES:
-        raise RuntimeError(
-            '"estimate_sparse_compressed_tensor_size" not implemented for '
-            f"'{_type_name(row_indices.dtype)}'"
-        )
-
-    ncols = ccol_indices.size(-1)
-    ncols = ncols - 1 if ncols > 0 else 0
-    n = row_indices.numel()
-    if n == 0:
-        return (0, ncols)
-    mx = torch.zeros((1,), dtype=torch.int64, device=row_indices.device)
-    grid = (triton.cdiv(n, 1024),)
-    with torch_device_fn.device(row_indices.device):
-        _max_kernel[grid](row_indices, mx, n, BLOCK=1024)
-    return (mx.item() + 1, ncols)
-
-
-def _resolve_device(values: torch.Tensor, device):
-    """Output device: ``values.device`` unless the caller pinned one."""
-    if device is None:
-        return values.device
-    return device if isinstance(device, torch.device) else torch.device(device)
-
-
-def _assemble(
-    ccol_indices: torch.Tensor,
-    row_indices: torch.Tensor,
-    values: torch.Tensor,
-    size,
-    *,
-    dtype,
-    layout,
-    device,
-    pin_memory,
-) -> torch.Tensor:
-    """Hand the components to the internal zero-copy CSC constructor.
-
-    ``layout`` and ``pin_memory`` are forwarded unchanged: that call is where
-    the layout check lives, and a ``True`` pin_memory materializes pinned
-    copies of the components.  ``dtype`` is the (possibly cast) values dtype,
-    as the native builtin passes it.
-    """
-    return torch.ops.aten._sparse_csc_tensor_unsafe(
-        ccol_indices,
-        row_indices,
-        values,
-        list(size),
-        dtype=dtype,
-        layout=layout,
-        device=device,
-        pin_memory=pin_memory,
-    )
 
 
 def sparse_csc_tensor_ccol_row_value_size(
@@ -248,23 +144,31 @@ def sparse_csc_tensor_ccol_row_value_size(
     """Build a sparse CSC tensor from explicit components and ``size``.
 
     Mirrors ``aten::sparse_csc_tensor.ccol_row_value_size``.  The components
-    are aliased, never copied: ``result.ccol_indices()``,
-    ``result.row_indices()`` and ``result.values()`` are the very tensors
-    passed in, exactly as native.  The only device work is the dtype
-    conversion, taken when ``dtype`` disagrees with ``values.dtype``.
+    are stored verbatim -- the result's ``ccol_indices()``,
+    ``row_indices()`` and ``values()`` are the very tensors passed in
+    (``data_ptr()`` identity, verified on this build) -- and ``size`` is
+    stored as given, even when it disagrees with the components: the
+    structural checks belong to the constructor's invariant validator, which
+    native runs only while ``torch.sparse.check_sparse_tensor_invariants``
+    is enabled.  Delegating to the same native body keeps the permissive
+    default and the validating mode byte-identical to native.
+
+    ``torch.sparse_csc_tensor`` (the Python builtin) is a different call
+    path: its C++ argument parser materialises the components in the
+    requested dtype and calls the shared composite directly, so the builtin
+    never enters these overloads.  Call this function, or the packet
+    overload, to exercise the registered implementation.
     """
     logger.debug("GEMS SPARSE_CSC_TENSOR_CCOL_ROW_VALUE_SIZE")
-    v = values
-    if dtype is not None and v.dtype != dtype:
-        v = _cast_values(v, dtype)
-    return _assemble(
+    _check_csc_layout(layout)
+    return torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size(
         ccol_indices,
         row_indices,
-        v,
-        size,
-        dtype=v.dtype,
-        layout=layout,
-        device=_resolve_device(v, device),
+        values,
+        list(size),
+        dtype=dtype,
+        layout=torch.sparse_csc,
+        device=device,
         pin_memory=pin_memory,
     )
 
@@ -281,24 +185,21 @@ def sparse_csc_tensor_ccol_row_value(
 ) -> torch.Tensor:
     """Build a sparse CSC tensor with ``size`` inferred from the components.
 
-    Mirrors ``aten::sparse_csc_tensor.ccol_row_value``: ``nrows`` is
-    ``row_indices.max() + 1`` and ``ncols`` is the compressed dimension size,
-    both derived as ``_estimate_sparse_compressed_tensor_size`` does.  The
-    aliasing contract is the same as the explicit-size overload; only the size
-    inference adds device work.
+    Mirrors ``aten::sparse_csc_tensor.ccol_row_value``.  The logical shape is
+    ``[batch..., max(row_indices) + 1, len(ccol_indices) - 1, dense...]``
+    computed by ATen's own ``_estimate_sparse_compressed_tensor_size``;
+    delegating to the shared composite's size-inference branch keeps the
+    estimator's dtype gate, dimensionality checks and batch/dense arithmetic
+    identical to native instead of re-deriving them in Python.
     """
     logger.debug("GEMS SPARSE_CSC_TENSOR_CCOL_ROW_VALUE")
-    v = values
-    if dtype is not None and v.dtype != dtype:
-        v = _cast_values(v, dtype)
-    size = _infer_size(ccol_indices, row_indices, v)
-    return _assemble(
+    _check_csc_layout(layout)
+    return torch.ops.aten.sparse_compressed_tensor.comp_plain_value(
         ccol_indices,
         row_indices,
-        v,
-        size,
-        dtype=v.dtype,
-        layout=layout,
-        device=_resolve_device(v, device),
+        values,
+        dtype=dtype,
+        layout=torch.sparse_csc,
+        device=device,
         pin_memory=pin_memory,
     )
