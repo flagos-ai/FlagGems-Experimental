@@ -1075,6 +1075,9 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    # The dispatched call (dense self x COO mask) resolves on the mask's COO
+    # functionality key, i.e. SparseCUDA -- the plain CUDA key never sees it.
+    ("sparse_mask", sparse_mask, None, (SPARSE_DISPATCH_KEY,)),
     ("sparse_sampled_addmm", sparse_sampled_addmm, None, (SPARSE_CSR_DISPATCH_KEY,)),
     (
         "sparse_sampled_addmm.out",
