@@ -371,77 +371,80 @@ def test_accuracy_flatten_dense_tensors_metadata_path(count, size):
     _check(_gen_inputs((size,), dtype, count), dtype)
 
 
-# The small-N fast path is only taken when the total fits in 32 bits; a list
-# whose total crosses 2**32 elements must fall through to the metadata kernel
-# (the only implementation path that can serve an offset >= 2**32). The wave
-# sizes are deliberately NOT a multiple of the chunk size so the tensor at the
-# 2**32 element boundary is only correct if the kernel kept every offset in
-# int64. Element count is kept just under 2**32 so native's own cat (which
-# materialises the same 4 * 2**30 buffer) stays affordable: the test is
-# skipped in the quick phase because it needs ~16 GiB of inputs plus the
-# equally large output and reference.
-BOUNDARY_TOTAL = (1 << 32) - 4
-# Unequal wave sizes, none a multiple of the chunk size, summing exactly to
-# BOUNDARY_TOTAL. The module-level construction is asserted inside the test so
-# a mistake is a test failure, not a collection error.
-_QUARTER = BOUNDARY_TOTAL // 4
-WAVE = [_QUARTER + 1, _QUARTER, _QUARTER + 3, _QUARTER - 4]
+# The small-N fast path is only taken when the total fits in 32 bits AND the
+# list has 2..4 members; a list whose element offsets cross 2**32 elements must
+# fall through to the 1-D-grid metadata kernel, which is the only path that
+# keeps every offset in int64.
+#
+# Two constraints set the shape of this test:
+#   - N must be >= 5: for N in 2..4 a >2**32 total would still enter the small-N
+#     2D-grid kernel, whose second grid dimension is ceil(numel / BLOCK) per
+#     tensor and exceeds CUDA's 65535 grid limit (measured: "invalid argument").
+#   - uint8 keeps the footprint affordable: 5 * 2**30 elements is ~4.3 GiB of
+#     inputs instead of ~17 GiB for float32.
+TOTAL_TARGET = (1 << 32) + 64
+_WAVE_BASE = 858993480  # per-tensor element count; 5 of them clear 2**32
+WAVE = [_WAVE_BASE, _WAVE_BASE + 1, _WAVE_BASE + 2, _WAVE_BASE + 3, _WAVE_BASE + 4]
 
 
 @pytest.mark.flatten_dense_tensors
 @pytest.mark.skipif(
-    cfg.QUICK_MODE,
-    reason="needs ~16 GiB of inputs plus the equally large output and reference",
+    cfg.QUICK_MODE, reason="needs ~4.3 GiB of inputs plus the equally large output"
 )
 def test_accuracy_flatten_dense_tensors_over_32bit_offsets():
-    dtype = torch.float32
-    assert sum(WAVE) == BOUNDARY_TOTAL, (sum(WAVE), BOUNDARY_TOTAL)
+    dtype = torch.uint8
+    total = sum(WAVE)
+    assert total > (1 << 32), (total, 1 << 32)
     tensors = [
         torch.zeros((size,), dtype=dtype, device=flag_gems.device) for size in WAVE
     ]
-    # Two markers per wave: the first wave starts before the 2**32 element
-    # offset of the later waves, so a 32-bit offset field would corrupt them.
+    # markers at both ends of every wave: the later waves start at an element
+    # offset above 2**32, so a 32-bit offset field would corrupt them.
     for i, tensor in enumerate(tensors):
-        tensor[0] = float(i + 1)
-        tensor[-1] = float(-(i + 1))
+        tensor[0] = i + 1
+        tensor[-1] = 200 + i
     res = flag_gems.flatten_dense_tensors(tensors)
-    assert res.shape == torch.Size([BOUNDARY_TOTAL])
+    assert res.shape == torch.Size([total])
+    assert res.dtype == dtype
     pos = 0
     for i, size in enumerate(WAVE):
-        assert float(res[pos]) == float(i + 1)
-        assert float(res[pos + size - 1]) == float(-(i + 1))
-        assert float(res[pos + size // 2]) == 0.0
+        assert int(res[pos]) == i + 1
+        assert int(res[pos + size - 1]) == 200 + i
+        assert int(res[pos + size // 2]) == 0
         pos += size
-    # Reference in chunks: a single CPU flatten of the same 16 GiB would need
-    # another ~16 GiB of host memory. Each chunk covers one wave and is built
-    # from that wave's own converted tensor, so the --ref=cpu contract holds.
+    # Reference per wave, built from that wave's own converted tensor: one
+    # CPU flatten of the whole 4.3 GiB list would need a second 4.3 GiB host
+    # buffer, and the --ref=cpu contract keeps each conversion independent.
+    pos = 0
     for i, size in enumerate(WAVE):
         ref_part = torch.ops.aten.flatten_dense_tensors(
             [utils.to_reference(tensors[i])]
         )
         assert ref_part.shape == torch.Size([size])
-        utils.gems_assert_equal(res[sum(WAVE[:i]) : sum(WAVE[: i + 1])], ref_part)
+        utils.gems_assert_equal(res[pos : pos + size], ref_part)
+        pos += size
         del ref_part
     del tensors, res
 
 
 # ---------------------------------------------------------------------------
-# Fresh-storage contract.
+# Fresh-storage contract. The reference is taken BEFORE the mutation below, so
+# the comparison is against the same pre-mutation values on both sides.
 # ---------------------------------------------------------------------------
 @pytest.mark.flatten_dense_tensors
 def test_accuracy_flatten_dense_tensors_fresh_storage():
     dtype = torch.float32
     tensors = [torch.randn(64, dtype=dtype, device=flag_gems.device) for _ in range(3)]
     res = flag_gems.flatten_dense_tensors(tensors)
+    ref = torch.ops.aten.flatten_dense_tensors(_to_ref_list(tensors))
     before = res.clone()
+    assert torch.equal(res, before)
+    # the flat buffer has exactly one storage of its own
+    assert res.untyped_storage().nbytes() == 3 * 64 * res.element_size()
+    # mutating an input after the call leaves the (fresh) output untouched
     for tensor in tensors:
         tensor.mul_(2.0)
     utils.gems_assert_equal(res, before)
-    # the flat buffer has exactly one storage of its own
-    assert res.untyped_storage().nbytes() == 3 * 64 * res.element_size()
-    # equivalent work on the reference side: same list length and dtype, so the
-    # comparison is against a reference that ran the same scope.
-    ref = torch.ops.aten.flatten_dense_tensors(_to_ref_list(tensors))
     utils.gems_assert_close(res, ref, dtype)
 
 
@@ -513,12 +516,19 @@ def test_accuracy_flatten_dense_tensors_autograd_contract():
 def test_accuracy_flatten_dense_tensors_repeat_dispatch():
     dtype = torch.float32
     tensors = [torch.randn(300, dtype=dtype, device=flag_gems.device) for _ in range(3)]
+    # Capture the first result through to_reference: under --ref=cpu this lands
+    # on the CPU, which is what gems_assert_close requires of its reference.
+    first = utils.to_reference(flag_gems.flatten_dense_tensors(tensors).clone())
+    # the reference implementation, run on the reference side, for the same list
     ref = torch.ops.aten.flatten_dense_tensors(_to_ref_list(tensors))
-    first = flag_gems.flatten_dense_tensors(tensors).clone()
     for _ in range(4):
-        utils.gems_assert_close(flag_gems.flatten_dense_tensors(tensors), ref, dtype)
-        utils.gems_assert_equal(flag_gems.flatten_dense_tensors(tensors), first)
+        utils.gems_assert_close(flag_gems.flatten_dense_tensors(tensors), first, dtype)
     # an unrelated op in between must not perturb the result
-    torch.ops.aten.dim(tensors[0])
+    assert torch.ops.aten.dim(tensors[0]) == 1
+    utils.gems_assert_close(flag_gems.flatten_dense_tensors(tensors), first, dtype)
     utils.gems_assert_close(flag_gems.flatten_dense_tensors(tensors), ref, dtype)
-    utils.gems_assert_equal(flag_gems.flatten_dense_tensors(tensors), first)
+    # every dispatch returned its own buffer (no reused scratch output); the
+    # results are held so the allocator cannot hand the same block back.
+    held = [flag_gems.flatten_dense_tensors(tensors) for _ in range(3)]
+    assert len({out.data_ptr() for out in held}) == 3
+    assert all(torch.equal(out, held[0]) for out in held[1:])
