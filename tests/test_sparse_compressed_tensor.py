@@ -728,8 +728,15 @@ def test_sparse_compressed_tensor_missing_or_bad_layout_rejected():
 def test_sparse_compressed_tensor_estimator_dtype_gate():
     # The estimator reduces the plain indices through ATen's integral
     # dispatcher, so a non-integral plain index is rejected with the
-    # dispatcher's own message. The class and the estimator name are pinned; the
-    # dtype spelling comes from a C++ macro, so it is matched as a fragment.
+    # dispatcher's own message. The estimator name and dtype spelling are
+    # pinned as fragments. The exception CLASS is pinned on each side
+    # independently as RuntimeError-or-subclass, not by identity between the
+    # sides: torch builds differ in which class the C++ dispatcher's default
+    # AT_DISPATCH fallback materialises (RuntimeError here, NotImplementedError
+    # -- a RuntimeError subclass -- on the CI build; the PR #674 incident).
+    # Our own estimator raises RuntimeError unconditionally, so requiring
+    # RuntimeError-or-subclass on the implementation side keeps the gate real
+    # without pinning one build's subclass choice.
     dev = flag_gems.device
     c, p, v = _to_device(
         _gen_components(torch.sparse_csr, (4, 4), 3, None, None, seed=9),
@@ -748,7 +755,8 @@ def test_sparse_compressed_tensor_estimator_dtype_gate():
             utils.to_reference(v),
             layout=torch.sparse_csr,
         )
-    assert type(res_exc.value) is type(ref_exc.value)
+    assert isinstance(res_exc.value, RuntimeError)
+    assert isinstance(ref_exc.value, RuntimeError)
     assert "estimate_sparse_compressed_tensor_size" in str(res_exc.value)
     assert "estimate_sparse_compressed_tensor_size" in str(ref_exc.value)
     assert "Float" in str(res_exc.value)
