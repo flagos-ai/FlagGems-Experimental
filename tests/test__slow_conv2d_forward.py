@@ -86,11 +86,17 @@ def _assert_matches(case, dtype, res_out, ref_out):
     (n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw) = case
     assert res_out.shape == (n, c_out, _h_out(case, 0), _h_out(case, 1))
     assert res_out.dtype == dtype
-    # Native allocates a fresh contiguous output for every input layout.
-    assert res_out.is_contiguous()
-    assert res_out.is_contiguous() == ref_out.is_contiguous()
-    assert res_out.stride() == ref_out.stride()
     assert res_out.shape == ref_out.shape
+    # Layout: the implementation always allocates a fresh CONTIGUOUS output
+    # (measured on CUDA for every input layout). The native CUDA kernel does
+    # the same, but the CPU reference forwards the input memory format and
+    # returns a channels-last output for a channels-last input, so the contig
+    # comparison is only meaningful when the reference ran on CUDA (full
+    # phase). Under --ref=cpu only the implementation's contract is pinned.
+    if ref_out.is_cuda:
+        assert res_out.is_contiguous() == ref_out.is_contiguous()
+        assert res_out.stride() == ref_out.stride()
+    assert res_out.is_contiguous()
     # Reduction-length-scaled atol: the fp32 kernel's fp16x3 split dot and the
     # fp16/bf16 tensor-core dot accumulate over K = C_in*KH*KW products (repo
     # convention for the conv reductions, cf. test_conv2d / test_cudnn_rnn_backward).
@@ -267,7 +273,8 @@ def test_accuracy__slow_conv2d_forward_empty_batch(dtype):
     )
     res_out = flag_gems._slow_conv2d_forward(inp, weight, [3, 3], None, [1, 1], [1, 1])
 
-    assert res_out.shape == ref_out.shape == (0, 4, 3, 3)
+    # H_out = (5 + 2*1 - 3)//1 + 1 = 5 with the padding used here.
+    assert res_out.shape == ref_out.shape == (0, 4, 5, 5)
     assert res_out.numel() == 0
     assert res_out.dtype == dtype
     utils.gems_assert_close(res_out, ref_out.to(dtype), dtype)
@@ -370,7 +377,10 @@ def test_accuracy__slow_conv2d_forward_mixed_dtypes(weight_dtype):
     scalar type Float but found Double' on CPU and CUDA). The wrapper's
     guard raises the same class; only the class is asserted."""
     inp = torch.randn((1, 2, 5, 5), device=flag_gems.device)
-    weight = torch.randn((3, 2, 3, 3), dtype=weight_dtype, device=flag_gems.device)
+    if weight_dtype.is_floating_point:
+        weight = torch.randn((3, 2, 3, 3), dtype=weight_dtype, device=flag_gems.device)
+    else:
+        weight = torch.ones((3, 2, 3, 3), dtype=weight_dtype, device=flag_gems.device)
 
     with pytest.raises(RuntimeError):
         ATEN_OP(
@@ -388,14 +398,17 @@ def test_accuracy__slow_conv2d_forward_mixed_dtypes(weight_dtype):
 @pytest.mark._slow_conv2d_forward
 @pytest.mark.parametrize("bad_len", [2, 4, 8])
 def test_accuracy__slow_conv2d_forward_bias_length_mismatch(bad_len):
-    """A bias whose length differs from C_out is rejected by native (measured
-    on CPU and CUDA: 'Expected bias to have shape [3] but got [4]'). Without
-    a guard the naive kernel would read past the end of the bias tensor."""
+    """A bias whose length differs from C_out is rejected. The exception
+    CLASS is asserted on both sides: the reference's and the wrapper's wordings
+    differ (CPU/CUDA reference: 'Expected a tensor of dimension 1 and
+    tensor.size[0] == 3 but got ...'; wrapper: 'Expected bias to have shape
+    [3] but got ...'), and the CUDA reference's message is not the wrapper's.
+    Without a guard the naive kernel would read past the end of the bias."""
     inp = torch.randn((1, 2, 5, 5), device=flag_gems.device)
     weight = torch.randn((3, 2, 3, 3), device=flag_gems.device)
     b = torch.randn((bad_len,), device=flag_gems.device)
 
-    with pytest.raises(RuntimeError, match="bias"):
+    with pytest.raises(RuntimeError):
         ATEN_OP(
             utils.to_reference(inp),
             utils.to_reference(weight),
