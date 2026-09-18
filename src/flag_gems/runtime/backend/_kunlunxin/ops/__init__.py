@@ -166,6 +166,10 @@ from .isfinite import isfinite
 from .isin import isin
 from .isinf import isinf
 from .isnan import isnan
+from .jagged_to_padded_dense_forward import (
+    _jagged_to_padded_dense_forward,
+    jagged_to_padded_dense_forward,
+)
 from .kron import kron
 from .layernorm import layer_norm, layer_norm_backward
 from .le import le, le_scalar
@@ -354,6 +358,7 @@ __all__ = [
     "_functional_sym_constrain_range",
     "_functional_sym_constrain_range_for_size",
     "_is_all_true",
+    "_jagged_to_padded_dense_forward",
     "_native_batch_norm_legit_no_training",
     "_safe_softmax",
     "_thnn_fused_lstm_cell_backward_impl",
@@ -552,6 +557,7 @@ __all__ = [
     "isin",
     "isinf",
     "isnan",
+    "jagged_to_padded_dense_forward",
     "kron",
     "layer_norm",
     "layer_norm_backward",
