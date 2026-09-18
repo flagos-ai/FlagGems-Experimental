@@ -161,38 +161,46 @@ def _make_matrices(dims, dtype, device=None):
     ]
 
 
-def _to_reference_list(matrices):
+def _to_reference_list(matrices, upcast=False):
     """Convert each input independently (utils.to_reference semantics)."""
-    return [utils.to_reference(m) for m in matrices]
+    return [utils.to_reference(m, upcast=upcast) for m in matrices]
+
+
+def _fp64_reference(matrices):
+    """Native chain_matmul computed on fp64-upcast INPUTS.
+
+    This is the repo's mm/bmm convention (test_mm.py: `ref_mat1 =
+    utils.to_reference(mat1, True)` then `torch.mm(ref_mat1, ref_mat2)`). The
+    distinction matters: upcasting the *result* of a native fp32 chain is not
+    a high-precision reference, it re-pins native's own fp32 rounding.
+    """
+    return ATEN(_to_reference_list(matrices, upcast=True))
 
 
 # The submitted implementation computes EVERY product on fp16 tensor cores:
-# fp32/fp64 go through an fp16 hi/lo split (lo*lo dropped) and fp16/bf16 use
-# the native tensor-core dot. It also re-rounds every intermediate chain
-# result back to the storage dtype -- exactly what native does -- but its
-# optimal parenthesization differs from native's, so a chain of length >= 3
-# accumulates a different fp16 rounding sequence than the native reference.
+# fp32/fp64 go through an fp16 hi/lo split (the lo*lo term is dropped) and
+# fp16/bf16 use the native tensor-core dot, with fp32 accumulation.
 #
-# The reference is therefore the NATIVE result computed on fp64-upcast inputs
-# (the repo's mm/bmm convention) with an atol budget measured on this GPU
-# (probe jobs chain_matmul-other-a1-aeec5a50 and -a1-c0a1e143). The budget is
-# `atol_budget * max(dims)`; the largest measured need over the whole suite
-# is listed per dtype next to it:
+# The gate therefore compares against the NATIVE chain computed on
+# fp64-upcast INPUTS (the repo's mm/bmm convention, test_mm.py) with a
+# per-dtype atol budget. The budgets are `base * max(dims)` with `base` taken
+# from the worst need measured over 20 cases x 5 seeds on this GPU (probe job
+# chain_matmul-other-a1-b8c68deb), rounded up with >= 2.5x margin:
 _ATOL_BUDGET = {
-    FP16: 2e-2,  # measured 7.7e-3 * max(dims)
-    BF16: 2e-1,  # measured 4.0e-2 * max(dims)
-    FP32: 5e-4,  # measured 5.5e-5 * max(dims) (the source's own documented gate)
-    FP64: 5e-4,  # measured 8.0e-5 * max(dims) (the source's own documented gate)
+    FP16: 2e-2,  # measured worst need 8.2e-3 * max(dims)
+    BF16: 2e-1,  # measured worst need 8.0e-2 * max(dims)
+    FP32: 5e-4,  # measured worst need 5.8e-5 * max(dims)
+    FP64: 5e-4,  # measured worst need 9.6e-5 * max(dims)
 }
 
 
-def _assert_matches_native(res, ref, dtype, dims=None):
-    assert tuple(res.shape) == tuple(ref.shape)
-    assert res.dtype == ref.dtype
+def _assert_matches_native(res, ref64, dtype, dims=None):
+    """`ref64` is the fp64 result of `_fp64_reference(matrices)`."""
+    assert tuple(res.shape) == tuple(ref64.shape)
     reduce_dim = max(dims) if dims else 1
     utils.gems_assert_close(
         res,
-        utils.to_reference(ref, upcast=True),
+        ref64,
         dtype,
         reduce_dim=reduce_dim,
         atol=_ATOL_BUDGET[dtype],
@@ -208,17 +216,19 @@ def _assert_matches_native(res, ref, dtype, dims=None):
 @pytest.mark.parametrize("dims,dtype,label", DTYPE_CASES)
 def test_accuracy_chain_matmul_general(dims, dtype, label):
     matrices = _make_matrices(dims, dtype)
-    refs = _to_reference_list(matrices)
 
-    ref_out = ATEN(refs)
+    ref_out = _fp64_reference(matrices)
     res_out = flag_gems.chain_matmul(matrices)
 
     _assert_matches_native(res_out, ref_out, dtype, dims)
     assert res_out.is_contiguous()
     # Fresh allocation: the impl never returns one of its inputs or an
-    # intermediate view of one for a 2+-matrix chain.
-    for m in matrices:
-        assert res_out.data_ptr() != m.data_ptr()
+    # intermediate view of one for a 2+-matrix chain. Zero-element tensors
+    # are exempt — an empty CUDA tensor has no backing page, so every
+    # data_ptr is 0 and the comparison cannot discriminate.
+    if res_out.numel() > 0:
+        for m in matrices:
+            assert res_out.data_ptr() != m.data_ptr()
     assert res_out.numel() == ref_out.numel()
 
 
@@ -231,7 +241,7 @@ def test_accuracy_chain_matmul_general_1d_non_contiguous_inputs():
     assert not a_t.is_contiguous() and not b_t.is_contiguous()
     c = torch.randn(6, 5, device=flag_gems.device)
 
-    ref_out = ATEN(_to_reference_list([a_t, b_t, c]))
+    ref_out = _fp64_reference([a_t, b_t, c])
     res_out = flag_gems.chain_matmul([a_t, b_t, c])
 
     _assert_matches_native(res_out, ref_out, FP32, [3, 4, 6, 5])
@@ -247,12 +257,10 @@ def test_accuracy_chain_matmul_repeated_dispatch():
     # The fp64 reference is the same one _assert_matches_native uses: the
     # kernel's fp16-split accumulation is not bit-exact against native's own
     # fp32 mm, exactly like the repo's mm/bmm tests.
-    ref_out = ATEN(_to_reference_list(matrices))
+    ref_out = _fp64_reference(matrices)
     for _ in range(3):
         res_out = flag_gems.chain_matmul(matrices)
-        _assert_matches_native(
-            res_out, utils.to_reference(ref_out, upcast=True), FP32, dims
-        )
+        _assert_matches_native(res_out, ref_out, FP32, dims)
         assert torch.ops.aten.dim(matrices[0]) == 2
 
 
@@ -265,7 +273,7 @@ def test_accuracy_chain_matmul_repeated_dispatch():
 @pytest.mark.parametrize("dims", TINY3_FP16_DIMS)
 def test_accuracy_chain_matmul_tiny3_fp16(dims):
     matrices = _make_matrices(dims, FP16)
-    ref_out = ATEN(_to_reference_list(matrices))
+    ref_out = _fp64_reference(matrices)
     res_out = flag_gems.chain_matmul(matrices)
     _assert_matches_native(res_out, ref_out, FP16, dims)
 
@@ -274,7 +282,7 @@ def test_accuracy_chain_matmul_tiny3_fp16(dims):
 @pytest.mark.parametrize("dims", TINY3_BF16_DIMS)
 def test_accuracy_chain_matmul_tiny3_bf16(dims):
     matrices = _make_matrices(dims, BF16)
-    ref_out = ATEN(_to_reference_list(matrices))
+    ref_out = _fp64_reference(matrices)
     res_out = flag_gems.chain_matmul(matrices)
     _assert_matches_native(res_out, ref_out, BF16, dims)
 
@@ -283,7 +291,7 @@ def test_accuracy_chain_matmul_tiny3_bf16(dims):
 @pytest.mark.parametrize("dims", TINY3_FP32_DIMS)
 def test_accuracy_chain_matmul_tiny3_fp32(dims):
     matrices = _make_matrices(dims, FP32)
-    ref_out = ATEN(_to_reference_list(matrices))
+    ref_out = _fp64_reference(matrices)
     res_out = flag_gems.chain_matmul(matrices)
     _assert_matches_native(res_out, ref_out, FP32, dims)
 
@@ -292,7 +300,7 @@ def test_accuracy_chain_matmul_tiny3_fp32(dims):
 @pytest.mark.parametrize("dims", TINY3_FP64_DIMS)
 def test_accuracy_chain_matmul_tiny3_fp64(dims):
     matrices = _make_matrices(dims, FP64)
-    ref_out = ATEN(_to_reference_list(matrices))
+    ref_out = _fp64_reference(matrices)
     res_out = flag_gems.chain_matmul(matrices)
     _assert_matches_native(res_out, ref_out, FP64, dims)
 
@@ -325,7 +333,7 @@ def test_accuracy_chain_matmul_fused_last2(dims, dtype):
     assert matrices[1].shape[0] <= 128 and matrices[3].shape[1] <= 64
     assert matrices[0].shape[0] <= 64 and matrices[0].shape[1] == matrices[1].shape[0]
 
-    ref_out = ATEN(_to_reference_list(matrices))
+    ref_out = _fp64_reference(matrices)
     res_out = flag_gems.chain_matmul(matrices)
     _assert_matches_native(res_out, ref_out, dtype, dims)
     for m in matrices:
@@ -338,7 +346,7 @@ def test_accuracy_chain_matmul_fused_last2_fp32_uses_general_path():
     # same shapes must still be correct through the general path.
     dims = [64, 16, 128, 256, 32]
     matrices = _make_matrices(dims, FP32)
-    ref_out = ATEN(_to_reference_list(matrices))
+    ref_out = _fp64_reference(matrices)
     res_out = flag_gems.chain_matmul(matrices)
     _assert_matches_native(res_out, ref_out, FP32, dims)
 
@@ -527,7 +535,7 @@ def test_accuracy_chain_matmul_out_matches_native():
     # The out tensor is written AND returned (identity).
     assert res_ret is res_out
     assert ref_ret is ref_out
-    _assert_matches_native(res_out, ref_out, FP32, dims)
+    _assert_matches_native(res_out, _fp64_reference(matrices), FP32, dims)
 
 
 @pytest.mark.chain_matmul_out
@@ -546,7 +554,7 @@ def test_accuracy_chain_matmul_out_resizes_wrong_shape():
     assert tuple(res_out.shape) == tuple(ref_out.shape) == (3, 5)
     assert res_ret is res_out
     assert ref_ret is ref_out
-    _assert_matches_native(res_out, ref_out, FP32, [3, 4, 5])
+    _assert_matches_native(res_out, _fp64_reference([a, b]), FP32, [3, 4, 5])
 
 
 @pytest.mark.chain_matmul_out
@@ -573,8 +581,7 @@ def test_accuracy_chain_matmul_out_does_not_alias_inputs():
     assert res_ret is res_out
     for m in matrices:
         assert res_out.data_ptr() != m.data_ptr()
-    ref_out = ATEN(_to_reference_list(matrices))
-    _assert_matches_native(res_out, ref_out, FP32, dims)
+    _assert_matches_native(res_out, _fp64_reference(matrices), FP32, dims)
 
 
 @pytest.mark.chain_matmul_out
