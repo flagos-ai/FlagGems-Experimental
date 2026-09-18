@@ -81,7 +81,10 @@ class CoalesceBenchmark(base.Benchmark):
 
     def get_input_iter(self, cur_dtype):
         for nnz, size in self.shapes:
-            yield _make_coo(nnz, size, cur_dtype, self.device)
+            # A 1-tuple: the harness iterates the yielded item to build the
+            # positional argument list, so a bare tensor would be unpacked
+            # element-wise into nnz arguments.
+            yield (_make_coo(nnz, size, cur_dtype, self.device),)
 
 
 @pytest.mark.coalesce
