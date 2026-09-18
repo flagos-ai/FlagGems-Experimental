@@ -321,21 +321,22 @@ def test_accuracy_coalesce_rejects_non_coo(layout_name, layout_enum):
 def test_accuracy_coalesce_input_not_mutated():
     """The fresh path must not modify the input's data or coalesced flag."""
     inp = _make_coo(2, 24, (8, 8), torch.float32, flag_gems.device, seed=11)
-    idx_before = inp._indices().clone()
-    val_before = inp._values().clone()
+    # ``to_reference`` copies the whole object once, so the pre-call snapshot
+    # must be taken from the REFERENCE copy: under --ref=cpu the
+    # implementation-side tensor stays on the accelerator and comparing its
+    # live data against an accelerator-side clone would trip the device check
+    # inside ``gems_assert_equal``.
     ref_inp = utils.to_reference(inp)
-    ref_idx = ref_inp._indices().clone()
-    ref_val = ref_inp._values().clone()
+    ref_idx_before = ref_inp._indices().clone()
+    ref_val_before = ref_inp._values().clone()
 
     ref_out = ref_inp.coalesce()
     res = flag_gems.coalesce(inp)
 
     assert inp.is_coalesced() is False
     assert inp.is_coalesced() == ref_inp.is_coalesced()
-    utils.gems_assert_equal(inp._indices(), ref_idx)
-    utils.gems_assert_close(inp._values(), ref_val, torch.float32)
-    utils.gems_assert_equal(inp._indices(), idx_before)
-    utils.gems_assert_close(inp._values(), val_before, torch.float32)
+    utils.gems_assert_equal(ref_inp._indices(), ref_idx_before)
+    utils.gems_assert_close(ref_inp._values(), ref_val_before, torch.float32)
     _assert_same_structure(res, ref_out, torch.float32)
 
 
