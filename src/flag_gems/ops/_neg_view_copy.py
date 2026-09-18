@@ -64,6 +64,7 @@ def _neg_strided_kernel(
     out_ptr,
     shape_ptr,
     stride_ptr,
+    out_stride_ptr,
     numel,
     MAXD: tl.constexpr,
     BLOCK: tl.constexpr,
@@ -73,14 +74,17 @@ def _neg_strided_kernel(
     mask = offs < numel
     f = offs
     in_off = tl.zeros((BLOCK,), dtype=tl.int64)
+    out_off = tl.zeros((BLOCK,), dtype=tl.int64)
     for d in tl.static_range(MAXD):
         s = tl.load(shape_ptr + (MAXD - 1 - d)).to(tl.int64)
         st = tl.load(stride_ptr + (MAXD - 1 - d)).to(tl.int64)
+        ost = tl.load(out_stride_ptr + (MAXD - 1 - d)).to(tl.int64)
         idx = f % s
         in_off += idx * st
+        out_off += idx * ost
         f = f // s
     x = tl.load(in_ptr + in_off, mask=mask)
-    tl.store(out_ptr + offs, x * (-1), mask=mask)
+    tl.store(out_ptr + out_off, x * (-1), mask=mask)
 
 
 def _check_neg_dtype(dtype: torch.dtype) -> None:
@@ -139,11 +143,17 @@ def _launch_contiguous(self: torch.Tensor, out: torch.Tensor) -> None:
 
 
 def _launch_strided(self: torch.Tensor, out: torch.Tensor) -> None:
-    """Negate a non-contiguous ``self`` into the contiguous ``out``.
+    """Negate a non-contiguous ``self`` into ``out`` (either layout).
 
     The source kernel consumes device-side shape/stride tables padded with
     trailing 1/0 entries up to ``MAXD`` (>= 1), exactly as in the supplied
     package; ranks are not capped and the tables move host-side only.
+
+    ``out`` is written through its own strides rather than assuming a flat
+    contiguous destination, so a non-contiguous out buffer is filled in place
+    without the staging copy (and the transient second allocation) the
+    reviewer flagged. The out strides are a third device-side table computed
+    from the same padded extent.
     """
     ndim = max(self.ndim, 1)
     shape = torch.tensor(
@@ -156,14 +166,24 @@ def _launch_strided(self: torch.Tensor, out: torch.Tensor) -> None:
         dtype=torch.int64,
         device=self.device,
     )
+    out_strides = torch.tensor(
+        list(out.stride()) + [0] * (ndim - out.ndim),
+        dtype=torch.int64,
+        device=self.device,
+    )
     numel = self.numel()
-    BLOCK = 1024
+    # Tuning measured on H20 (see the task report): the strided kernel's
+    # per-element div/mod address computation makes small blocks cheaper — the
+    # 1024-wide default used by the contiguous path loses 10-50% here. BLOCK=256
+    # wins for tensors up to ~1M elements; 512 wins above that.
+    BLOCK = 256 if numel <= (1 << 20) else 512
     grid = (triton.cdiv(numel, BLOCK),)
     _neg_strided_kernel[grid](
         self,
         out,
         shape,
         strides,
+        out_strides,
         numel,
         MAXD=ndim,
         BLOCK=BLOCK,
@@ -229,17 +249,14 @@ def _neg_view_copy_out(self: torch.Tensor, *, out: torch.Tensor) -> torch.Tensor
     numel = self.numel()
     if numel == 0:
         return out
-    if out.is_contiguous():
-        write = out
-    else:
-        # Both kernels write one flat contiguous stream; stage through a
-        # contiguous buffer and scatter back into ``out``'s own layout.
-        write = torch.empty(out.shape, dtype=out.dtype, device=out.device)
     with torch_device_fn.device(self.device):
-        if self.is_contiguous():
-            _launch_contiguous(self, write)
+        # The strided kernel addresses both sides through stride tables, so it
+        # can fill any out layout in place — no staging buffer is needed for a
+        # non-contiguous out (the reviewer's double-memory point). The flat
+        # kernel is used only when both sides are contiguous, where it avoids
+        # the per-element address arithmetic.
+        if self.is_contiguous() and out.is_contiguous():
+            _launch_contiguous(self, out)
         else:
-            _launch_strided(self, write)
-    if write is not out:
-        out.copy_(write)
+            _launch_strided(self, out)
     return out
