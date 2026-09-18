@@ -437,8 +437,10 @@ def test_accuracy_flatten_dense_tensors_fresh_storage():
     tensors = [torch.randn(64, dtype=dtype, device=flag_gems.device) for _ in range(3)]
     res = flag_gems.flatten_dense_tensors(tensors)
     ref = torch.ops.aten.flatten_dense_tensors(_to_ref_list(tensors))
-    before = res.clone()
-    assert torch.equal(res, before)
+    # capture through to_reference: under --ref=cpu the assertion helper
+    # requires its reference argument to already be on the CPU.
+    before = utils.to_reference(res.clone())
+    assert torch.equal(utils.to_reference(res), before)
     # the flat buffer has exactly one storage of its own
     assert res.untyped_storage().nbytes() == 3 * 64 * res.element_size()
     # mutating an input after the call leaves the (fresh) output untouched
