@@ -133,8 +133,7 @@ from .expm1 import expm1, expm1_, expm1_out
 from .exponential_ import exponential_
 from .eye import eye
 from .eye_m import eye_m
-from .feature_dropout import feature_dropout_
-from .feature_dropout import feature_dropout
+from .feature_dropout import feature_dropout, feature_dropout_
 from .fill import (
     fill_scalar,
     fill_scalar_,
