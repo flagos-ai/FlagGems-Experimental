@@ -12328,6 +12328,20 @@ ops:
   - Tensor
   stages:
   - stable: '2.2'
+- id: slow_conv_dilated2d
+  description: 'Applies a dilated 2-D convolution over an input tensor (NCHW) with
+    explicit `stride`, `padding` and `dilation` control.
+
+    '
+  for:
+  - slow_conv_dilated2d
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Convolution
+  stages:
+  - alpha: '5.4'
 - id: smooth_l1_loss
   description: Compute the smooth L1 loss between input and target tensors.
   for:
