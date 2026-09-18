@@ -691,42 +691,53 @@ def test_sparse_csc_tensor_public_forms_agree():
 
 @pytest.mark.sparse_csc_tensor
 def test_sparse_csc_tensor_dispatch_reached():
-    # Registration-path check: a sentinel on the key this operator is
-    # registered on must intercept both overloads, proving the shipped
-    # implementation runs rather than the native kernel. Measured per key in
-    # fresh processes on this build (probe-F runner log): the device key
-    # intercepts both overloads for device components, the CPU key for CPU
-    # components; SparseCUDA / SparseCsrCUDA / Autograd / BackendSelect /
-    # CompositeExplicitAutograd all miss, because the arguments are plain
-    # dense tensors. The counter assertions below fail if the registration is
-    # ever unreachable.
+    # Registration-path check: a sentinel on each of the two keys this operator
+    # is registered on must intercept the call forms that select it, proving
+    # the shipped implementation runs rather than the native kernel. Measured
+    # with labelled sentinels per (overload, key) pair: a call that omits
+    # layout= resolves on the plain device key, an explicit
+    # layout=torch.sparse_csc argument selects CompositeImplicitAutograd
+    # instead; SparseCUDA / SparseCsrCUDA / Autograd / BackendSelect /
+    # CompositeExplicitAutograd all miss, because the arguments are plain dense
+    # tensors. The per-form counters below fail if either registration becomes
+    # unreachable (the layout-qualified form was dead before the composite key
+    # was added).
     lib = torch.library.Library("aten", "IMPL")
     hits = []
 
-    def sentinel_size(ccol_indices, row_indices, values, size, **kw):
-        hits.append("size")
-        return flag_gems.sparse_csc_tensor_ccol_row_value_size(
-            ccol_indices, row_indices, values, size, **kw
-        )
+    def make_sentinel(tag, plain):
+        def sentinel(ccol_indices, row_indices, values, *args, **kw):
+            hits.append(tag)
+            return plain(ccol_indices, row_indices, values, *args, **kw)
 
-    def sentinel_value(ccol_indices, row_indices, values, **kw):
-        hits.append("value")
-        return flag_gems.sparse_csc_tensor_ccol_row_value(
-            ccol_indices, row_indices, values, **kw
-        )
+        return sentinel
 
     dev = torch.device(str(flag_gems.device))
     key = flag_gems.runtime.device.dispatch_key
+    comp_key = "CompositeImplicitAutograd"
     assert key == flag_gems.backend_info.dispatch_key
     ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     values = torch.tensor([3.0, 4.0, 5.0], device=dev)
 
     try:
-        lib.impl("sparse_csc_tensor.ccol_row_value_size", sentinel_size, key)
-        lib.impl("sparse_csc_tensor.ccol_row_value", sentinel_value, key)
+        for k, tag in ((key, "dev"), (comp_key, "comp")):
+            lib.impl(
+                "sparse_csc_tensor.ccol_row_value_size",
+                make_sentinel(
+                    f"{tag}/size", flag_gems.sparse_csc_tensor_ccol_row_value_size
+                ),
+                k,
+            )
+            lib.impl(
+                "sparse_csc_tensor.ccol_row_value",
+                make_sentinel(
+                    f"{tag}/value", flag_gems.sparse_csc_tensor_ccol_row_value
+                ),
+                k,
+            )
 
-        # Packet entry points.
+        # Device-key forms (layout omitted or None).
         assert (
             torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
                 ccol, row, values, [5, 4], device=dev
@@ -739,17 +750,35 @@ def test_sparse_csc_tensor_dispatch_reached():
             )._nnz()
             == 3
         )
+        assert hits == ["dev/size", "dev/value"], hits
+
+        # Composite-key forms (explicit layout).
+        hits.clear()
+        assert (
+            torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
+                ccol, row, values, [5, 4], layout=torch.sparse_csc, device=dev
+            )._nnz()
+            == 3
+        )
+        assert (
+            torch.ops.aten.sparse_csc_tensor.ccol_row_value(
+                ccol, row, values, layout=torch.sparse_csc, device=dev
+            )._nnz()
+            == 3
+        )
+        assert hits == ["comp/size", "comp/value"], hits
+
         # The python builtin does NOT route through these overloads: its C++
         # argument parser calls the shared composite directly (measured with
         # sentinels on a clean process), so these two calls must NOT hit.
+        hits.clear()
         assert torch.sparse_csc_tensor(ccol, row, values, (5, 4))._nnz() == 3
         assert torch.sparse_csc_tensor(ccol, row, values)._nnz() == 3
-        assert hits.count("size") == 1, hits
-        assert hits.count("value") == 1, hits
+        assert hits == [], hits
     finally:
         lib._destroy()
 
-    # After destroying the sentinel the routed path is native again and still
+    # After destroying the sentinels the routed path is native again and still
     # agrees with the submitted implementation.
     assert (
         torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
