@@ -155,9 +155,13 @@ if QUICK_MODE:
 
 
 def _make_matrices(dims, dtype, device=None):
+    # Every dtype exercised here is floating point (chain_matmul is a
+    # float-only op), so a direct randn covers the sweep without depending on
+    # the QUICK_MODE-trimmed dtype lists.
+    assert dtype.is_floating_point, dtype
     device = device if device is not None else flag_gems.device
     return [
-        utils.generate_tensor_input((dims[i], dims[i + 1]), dtype, device)
+        torch.randn(dims[i], dims[i + 1], dtype=dtype, device=device)
         for i in range(len(dims) - 1)
     ]
 
@@ -359,7 +363,7 @@ def test_accuracy_chain_matmul_single_matrix_transposed_is_clone():
 @pytest.mark.chain_matmul
 def test_accuracy_chain_matmul_single_matrix_dtypes():
     for dt in [FP32, FP16, FP64]:
-        m = utils.generate_tensor_input((5, 6), dt, flag_gems.device)
+        m = torch.randn(5, 6, dtype=dt, device=flag_gems.device)
         ref_out = ATEN(_to_reference_list([m]))
         res_out = flag_gems.chain_matmul([m])
         assert res_out.dtype == dt
@@ -517,7 +521,7 @@ def test_accuracy_chain_matmul_out_resizes_wrong_shape():
     b = torch.randn(4, 5, device=flag_gems.device)
     ref_a, ref_b = utils.to_reference(a), utils.to_reference(b)
 
-    ref_out = torch.empty(1, 1, dtype=FP32)
+    ref_out = torch.empty(1, 1, dtype=FP32, device=ref_a.device)
     res_out = torch.empty(1, 1, device=flag_gems.device, dtype=FP32)
     ref_ret = ATEN_OUT([ref_a, ref_b], out=ref_out)
     res_ret = flag_gems.chain_matmul_out([a, b], out=res_out)
@@ -532,7 +536,7 @@ def test_accuracy_chain_matmul_out_resizes_wrong_shape():
 def test_accuracy_chain_matmul_out_single_matrix():
     m = torch.randn(3, 4, device=flag_gems.device)
     ref_m = utils.to_reference(m)
-    ref_out = torch.empty(3, 4, dtype=FP32)
+    ref_out = torch.empty(3, 4, dtype=FP32, device=ref_m.device)
     res_out = torch.empty(3, 4, device=flag_gems.device, dtype=FP32)
 
     ref_ret = ATEN_OUT([ref_m], out=ref_out)
