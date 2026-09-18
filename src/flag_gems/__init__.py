@@ -1202,6 +1202,11 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    ("sparse_bsc_tensor.ccol_row_value", sparse_bsc_tensor_ccol_row_value),
+    (
+        "sparse_bsc_tensor.ccol_row_value_size",
+        sparse_bsc_tensor_ccol_row_value_size,
+    ),
     (
         "sparse_coo_tensor.indices",
         sparse_coo_tensor_indices,
