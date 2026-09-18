@@ -12522,6 +12522,23 @@ ops:
   - NeuralNetwork
   stages:
   - beta: '5.3'
+- id: sparse_csr_tensor
+  description: 'Host-side sparse CSR constructor: stores the crow/col index vectors
+    and values verbatim (the result aliases all three component tensors), infers
+    the size as (crow length - 1) x (max(col) + 1) when omitted, and rejects a
+    values dtype that disagrees with the requested tensor dtype instead of casting.
+
+    '
+  for:
+  - sparse_csr_tensor.crow_col_value
+  - sparse_csr_tensor.crow_col_value_size
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: sparse_mla_fwd_interface
   description: 'A generic interface for sparse MLA (Multi-head Latent Attention) for
     DeepSeek v3/v3.2.
