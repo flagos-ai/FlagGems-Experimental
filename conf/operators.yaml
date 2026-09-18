@@ -13422,7 +13422,6 @@ ops:
   - Tensor
   stages:
   - alpha: '5.5'
-  - alpha: '5.4'
 - id: sparse_csr_tensor
   description: 'Host-side sparse CSR constructor: stores the crow/col index vectors
     and values verbatim (the result aliases all three component tensors), infers the
