@@ -40,26 +40,33 @@ involved: the packet-level ``layout=`` argument selects the constructor branch,
 no sparse tensor is passed in, and a sparse-key registration was measured to be
 dead for both call forms.
 
-Delegation, not re-dispatch. ``aten::sparse_compressed_tensor.comp_plain_value``
-is the same shared native constructor these two overloads resolve to -- the BSC
-wrappers are generated from the very same ``sparse_compressed_tensor`` body (see
-``SPARSE_COMPRESSED_TENSOR(bsc, kSparseBsc)`` in ATen's
-``native/sparse/SparseCsrTensor.cpp``), and ATen's size-inference branch
-hardcodes the BSC size estimator, so delegating reproduces the inferred shape
-*and the estimator's own rejections* without re-implementing either. Measured
-equivalence against both packet overloads: identical metadata, components and
-error text on CPU and CUDA (``native_probe_i_cpu.log``, ``native_probe_j_cuda.log``).
-Registering ``sparse_bsc_tensor.ccol_row_value`` and then calling it internally
-would recurse; calling ``comp_plain_value`` does not, because that is a separate
-operator entry.
+Delegation, not re-dispatch. Each implementation calls the ATen op that computes
+its own result natively, never the overload it implements (which would recurse):
+
+- ``.ccol_row_value_size`` delegates to ``_sparse_bsc_tensor_unsafe``, the
+  ``int[]``-size entry into the shared compressed constructor -- the same inner
+  call the generated BSC wrapper makes. ``sparse_compressed_tensor.comp_plain_value_size``
+  is equally equivalent (measured) but goes through a ``SymInt[]`` size, which
+  costs measurably more per call on this build.
+- ``.ccol_row_value`` delegates to ``sparse_compressed_tensor.comp_plain_value``,
+  whose size-inference branch hardcodes the BSC estimator, so the inferred shape
+  *and the estimator's own rejections* are reproduced without re-implementing
+  them (a Python mirror of the estimator costs ~4 us more per call here,
+  ``native_probe_q_cuda.log``).
+
+Both choices were verified equivalent to the corresponding packet overload on
+CPU and CUDA -- identical metadata, components and error text over the case
+grids (``native_probe_i_cpu.log``, ``native_probe_j_cuda.log``,
+``native_probe_e_cuda.log``).
 
 The only behaviour not inherited from the shared constructor is the layout
 check: the generated BSC wrapper rejects a mismatching ``layout`` *before*
 delegating, with the spelling ``sparse bsc layout must be SparseBsc but got
-<SparseCsr|Strided|...>``, while the shared constructor would accept some of
-those layouts and build a differently-shaped tensor. ``_bsc_layout_guard``
-therefore reproduces that one check; with it, the measured error text matches
-native character for character on every rejected layout.
+<SparseCsr|Strided|...>``, while ``_sparse_bsc_tensor_unsafe`` would reject it
+with a different sentence and the shared constructor would accept some of those
+layouts and build a differently shaped tensor. Both implementations therefore
+run the same in-line layout check first; with it, the measured error text
+matches native character for character on every rejected layout.
 
 The supplied competition source's ``_copy_cast_kernel`` / ``_flat_copy_cast``
 Triton pair was never reached: their ``run()`` passes ``dtype`` straight through
@@ -72,8 +79,9 @@ are: ``dtype=None`` resolves to the **default dtype** (not the values dtype), an
 a mismatch raises ``dtype of values (...) must match dtype of sparse tensor
 (...)``. The cast that does exist in the ecosystem happens one level up, inside
 the ``torch.sparse_bsc_tensor`` Python builtin, which materialises the
-components in the requested dtype before construction -- a different call path,
-covered by the builtin rather than by this constructor.
+components in the requested dtype before construction -- a different call path
+(that builtin does not route through these two operators at all; measured in
+``native_probe_l_cpu.log``), covered by its own accuracy test.
 
 The device default is measured rather than assumed: a packet call with CUDA
 components and ``device=None`` raises ``Values and compressed tensor instance
@@ -88,7 +96,6 @@ import torch
 
 logger = logging.getLogger(__name__)
 
-
 # Layout spellings as they appear in ATen's layout printing ("Sparse",
 # "Strided", "SparseCsr", ...), so a rejected layout= produces native wording.
 _LAYOUT_NAMES = {
@@ -100,22 +107,11 @@ _LAYOUT_NAMES = {
     torch.sparse_bsc: "SparseBsc",
 }
 
-
-def _bsc_layout_guard(layout) -> None:
-    """Reject a non-BSC ``layout=`` with the generated wrapper's own message.
-
-    ``SPARSE_COMPRESSED_TENSOR(bsc, kSparseBsc)`` wraps the shared constructor
-    with exactly this check, before delegating, so the wording (and its ordering
-    relative to the dtype/device checks) matches native. Deleting the check
-    would not merely change the message: the shared constructor accepts several
-    layouts that the BSC wrapper refuses, and would silently build a tensor of
-    the wrong shape.
-    """
-    if layout is not None and layout != torch.sparse_bsc:
-        raise RuntimeError(
-            f"sparse bsc layout must be {_LAYOUT_NAMES[torch.sparse_bsc]} but "
-            f"got {_LAYOUT_NAMES.get(layout, str(layout))}"
-        )
+# Module-scope bindings: these are the only two hot calls in the wrappers, and
+# the per-call attribute lookup is a measurable share of a ~5 us host-side
+# constructor (same rationale as the source's own _SPARSE_BSC_TENSOR binding).
+_UNSAFE_SIZE = torch.ops.aten._sparse_bsc_tensor_unsafe
+_COMP_PLAIN_VALUE = torch.ops.aten.sparse_compressed_tensor.comp_plain_value
 
 
 def sparse_bsc_tensor_ccol_row_value_size(
@@ -139,12 +135,16 @@ def sparse_bsc_tensor_ccol_row_value_size(
     shared native constructor, which this delegates to unchanged.
     """
     logger.debug("GEMS SPARSE_BSC_TENSOR_CCOL_ROW_VALUE_SIZE")
-    _bsc_layout_guard(layout)
-    return torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size(
+    if layout is not None and layout != torch.sparse_bsc:
+        raise RuntimeError(
+            f"sparse bsc layout must be {_LAYOUT_NAMES[torch.sparse_bsc]} but "
+            f"got {_LAYOUT_NAMES.get(layout, str(layout))}"
+        )
+    return _UNSAFE_SIZE(
         ccol_indices,
         row_indices,
         values,
-        list(size),
+        size,
         dtype=dtype,
         layout=torch.sparse_bsc,
         device=device,
@@ -168,12 +168,16 @@ def sparse_bsc_tensor_ccol_row_value(
     logical shape is ``[batch..., (max(row_indices) + 1) * block_rows,
     (len(ccol_indices) - 1) * block_cols, dense...]``, computed by the same
     native estimator the packet overload uses; delegating to the shared
-    constructor's size-inference branch keeps the estimator's dtype gate and
+    constructor's size-inference branch keeps that estimator's dtype gate and
     dimensionality rejections identical to native instead of re-deriving them.
     """
     logger.debug("GEMS SPARSE_BSC_TENSOR_CCOL_ROW_VALUE")
-    _bsc_layout_guard(layout)
-    return torch.ops.aten.sparse_compressed_tensor.comp_plain_value(
+    if layout is not None and layout != torch.sparse_bsc:
+        raise RuntimeError(
+            f"sparse bsc layout must be {_LAYOUT_NAMES[torch.sparse_bsc]} but "
+            f"got {_LAYOUT_NAMES.get(layout, str(layout))}"
+        )
+    return _COMP_PLAIN_VALUE(
         ccol_indices,
         row_indices,
         values,
