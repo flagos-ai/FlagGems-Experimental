@@ -22,11 +22,19 @@ import flag_gems
 from . import accuracy_utils as utils
 from .conftest import QUICK_MODE
 
-SHAPES = [(16,), (1024,), (2, 3, 4), (16, 128, 64, 60)]
+# diagflat's output is QUADRATIC in the input element count: an input like
+# (16, 128, 64, 60) (7.9M elements) would require a ~61.8e12-element matrix —
+# native itself OOMs on it (measured, job diagflat-accuracy-a1-37bf8a7f). The
+# largest 1-D size here, (4096,), draws a (4096 + |offset|)^2 output, and the
+# four shapes together cover all three tuning branches of the implementation:
+# m <= 512 (cb=512, nw=4), 512 < m <= 2048 (cb=1024, nw=4) and m > 2048
+# (cb=1024, nw=8).
+SHAPES = [(16,), (1024,), (2, 3, 4), (4096,)]
 if QUICK_MODE:
     SHAPES = [(2, 3)]
 
-# Offsets keep the output small: the full matrix has (n + |offset|)^2 elements.
+# Offsets stay small for the same reason; the nonzero-offset diagonal
+# mapping (offset >= 0 vs offset < 0) is checked for both signs.
 OFFSET_LIST = [-2, -1, 0, 1] if QUICK_MODE else [-5, -2, -1, 0, 1, 2, 7]
 
 
@@ -81,18 +89,19 @@ def test_accuracy_diagflat(shape, dtype, offset):
     assert res_out.data_ptr() != inp.data_ptr()
     # diagflat semantics: out[i, i + offset] == flat[i] for offset >= 0,
     # out[i - offset, i] == flat[i] for offset < 0; everything else is zero.
-    # Build the expected matrix on the reference side and compare fully —
+    # Build the expected matrix ON THE REFERENCE'S DEVICE (under --ref=cpu the
+    # reference lives on CPU while the result is CUDA) and compare fully —
     # this catches both a wrong diagonal value and a missed off-diagonal
     # zero (e.g. a bad CB chunk mask).
     rows = utils.to_cpu(res_out, ref_out)
     n = inp.numel()
-    expected = torch.zeros((m, m), dtype=ref_inp.dtype)
-    idx = torch.arange(n)
+    expected = torch.zeros((m, m), dtype=ref_inp.dtype, device=ref_flat.device)
+    idx = torch.arange(n, device=ref_flat.device)
     if offset >= 0:
         expected[idx, idx + offset] = ref_flat
     else:
         expected[idx - offset, idx] = ref_flat
-    assert torch.equal(rows, expected)
+    assert torch.equal(rows.to(expected.device), expected)
 
 
 @pytest.mark.diagflat
@@ -207,7 +216,8 @@ def test_accuracy_diagflat_offset_beyond_n(offset):
     assert res_out.shape == (3 + abs(offset),) * 2
     utils.gems_assert_equal(res_out, ref_out)
     got_diag = utils.to_cpu(res_out, ref_out).diagonal(offset=offset)
-    assert torch.equal(got_diag, torch.tensor([1.0, 2.0, 3.0]))
+    expected_diag = torch.tensor([1.0, 2.0, 3.0], device=got_diag.device)
+    assert torch.equal(got_diag, expected_diag)
 
 
 @pytest.mark.diagflat
@@ -262,3 +272,23 @@ def test_accuracy_diagflat_repeated_dispatch():
         assert torch.equal(utils.to_cpu(res_out, ref_out), ref_out)
         assert torch.ops.aten.dim(inp) == 2
     assert res_out.data_ptr() != inp.data_ptr()
+
+
+@pytest.mark.diagflat
+def test_accuracy_diagflat_non_contiguous_9d():
+    # A 9-D permuted input pushes MAX_NDIM past its default of 8
+    # (MAX_NDIM = max(_MIN_MAX_NDIM, ndim) = 9) and exercises the gather
+    # kernel's static-range dimension loop with NDIM == 9.
+    shape = (2, 2, 2, 2, 2, 2, 2, 2, 3)
+    inp = torch.randn(shape, device=flag_gems.device).permute(8, 7, 6, 5, 4, 3, 2, 1, 0)
+    assert not inp.is_contiguous()
+    ref_inp = utils.to_reference(inp)
+
+    ref_out = torch.ops.aten.diagflat(ref_inp)
+    res_out = flag_gems.diagflat(inp)
+
+    m = inp.numel()
+    assert res_out.shape == (m, m)
+    utils.gems_assert_equal(res_out, ref_out)
+    got_diag = utils.to_cpu(res_out, ref_out).diagonal()
+    assert torch.equal(got_diag, ref_inp.reshape(-1))
