@@ -125,10 +125,13 @@ def _size_input_fn(layout):
     base_fn = _input_fn(layout)
 
     def input_fn(shape, dtype, device):
-        for item in base_fn(shape, dtype, device):
+        # The base function yields a 1-tuple whose single element is the kwargs
+        # dict (see _input_fn): copy that dict, add the explicit size and yield
+        # the same 1-tuple shape back.
+        for (item,) in base_fn(shape, dtype, device):
             item = dict(item)
             item["size"] = list(shape)
-            yield item
+            yield (item,)
 
     return input_fn
 
