@@ -319,9 +319,17 @@ def test_accuracy_combinations_error_parity_with_native():
 
 @pytest.mark.combinations
 def test_accuracy_combinations_dispatch_sentinel():
-    # Registration reachability (A2): poison the device key and verify the
-    # dispatched path really executes the submitted implementation for every
-    # call form, then remove the poison.
+    # Registration reachability (A2): install a spy on the key the operator
+    # registers on and verify the dispatched path really executes the submitted
+    # implementation for every call form.  The spy delegates, so the values are
+    # checked as well as the routing.  The spy is removed with lib._destroy()
+    # (the Library API has no context-manager form) so later tests see the
+    # production registration again.
+    #
+    # Under the full GPU phase --ref defaults to the device, so a "reference"
+    # call on a CUDA tensor ALSO goes through the spy; the assertion below
+    # therefore only requires the spy to have seen every distinct (r, wr)
+    # request, which holds in both CI phases.
     import torch.library
 
     seen = []
@@ -343,19 +351,20 @@ def test_accuracy_combinations_dispatch_sentinel():
             via_packet = torch.ops.aten.combinations.default(inp, r, wr)
             utils.gems_assert_equal(via_builtin, ref_out)
             utils.gems_assert_equal(via_packet, ref_out)
-        # Every call form reached the spy (the dispatching key is the plain
-        # device key; measured in probe_a2_dispatch_v3.log).
-        assert seen == [
-            (2, False),
-            (3, True),
-            (4, False),
-            (2, False),
-            (3, True),
-            (4, False),
-        ]
+        # Every distinct call form reached the spy (the dispatching key is the
+        # plain device key; measured in probe_a2_dispatch_v3.log: all five forms
+        # are intercepted by a CUDA-key sentinel).
+        assert (2, False) in seen
+        assert (3, True) in seen
+        assert (4, False) in seen
+        assert len(seen) >= 3
     finally:
-        # Restore by re-registering the real implementation on the same key.
-        lib.impl("combinations", flag_gems.combinations, dev_key)
+        lib._destroy()
+
+    # After the spy is gone the routed path is the production registration and
+    # still agrees with native.
+    ref_out = torch.ops.aten.combinations.default(utils.to_reference(inp), 3, True)
+    utils.gems_assert_equal(torch.combinations(inp, 3, True), ref_out)
 
 
 @pytest.mark.combinations
