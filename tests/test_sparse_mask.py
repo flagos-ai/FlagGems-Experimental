@@ -37,6 +37,8 @@ if QUICK_MODE:
 else:
     DENSE_SHAPES_2D = [(3, 4), (16, 33), (128, 256)]
     DENSE_SHAPES_ND = [(2, 3, 4), (4, 5, 6, 7)]
+    # nnz must fit every parametrized shape (min numel 12): 1 (single entry),
+    # 8 (unsorted within one program), 64 (multi-program over the 512 block).
     NNZ_LIST = [1, 8, 64]
 
 DTYPES = utils.FLOAT_DTYPES + utils.INT_DTYPES + utils.BOOL_TYPES
@@ -44,11 +46,17 @@ DTYPES = utils.FLOAT_DTYPES + utils.INT_DTYPES + utils.BOOL_TYPES
 
 def _make_coo_mask(shape, nnz, dtype, seed=0, coalesced=False):
     """A COO mask of the given shape/nnz whose entries are unique (so that
-    coalesce() would not change them) but stored unsorted by default."""
+    coalesce() would not change them) but stored unsorted by default.
+
+    Returns the built mask; callers must read back ``mask.is_coalesced()``
+    instead of assuming the requested flag (a single-entry or already-sorted
+    tensor is normalized to coalesced by the constructor itself).
+    """
     gen = torch.Generator().manual_seed(seed)
     numel = 1
     for s in shape:
         numel *= s
+    assert nnz <= numel, f"nnz={nnz} exceeds {shape} elements"
     flat = torch.randperm(numel, generator=gen)[:nnz]
     indices = torch.empty((len(shape), nnz), dtype=torch.int64)
     for d in reversed(range(len(shape))):
@@ -78,7 +86,10 @@ def test_accuracy_sparse_mask_dense_2d(shape, nnz):
 
         assert res_out.layout == torch.sparse_coo
         assert res_out.shape == ref_out.shape
-        assert res_out.is_coalesced() == ref_out.is_coalesced() == coalesced
+        # The flag follows the BUILT mask (native normalizes a single entry
+        # or an already-sorted uncoalesced construction to coalesced=True).
+        assert mask.is_coalesced() == ref_mask.is_coalesced()
+        assert res_out.is_coalesced() == ref_out.is_coalesced() == mask.is_coalesced()
         utils.gems_assert_close(res_out._indices(), ref_out._indices(), torch.int64)
         utils.gems_assert_close(res_out._values(), ref_out._values(), torch.float32)
 
@@ -200,8 +211,11 @@ def test_accuracy_sparse_mask_sparse_self():
 
 @pytest.mark.sparse_mask
 def test_accuracy_sparse_mask_empty_mask():
-    # 0-NNZ mask: output keeps the shape, nnz 0, and native reports
-    # is_coalesced() == True regardless of the mask flag.
+    # 0-NNZ mask: output keeps the shape, nnz 0, and (measured native) the
+    # mask's explicit is_coalesced() flag is PRESERVED -- an explicitly built
+    # uncoalesced 0-nnz mask yields an uncoalesced 0-nnz output. (A 0-nnz
+    # tensor built without the flag defaults to coalesced=True, which is what
+    # the first probe measured.)
     self_t = torch.randn((3, 4), device=flag_gems.device)
     ref_self = utils.to_reference(self_t)
     for coalesced in (False, True):
@@ -211,6 +225,7 @@ def test_accuracy_sparse_mask_empty_mask():
             (3, 4),
             is_coalesced=coalesced,
         )
+        assert mask.is_coalesced() == coalesced
         ref_mask = utils.to_reference(mask)
 
         ref_out = torch.ops.aten.sparse_mask(ref_self, ref_mask)
@@ -218,7 +233,7 @@ def test_accuracy_sparse_mask_empty_mask():
 
         assert res_out._nnz() == 0
         assert res_out.shape == ref_out.shape == torch.Size([3, 4])
-        assert res_out.is_coalesced() == ref_out.is_coalesced() is True
+        assert res_out.is_coalesced() == ref_out.is_coalesced() == coalesced
         # Both sides have no backing page for a 0-nnz sparse tensor.
         assert res_out._values().data_ptr() == ref_out._values().data_ptr() == 0
 
