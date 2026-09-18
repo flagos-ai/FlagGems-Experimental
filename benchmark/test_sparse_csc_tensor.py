@@ -86,7 +86,7 @@ def _input_fn_size(shape, dtype, device):
         "size": [nrows, ncols],
         "dtype": dtype,
         "device": device,
-    }
+    },
 
 
 def _input_fn_value(shape, dtype, device):
@@ -98,7 +98,7 @@ def _input_fn_value(shape, dtype, device):
         "values": values,
         "dtype": dtype,
         "device": device,
-    }
+    },
 
 
 class SparseCscTensorSizeBenchmark(base.GenericBenchmark):
