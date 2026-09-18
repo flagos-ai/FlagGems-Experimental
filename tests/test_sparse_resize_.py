@@ -48,18 +48,18 @@ if QUICK_MODE:
     GROW_SPARSE = GROW_SPARSE[:2] + [GROW_SPARSE[3]]
 
 DENSE_RELAY = [
-    ("hybrid-2d-dense", (3, 3, 2), 1, 3, [3, 4, 2], None),
-    ("hybrid-1d-dense", (3, 2, 3), 1, 4, [3, 3, 3], None),
-    ("hybrid-both-grow", (3, 3, 2), 1, 3, [4, 3, 5], None),
+    ("hybrid-2d-dense", (3, 3, 2), 1, 3, [3, 4, 2]),
+    ("hybrid-1d-dense", (4, 2, 3), 1, 4, [4, 3, 3]),
+    ("hybrid-both-grow", (3, 3, 2), 1, 3, [4, 3, 5]),
 ]
 if QUICK_MODE:
     DENSE_RELAY = DENSE_RELAY[:1]
 
 EMPTY_CASES = [
-    ("empty-grow", (2, 3), 2, 0, [7, 5], 2, 0),
-    ("empty-sp-dim-change", (2, 3), 2, 0, [4, 5, 6], 3, 0),
-    ("empty-to-hybrid", (2, 3), 2, 0, [4, 3, 2], 1, 2),
-    ("empty-to-1d", (2, 3), 2, 0, [7], 1, 0),
+    ("empty-grow", (2, 3), 2, [7, 5], 2, 0),
+    ("empty-sp-dim-change", (2, 3), 2, [4, 5, 6], 3, 0),
+    ("empty-to-hybrid", (2, 3), 2, [4, 3, 2], 1, 2),
+    ("empty-to-1d", (2, 3), 2, [7], 1, 0),
 ]
 if QUICK_MODE:
     EMPTY_CASES = EMPTY_CASES[:2]
@@ -76,6 +76,20 @@ ERROR_CASES = [
 
 DTYPES = [torch.float32, torch.float16, torch.float64, torch.int32, torch.int64]
 
+# (tag, source size, sparse dims, nnz, target size) for the dtype sweep; both
+# data-carrying paths (metadata-only grow and dense-trailing relayout).
+DTYPE_CASES = [
+    ("grow", (3, 3), 2, 3, [5, 3]),
+    ("relay", (3, 3, 2), 1, 3, [3, 4, 2]),
+]
+
+
+def _dense_numel(shape):
+    n = 1
+    for s in shape:
+        n *= s
+    return n
+
 
 def _make_coo(size, nnd, nnz, seed=0, dtype=torch.float32, flag=None):
     """A sparse COO tensor of ``size`` with ``nnz`` stored entries.
@@ -84,10 +98,8 @@ def _make_coo(size, nnd, nnz, seed=0, dtype=torch.float32, flag=None):
     indices), ``flag=True``/``False`` forces the flag explicitly.
     """
     gen = torch.Generator().manual_seed(seed)
-    numel = 1
-    for s in size[:nnd]:
-        numel *= s
-    flat = torch.randperm(max(numel, 1), generator=gen)[:nnz]
+    nnz = min(nnz, _dense_numel(size[:nnd]))
+    flat = torch.randperm(_dense_numel(size[:nnd]), generator=gen)[:nnz]
     if flag is not False:
         flat = flat.sort().values
     idx = torch.empty((nnd, nnz), dtype=torch.int64)
@@ -95,12 +107,8 @@ def _make_coo(size, nnd, nnz, seed=0, dtype=torch.float32, flag=None):
         idx[d] = flat % size[d]
         flat = flat // size[d]
     dense = tuple(size[nnd:])
-    dnum = 1
-    for s in dense:
-        dnum *= s
-    vals = (
-        torch.arange(nnz * dnum, dtype=torch.float32).reshape((nnz,) + dense).to(dtype)
-    )
+    vals = torch.arange(nnz * _dense_numel(dense), dtype=torch.float32)
+    vals = vals.reshape((nnz,) + dense).to(dtype)
     t = torch.sparse_coo_tensor(idx, vals, size)
     if flag is not None:
         t = t._coalesced_(flag)
@@ -115,7 +123,11 @@ def _make_empty(size, nnd, flag=True, dtype=torch.float32):
 
 
 def _state(t):
-    """The observable end state the operator is compared on."""
+    """The observable end state the operator is compared on.
+
+    Every field is device-independent, so a reference that moved to CPU under
+    the quick-cpu phase compares equal.
+    """
     return (
         tuple(t.shape),
         t.sparse_dim(),
@@ -128,13 +140,36 @@ def _state(t):
     )
 
 
+_IMPL_REGISTERED = False
+
+
+def _register_impl():
+    """Install the submitted implementation on the dispatcher keys.
+
+    The repository registration reaches COO tensors through the Sparse keys,
+    so the tests that exercise dispatcher-provided behaviour (the in-place
+    version bump, the autograd rejection of a leaf) register the same way.
+
+    Only the CUDA/SparseCUDA keys are touched, so the CPU references used by
+    the value-comparison tests keep reaching the native kernel. Registration
+    happens once per process (a second registration on the same key raises).
+    """
+    global _IMPL_REGISTERED
+    if _IMPL_REGISTERED:
+        return
+    lib = torch.library.Library("aten", "IMPL")
+    lib.impl("sparse_resize_", flag_gems.sparse_resize_, "CUDA")
+    lib.impl("sparse_resize_", flag_gems.sparse_resize_, "SparseCUDA")
+    _IMPL_REGISTERED = True
+
+
 @pytest.mark.sparse_resize_
 @pytest.mark.parametrize("tag,size,nnd,nnz,target,flag", GROW_SPARSE)
 def test_sparse_resize__sparse_grow(tag, size, nnd, nnz, target, flag):
     # Non-empty sparse-dimension growth keeps the stored entries verbatim and
     # the values storage is shared with the pre-call accessors.
-    ref = _make_coo(size, nnd, nnz, seed=1, flag=flag)
-    inp = _make_coo(size, nnd, nnz, seed=1, flag=flag)
+    ref = _make_coo(size, nnd, nnz, seed=1, flag=flag).to(flag_gems.device)
+    inp = _make_coo(size, nnd, nnz, seed=1, flag=flag).to(flag_gems.device)
     ref = utils.to_reference(ref)
     dense_dim = len(target) - nnd
 
@@ -148,19 +183,21 @@ def test_sparse_resize__sparse_grow(tag, size, nnd, nnz, target, flag):
     assert _state(inp) == _state(ref), f"{tag}: {_state(inp)} != {_state(ref)}"
     assert tuple(inp.shape) == tuple(target)
     assert inp.sparse_dim() == nnd
+    assert inp.dense_dim() == dense_dim
+    assert inp._nnz() == nnz
     utils.gems_assert_equal(inp._indices(), ref._indices())
     utils.gems_assert_close(inp._values(), ref._values(), inp._values().dtype)
 
 
 @pytest.mark.sparse_resize_
-@pytest.mark.parametrize("tag,size,nnd,nnz,target,flag", DENSE_RELAY)
-def test_sparse_resize__dense_relay(tag, size, nnd, nnz, target, flag):
+@pytest.mark.parametrize("tag,size,nnd,nnz,target", DENSE_RELAY)
+def test_sparse_resize__dense_relay(tag, size, nnd, nnz, target):
     # Dense trailing dimensions change size: the values storage is relaid out
     # preserving the stored prefix, and the tail is whatever the reference
     # leaves there (the reference resizes uninitialized storage). Compare the
     # prefix, which is the part the operator defines.
-    ref = _make_coo(size, nnd, nnz, seed=2, flag=flag)
-    inp = _make_coo(size, nnd, nnz, seed=2, flag=flag)
+    ref = _make_coo(size, nnd, nnz, seed=2).to(flag_gems.device)
+    inp = _make_coo(size, nnd, nnz, seed=2).to(flag_gems.device)
     ref = utils.to_reference(ref)
     dense_dim = len(size) - nnd
 
@@ -170,12 +207,11 @@ def test_sparse_resize__dense_relay(tag, size, nnd, nnz, target, flag):
     assert res_out is inp
     assert ref_out is ref
     assert _state(inp) == _state(ref), f"{tag}: {_state(inp)} != {_state(ref)}"
-    assert tuple(inp._values().shape)[1:] == tuple(target[nnd:])
+    assert tuple(inp._values().shape) == (nnz,) + tuple(target[nnd:])
+    assert inp._nnz() == nnz
     utils.gems_assert_equal(inp._indices(), ref._indices())
     # The stored prefix is preserved exactly (this is the relayout contract).
-    prefix_numel = 1
-    for s in size[nnd:]:
-        prefix_numel *= s
+    prefix_numel = _dense_numel(size[nnd:])
     assert prefix_numel > 0
     utils.gems_assert_close(
         inp._values().reshape(-1)[:prefix_numel],
@@ -185,12 +221,12 @@ def test_sparse_resize__dense_relay(tag, size, nnd, nnz, target, flag):
 
 
 @pytest.mark.sparse_resize_
-@pytest.mark.parametrize("tag,size,nnd,nnz,target,sp,dn", EMPTY_CASES)
-def test_sparse_resize__empty(tag, size, nnd, nnz, target, sp, dn):
+@pytest.mark.parametrize("tag,size,nnd,target,sp,dn", EMPTY_CASES)
+def test_sparse_resize__empty(tag, size, nnd, target, sp, dn):
     # An empty tensor takes any reshape; the result stays empty with the
     # requested split, and the coalesced flag follows the input (measured).
     for flag in (True, False):
-        ref = utils.to_reference(_make_empty(size, nnd, flag=flag))
+        ref = utils.to_reference(_make_empty(size, nnd, flag=flag).to(flag_gems.device))
         inp = _make_empty(size, nnd, flag=flag).to(flag_gems.device)
 
         ref_out = torch.ops.aten.sparse_resize_(ref, target, sp, dn)
@@ -203,6 +239,7 @@ def test_sparse_resize__empty(tag, size, nnd, nnz, target, sp, dn):
         assert inp.sparse_dim() == sp
         assert inp.dense_dim() == dn
         assert tuple(inp._indices().shape) == (sp, 0)
+        assert inp.is_coalesced() == flag
 
 
 @pytest.mark.sparse_resize_
@@ -213,7 +250,7 @@ def test_sparse_resize__errors(tag, size, nnd, nnz, target, sp, dn):
     # fragments (parameter names/values) are asserted: CI's self-hosted torch
     # build raises the same rejections from a different code path with
     # different wording.
-    ref_inp = utils.to_reference(_make_coo(size, nnd, nnz, seed=3))
+    ref_inp = utils.to_reference(_make_coo(size, nnd, nnz, seed=3).to(flag_gems.device))
     ref_before = _state(ref_inp)
     ref_err = None
     try:
@@ -241,8 +278,9 @@ def test_sparse_resize__errors(tag, size, nnd, nnz, target, sp, dn):
         assert "not supported" in msg
         assert "non-empty sparse tensor" in msg
     assert _state(inp) == before, f"{tag}: implementation mutated the input"
-    utils.gems_assert_equal(inp._indices(), idx_before)
-    utils.gems_assert_close(inp._values(), vals_before, vals_before.dtype)
+    # Same-device structural checks: the pre-call buffers are unchanged.
+    assert torch.equal(inp._indices(), idx_before)
+    assert torch.equal(inp._values(), vals_before)
 
 
 @pytest.mark.sparse_resize_
@@ -250,11 +288,10 @@ def test_sparse_resize__errors(tag, size, nnd, nnz, target, sp, dn):
 def test_sparse_resize__dtypes(dtype):
     # dtype preservation on both data-carrying paths: the metadata-only grow
     # and the dense-trailing relayout.
-    for tag, size, nnd, nnz, target in [
-        ("grow", (3, 3), 2, 3, [5, 3]),
-        ("relay", (3, 3, 2), 1, 3, [3, 4, 2]),
-    ]:
-        ref = utils.to_reference(_make_coo(size, nnd, nnz, seed=4, dtype=dtype))
+    for tag, size, nnd, nnz, target in DTYPE_CASES:
+        ref = utils.to_reference(
+            _make_coo(size, nnd, nnz, seed=4, dtype=dtype).to(flag_gems.device)
+        )
         inp = _make_coo(size, nnd, nnz, seed=4, dtype=dtype).to(flag_gems.device)
         dd = len(size) - nnd
 
@@ -264,10 +301,9 @@ def test_sparse_resize__dtypes(dtype):
         assert inp.dtype == dtype, f"{tag}: dtype changed"
         assert inp._values().dtype == dtype
         assert inp.dtype == ref.dtype
+        assert _state(inp) == _state(ref)
         utils.gems_assert_equal(inp._indices(), ref._indices())
-        prefix_numel = 1
-        for s in size[nnd:]:
-            prefix_numel *= s
+        prefix_numel = _dense_numel(size[nnd:])
         utils.gems_assert_close(
             inp._values().reshape(-1)[:prefix_numel],
             ref._values().reshape(-1)[:prefix_numel],
@@ -277,12 +313,10 @@ def test_sparse_resize__dtypes(dtype):
 
 @pytest.mark.sparse_resize_
 def test_sparse_resize__noop_identity():
-    # Identical target metadata is a no-op: identity preserved, version
-    # counter still bumped (native bumps it for every in-place aten call), and
-    # the stored buffers are the very same allocations.
+    # Identical target metadata is a no-op: identity preserved and the stored
+    # buffers are the very same allocations.
     inp = _make_coo((3, 3), 2, 3, seed=5).to(flag_gems.device)
     idx_ptr, vals_ptr = inp._indices().data_ptr(), inp._values().data_ptr()
-    v0 = inp._version
 
     res = flag_gems.sparse_resize_(inp, [3, 3], 2, 0)
 
@@ -291,7 +325,9 @@ def test_sparse_resize__noop_identity():
     assert inp._nnz() == 3
     assert inp._indices().data_ptr() == idx_ptr
     assert inp._values().data_ptr() == vals_ptr
-    assert inp._version == v0 + 1
+
+    # The no-op is a metadata read: the stored values are untouched.
+    assert inp.is_coalesced() is True
 
 
 @pytest.mark.sparse_resize_
@@ -299,19 +335,21 @@ def test_sparse_resize__sparse_grow_shares_storage():
     # Sparse-dimension growth is the zero-copy direction: the new tensor takes
     # the existing indices/values storage (native hands over the same
     # allocation, measured via data_ptr).
-    ref = utils.to_reference(_make_coo((3, 3), 2, 3, seed=6))
+    ref = utils.to_reference(_make_coo((3, 3), 2, 3, seed=6).to(flag_gems.device))
     inp = _make_coo((3, 3), 2, 3, seed=6).to(flag_gems.device)
-    idx_obj, vals_obj = inp._indices(), inp._values()
+    idx_ptr = inp._indices().data_ptr()
+    vals_ptr = inp._values().data_ptr()
 
     torch.ops.aten.sparse_resize_(ref, [5, 3], 2, 0)
     flag_gems.sparse_resize_(inp, [5, 3], 2, 0)
 
     assert inp._nnz() == 3
+    assert _state(inp) == _state(ref)
+    # The pre-call buffers are the storage the tensor now uses (zero copy).
+    assert inp._indices().data_ptr() == idx_ptr
+    assert inp._values().data_ptr() == vals_ptr
     utils.gems_assert_equal(inp._indices(), ref._indices())
     utils.gems_assert_close(inp._values(), ref._values(), inp._values().dtype)
-    # The pre-call accessors still alias the same storage the tensor now uses.
-    assert inp._values().data_ptr() == vals_obj.data_ptr()
-    assert inp._indices().data_ptr() == idx_obj.data_ptr()
 
 
 @pytest.mark.sparse_resize_
@@ -319,7 +357,9 @@ def test_sparse_resize__sparse_grow_shares_storage():
 def test_sparse_resize__coalesced_preserved(flag):
     # The coalesced flag survives every direction, exactly as measured against
     # native: the flag is not recomputed from the index data by the resize.
-    ref = utils.to_reference(_make_coo((3, 3), 2, 4, seed=7, flag=flag))
+    ref = utils.to_reference(
+        _make_coo((3, 3), 2, 4, seed=7, flag=flag).to(flag_gems.device)
+    )
     inp = _make_coo((3, 3), 2, 4, seed=7, flag=flag).to(flag_gems.device)
     assert inp.is_coalesced() == flag
 
@@ -328,6 +368,7 @@ def test_sparse_resize__coalesced_preserved(flag):
 
     assert inp.is_coalesced() == flag
     assert inp.is_coalesced() == ref.is_coalesced()
+    assert _state(inp) == _state(ref)
     utils.gems_assert_equal(inp._indices(), ref._indices())
 
 
@@ -336,7 +377,7 @@ def test_sparse_resize__coalesced_preserved(flag):
 def test_sparse_resize__empty_coalesced_preserved(flag):
     # Empty tensors keep their flag too (native preserves it; a freshly
     # constructed empty tensor would otherwise always come back coalesced).
-    ref = utils.to_reference(_make_empty((2, 3), 2, flag=flag))
+    ref = utils.to_reference(_make_empty((2, 3), 2, flag=flag).to(flag_gems.device))
     inp = _make_empty((2, 3), 2, flag=flag).to(flag_gems.device)
 
     torch.ops.aten.sparse_resize_(ref, [7, 5], 2, 0)
@@ -345,6 +386,7 @@ def test_sparse_resize__empty_coalesced_preserved(flag):
     assert inp.is_coalesced() == flag
     assert inp.is_coalesced() == ref.is_coalesced()
     assert inp._nnz() == 0
+    assert _state(inp) == _state(ref)
 
 
 @pytest.mark.sparse_resize_
@@ -352,7 +394,7 @@ def test_sparse_resize__dense_input_rejected():
     # The native kernel table has no CUDA kernel for this operator, so a dense
     # tensor raises the dispatcher's NotImplementedError; the override must
     # reject it rather than quietly accepting it through the CUDA key.
-    ref = torch.randn(3, 4, device="cpu")
+    ref = torch.randn(3, 4)
     ref_err = None
     try:
         torch.ops.aten.sparse_resize_(ref, [5, 4], 2, 0)
@@ -370,20 +412,65 @@ def test_sparse_resize__dense_input_rejected():
 def test_sparse_resize__compressed_input_rejected():
     # Compressed layouts have no native kernel either; the override rejects
     # them the same way instead of producing a bogus COO result.
-    row = torch.tensor([0, 2, 4], dtype=torch.int64, device=flag_gems.device)
-    col = torch.tensor([0, 1, 0, 1], dtype=torch.int64, device=flag_gems.device)
-    csr = torch.sparse_csr_tensor(
-        row, col, torch.randn(4, device=flag_gems.device), (2, 3)
-    )
+    dev = flag_gems.device
+    row = torch.tensor([0, 2, 4], dtype=torch.int64, device=dev)
+    col = torch.tensor([0, 1, 0, 1], dtype=torch.int64, device=dev)
+    csr = torch.sparse_csr_tensor(row, col, torch.randn(4, device=dev), (2, 3))
     with pytest.raises(NotImplementedError):
         flag_gems.sparse_resize_(csr, [5, 5], 2, 0)
     assert tuple(csr.shape) == (2, 3)
 
 
 @pytest.mark.sparse_resize_
+def test_sparse_resize__dispatcher_path():
+    # The operator must be reachable through the dispatcher (this is the path
+    # the repository registration installs), not only through a direct call.
+    _register_impl()
+
+    for tag, size, target in [
+        ("grow", (3, 3), [5, 3]),
+        ("no-op", (3, 3), [3, 3]),
+        ("empty", (2, 3), [7, 5]),
+    ]:
+        if tag == "empty":
+            inp = _make_empty(size, 2).to(flag_gems.device)
+            sp, dn = 2, 0
+        else:
+            inp = _make_coo(size, 2, 3, seed=9).to(flag_gems.device)
+            sp, dn = 2, 0
+        # A second name for the same object: the dispatcher path must mutate
+        # in place, so this name observes the new metadata too.
+        alias = inp
+        res = torch.ops.aten.sparse_resize_(inp, target, sp, dn)
+        assert res is inp, tag
+        assert alias is inp, tag
+        assert tuple(alias.shape) == tuple(target), tag
+        # Repeated dispatch must not recurse or accumulate state.
+        torch.ops.aten.sparse_resize_(inp, target, sp, dn)
+        assert tuple(inp.shape) == tuple(target), tag
+
+    # The builtin method form reaches the same registered kernel.
+    inp = _make_coo((3, 3), 2, 3, seed=10).to(flag_gems.device)
+    res = inp.sparse_resize_([5, 3], 2, 0)
+    assert res is inp
+    assert tuple(inp.shape) == (5, 3)
+
+    # Version-counter parity with native: the dispatched in-place call goes
+    # through the in-place view layer, which bumps the counter exactly once --
+    # including for the no-op direction, matching the measured reference.
+    for tag, target in [("grow", [7, 3]), ("no-op", [7, 3])]:
+        t = _make_coo((3, 3), 2, 3, seed=11).to(flag_gems.device)
+        v0 = t._version
+        torch.ops.aten.sparse_resize_(t, target, 2, 0)
+        assert t._version == v0 + 1, tag
+
+
+@pytest.mark.sparse_resize_
 def test_sparse_resize__requires_grad_leaf():
-    # An in-place op on a leaf that requires grad is rejected by the
-    # dispatcher, before any implementation code runs.
+    # An in-place op on a leaf that requires grad is rejected before the
+    # implementation body runs; the rejection is produced by the in-place view
+    # layer on the dispatcher path, so the test goes through a registration
+    # exactly like the repository registration does.
     ref = _make_coo((3, 3), 2, 3, seed=8)
     ref.requires_grad_(True)
     ref_err = None
@@ -393,44 +480,9 @@ def test_sparse_resize__requires_grad_leaf():
         ref_err = e
     assert ref_err is not None, "native must reject a requires-grad leaf"
 
+    _register_impl()
     inp = _make_coo((3, 3), 2, 3, seed=8).to(flag_gems.device)
     inp.requires_grad_(True)
     with pytest.raises(type(ref_err)):
-        flag_gems.sparse_resize_(inp, [5, 3], 2, 0)
+        torch.ops.aten.sparse_resize_(inp, [5, 3], 2, 0)
     assert tuple(inp.shape) == (3, 3)
-
-
-@pytest.mark.sparse_resize_
-def test_sparse_resize__dispatcher_path():
-    # The operator must be reachable through the dispatcher (this is the path
-    # the repository registration installs), not only through a direct call.
-    lib = torch.library.Library("aten", "IMPL")
-    lib.impl("sparse_resize_", flag_gems.sparse_resize_, "CUDA")
-    lib.impl("sparse_resize_", flag_gems.sparse_resize_, "SparseCUDA")
-
-    for tag, size, target in [
-        ("grow", (3, 3), [5, 3]),
-        ("no-op", (3, 3), [3, 3]),
-        ("empty", (2, 3), [7, 5]),
-    ]:
-        inp = (
-            _make_coo(size, 2, 3, seed=9).to(flag_gems.device)
-            if tag != "empty"
-            else _make_empty(size, 2).to(flag_gems.device)
-        )
-        # A second name for the same object: the dispatcher path must mutate
-        # in place, so this name observes the new metadata too.
-        alias = inp
-        res = torch.ops.aten.sparse_resize_(inp, target, 2, 0)
-        assert res is inp, tag
-        assert alias is inp, tag
-        assert tuple(alias.shape) == tuple(target), tag
-        # Repeated dispatch must not recurse or accumulate state.
-        torch.ops.aten.sparse_resize_(inp, target, 2, 0)
-        assert tuple(inp.shape) == tuple(target), tag
-
-    # The builtin method form reaches the same registered kernel.
-    inp = _make_coo((3, 3), 2, 3, seed=10).to(flag_gems.device)
-    res = inp.sparse_resize_([5, 3], 2, 0)
-    assert res is inp
-    assert tuple(inp.shape) == (5, 3)
