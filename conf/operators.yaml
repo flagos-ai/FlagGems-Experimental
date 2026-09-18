@@ -12522,6 +12522,22 @@ ops:
   - NeuralNetwork
   stages:
   - beta: '5.3'
+- id: sparse_bsr_tensor
+  description: 'Host-side sparse BSR constructor: validates the block-row and block-column
+    indices plus the 3-D values tensor and wires them into a BSR tensor that aliases
+    all three component tensors. Covers the explicit-size and size-inference overloads.
+
+    '
+  for:
+  - sparse_bsr_tensor.crow_col_value
+  - sparse_bsr_tensor.crow_col_value_size
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: sparse_mla_fwd_interface
   description: 'A generic interface for sparse MLA (Multi-head Latent Attention) for
     DeepSeek v3/v3.2.

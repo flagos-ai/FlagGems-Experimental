@@ -1075,6 +1075,28 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    # sparse_bsr_tensor: both ATen overloads measured per key with labelled
+    # sentinel probes in a fresh process per (op, key) pair
+    # (runs/sparse_bsr_tensor/native_probe_c_matrix.log, _d_matrix.log and
+    # _f.log). The packet forms are pure composite constructors, so the
+    # Autograd key is the one every real call form selects; registering on the
+    # plain device key alone is dead code for them. The Python builtin
+    # torch.sparse_bsr_tensor does NOT route through either overload — its
+    # C++ argument parser calls the shared
+    # sparse_compressed_tensor.comp_plain_value[_size] op, which belongs to
+    # the sparse_compressed_tensor integration.
+    (
+        "sparse_bsr_tensor.crow_col_value",
+        sparse_bsr_tensor_crow_col_value,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_bsr_tensor.crow_col_value_size",
+        sparse_bsr_tensor_crow_col_value_size,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
     ("sparse_sampled_addmm", sparse_sampled_addmm, None, (SPARSE_CSR_DISPATCH_KEY,)),
     (
         "sparse_sampled_addmm.out",
