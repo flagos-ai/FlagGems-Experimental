@@ -16,7 +16,7 @@
 
 import pytest
 import torch
-from torch.testing import Mark, MarkDecorator
+from _pytest.mark import Mark, MarkDecorator
 
 import flag_gems
 
