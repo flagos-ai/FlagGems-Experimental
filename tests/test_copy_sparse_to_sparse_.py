@@ -117,7 +117,7 @@ GROW_CASES = [
     ("shrink-nnz-on-empty", (3, 4), 0, (3, 4), 3, 2),
     ("shrink-shape-on-empty", (5, 6), 0, (3, 4), 4, 2),
     ("3d-grow", (4, 5, 6), 6, (4, 6, 7), 10, 3),
-    ("hybrid-empty-to-full", (2, 3, 4), 0, (2, 3, 4), 4, 1),
+    ("hybrid-empty-to-full", (2, 3, 4), 0, (2, 3, 4), 2, 1),
 ]
 if QUICK_MODE:
     GROW_CASES = GROW_CASES[:2] + [GROW_CASES[2], GROW_CASES[5]]
