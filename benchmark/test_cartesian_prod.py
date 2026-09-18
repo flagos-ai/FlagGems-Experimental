@@ -81,9 +81,12 @@ def _input_fn(lengths, dtype, device):
     tensors = [
         utils.generate_tensor_input((length,), dtype, device) for length in lengths
     ]
-    # Yield a 1-tuple wrapping the list: the harness unpacks each yielded item
-    # as the argument list for both torch_op and gems_op.
-    yield [tensors],
+    # Yield a 1-tuple whose single element is the TensorList argument: the
+    # harness unpacks each yielded item as the call argument list, so this
+    # produces exactly ``op(tensors_list)`` on both the torch and gems sides.
+    # (Yielding ``[tensors],`` instead would pass a nested list and pybind
+    # rejects it for the Tensor[] parameter.)
+    yield (tensors,)
 
 
 @pytest.mark.cartesian_prod
