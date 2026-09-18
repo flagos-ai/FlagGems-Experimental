@@ -45,7 +45,11 @@ CSR_SHAPES = [(16, 16, 16), (256, 256, 256), (1024, 1024, 1024), (4096, 4096, 40
 
 
 def _components(nrows, ncols, nnz, dtype, device):
-    """Deterministic (crow, col, values) for a CSR tensor of the given grid."""
+    """Deterministic (crow_idx, col_idx, values) for a CSR tensor of the grid.
+
+    ``col`` contains ``ncols - 1`` at least once so the size-inferred form
+    produces the same shape as the explicit ``(nrows, ncols)`` one.
+    """
     nnz = min(nnz, nrows * ncols)
     gen = torch.Generator(device="cpu").manual_seed(42)
     crow = torch.zeros(nrows + 1, dtype=torch.int64)
@@ -55,18 +59,25 @@ def _components(nrows, ncols, nnz, dtype, device):
         crow[1:] = torch.tensor(cuts, dtype=torch.int64)
     crow[-1] = nnz
     col = torch.randint(0, ncols, (nnz,), generator=gen)
-    values = torch.randn(nnz, generator=gen).to(dtype)
+    if nnz:
+        col[0] = ncols - 1
+    values = (torch.randn(nnz, generator=gen) if nnz else torch.empty(0)).to(dtype)
     return crow.to(device), col.to(device), values.to(device)
 
 
 def _input_fn_size(shape, dtype, device):
     nrows, ncols, nnz = shape
     crow, col, values = _components(nrows, ncols, nnz, dtype, device)
+    # `dtype` is named explicitly on both sides: with dtype=None the packet
+    # resolves to the default dtype and rejects a values tensor of any other
+    # dtype (measured), so an unnamed dtype would fail the int/bool half of
+    # the sweep before it is timed.
     yield {
         "crow_indices": crow,
         "col_indices": col,
         "values": values,
         "size": [nrows, ncols],
+        "dtype": dtype,
         "device": device,
     },
 
@@ -78,6 +89,7 @@ def _input_fn_value(shape, dtype, device):
         "crow_indices": crow,
         "col_indices": col,
         "values": values,
+        "dtype": dtype,
         "device": device,
     },
 
