@@ -21,12 +21,18 @@ import flag_gems
 
 from . import base, consts, utils
 
-# Dense self x COO mask (the dispatched real-input shape of the op). The
-# sweep covers the 2-D gather branch (`_gather2d_kernel`, 512-element blocks),
-# the N-D gather branch (`_gather_nd_kernel`, 1024-element blocks, MAXD=8),
-# several nnz levels so the grid spans one and many programs, and the full
-# dtype set the op accepts.
-SPARSE_MASK_SHAPES = [(3, 4), (64, 128), (512, 512), (1024, 1024)]
+# (shape, nnz) cases: dense self x COO mask. The sweep covers the 2-D gather
+# branch (`_gather2d_kernel`, 512-element blocks) and the N-D gather branch
+# (`_gather_nd_kernel`, 1024-element blocks, MAXD=8); nnz spans the
+# single-program (nnz <= block) and multi-program grids and stays at a
+# constant ~6% density on the large shapes so one shape's cost tracks the
+# others. Dtypes sweep FLOAT + INT + BOOL via utils.generate_tensor_input.
+SPARSE_MASK_CASES = [
+    ((3, 4), 12),
+    ((64, 128), 512),
+    ((512, 512), 16384),
+    ((1024, 1024), 65536),
+]
 
 
 def _make_mask(shape, dtype, device, nnz):
@@ -34,6 +40,7 @@ def _make_mask(shape, dtype, device, nnz):
     numel = 1
     for s in shape:
         numel *= s
+    nnz = min(nnz, numel)
     flat = torch.randperm(numel, generator=gen)[:nnz]
     indices = torch.empty((len(shape), nnz), dtype=torch.int64)
     for d in reversed(range(len(shape))):
@@ -48,12 +55,12 @@ def _make_mask(shape, dtype, device, nnz):
 
 class SparseMaskBenchmark(base.Benchmark):
     def set_shapes(self, shape_file_path=None):
-        self.shapes = SPARSE_MASK_SHAPES
+        self.shapes = [shape for shape, _ in SPARSE_MASK_CASES]
 
     def get_input_iter(self, cur_dtype):
-        for shape in self.shapes:
+        for shape, nnz in SPARSE_MASK_CASES:
             inp = utils.generate_tensor_input(shape, cur_dtype, self.device)
-            mask = _make_mask(shape, cur_dtype, self.device, 512)
+            mask = _make_mask(shape, cur_dtype, self.device, nnz)
             yield inp, mask
 
 
