@@ -166,6 +166,7 @@ from .isfinite import isfinite
 from .isin import isin
 from .isinf import isinf
 from .isnan import isnan
+from .ixor import ixor, xor_, xor_scalar_
 from .jagged_to_padded_dense_forward import (
     _jagged_to_padded_dense_forward,
     jagged_to_padded_dense_forward,
@@ -565,6 +566,7 @@ __all__ = [
     "isin",
     "isinf",
     "isnan",
+    "ixor",
     "jagged_to_padded_dense_forward",
     "kron",
     "layer_norm",
@@ -819,6 +821,8 @@ __all__ = [
     "xlogy_scalar_tensor_out",
     "xlogy_tensor_scalar",
     "xlogy_tensor_scalar_out",
+    "xor_",
+    "xor_scalar_",
     "zero",
     "zero_",
     "zero_out",
