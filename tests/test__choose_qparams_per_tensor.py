@@ -429,14 +429,17 @@ def test_accuracy__choose_qparams_subnormal_scale_window(reduce_range):
         _assert_same_result(res, ref, f"[0,{hi}]/rr={reduce_range}")
         assert res[0] == floor, res
 
-    # Ranges whose raw scale is comfortably above the floor: exact parity, no
-    # flooring involved on either side.
+    # Ranges whose raw scale crosses the floor within this family: whether the
+    # agreed scale is the floor or the raw scale depends on hi/255 (rr=False)
+    # or hi/127 (rr=True) -- e.g. [0, 1e-3] floors on both sides while
+    # [0, 1.0] returns the raw 1/255 on both sides (both measured). The
+    # invariant is exact parity, asserted above; the floor/no-floor split
+    # itself is pinned by the two windows below and above the crossing.
     for hi in (1e-3, 1e-2, 1.0):
         x = torch.tensor([0.0, hi], dtype=torch.float32, device=_DEVICE)
         ref = _ATEN(x, reduce_range)
         res = flag_gems._choose_qparams_per_tensor(x, reduce_range)
         _assert_same_result(res, ref, f"[0,{hi}]/rr={reduce_range}")
-        assert res[0] > floor, res
 
     # Below the boundary the scales differ by the fixed replacement; pin both
     # sides so neither one moves.
