@@ -69,6 +69,7 @@ current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
+SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 
 
 def torch_ge(v):
@@ -125,6 +126,7 @@ _FULL_CONFIG = (
     ("_cudnn_attention_forward", cudnn_attention_forward),
     ("_cudnn_rnn_backward", cudnn_rnn_backward),
     ("_cummin_helper", _cummin_helper),
+    ("_dim_arange", _dim_arange),
     ("_dyn_quant_pack_4bit_weight", _dyn_quant_pack_4bit_weight),
     ("_efficient_attention_backward", efficient_attention_backward),
     ("_embedding_bag_dense_backward", _embedding_bag_dense_backward),
@@ -486,6 +488,12 @@ _FULL_CONFIG = (
     ("deg2rad", deg2rad),
     ("deg2rad.out", deg2rad_out),
     ("deg2rad_", deg2rad_),
+    (
+        "dense_dim",
+        dense_dim,
+        None,
+        (SPARSE_DISPATCH_KEY, SPARSE_CSR_DISPATCH_KEY),
+    ),
     ("dequantize", dequantize),
     ("dequantize.self", dequantize),
     ("diag", diag),
