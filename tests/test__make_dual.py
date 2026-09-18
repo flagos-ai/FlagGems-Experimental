@@ -56,10 +56,11 @@ MAKE_DUAL_LEVELS = [0, 1]
 def _ref_make_dual(primal, tangent, level):
     """Native reference for ``_make_dual``.
 
-    The FlagGems override delegates to ``torch._make_dual`` with the CUDA
-    dispatch key temporarily excluded, so the un-registered ``torch._make_dual``
-    entry point is exactly the native kernel and both sides are produced by the
-    same public API.
+    Both sides go through the same public ``torch._make_dual`` API. The
+    FlagGems override delegates to that entry point on the first (top-level)
+    call via a thread-local re-entry flag, and on the re-entered call
+    redispatches onto the CompositeExplicitAutograd kernel; neither path
+    changes the visible native semantics of the reference value.
     """
     return torch._make_dual(primal, tangent, level)
 
