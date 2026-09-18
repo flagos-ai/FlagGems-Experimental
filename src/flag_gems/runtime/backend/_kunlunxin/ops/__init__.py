@@ -177,6 +177,7 @@ from .linspace import linspace
 from .log import log
 from .log1p import log1p, log1p_
 from .log_sigmoid import log_sigmoid
+from .log_sigmoid_forward import log_sigmoid_forward
 from .log_softmax import log_softmax, log_softmax_backward
 from .logaddexp2 import logaddexp2, logaddexp2_out
 from .logical_and import logical_and, logical_and_
@@ -563,6 +564,7 @@ __all__ = [
     "log1p",
     "log1p_",
     "log_sigmoid",
+    "log_sigmoid_forward",
     "log_softmax",
     "log_softmax_backward",
     "logaddexp2",
