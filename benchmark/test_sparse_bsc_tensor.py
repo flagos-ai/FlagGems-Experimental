@@ -74,10 +74,13 @@ class _BSCGenericBenchmark(base.GenericBenchmark):
 
 
 def _input_fn_ccol_row_value_size(shape, dtype, device):
-    # aten::sparse_bsc_tensor.ccol_row_value_size: explicit logical size. The
-    # device kwarg is passed explicitly because the constructor does not infer
-    # it from the components (measured: a bare CUDA call with device=None is
-    # rejected), so both sides must be handed the same one.
+    # aten::sparse_bsc_tensor.ccol_row_value_size: explicit logical size.
+    #
+    # The components are built in the requested dtype and NO dtype= kwarg is
+    # passed: the constructor rejects a values dtype that differs from the
+    # requested tensor dtype rather than casting (measured), so passing both
+    # would make every sweep cell fail. The device kwarg IS passed explicitly,
+    # because the constructor does not infer it from the components.
     ccol, row, values = _bsc_components(shape, dtype, device)
     yield {
         "ccol_indices": ccol,
@@ -102,7 +105,8 @@ def test_sparse_bsc_tensor_ccol_row_value_size():
 
 def _input_fn_ccol_row_value(shape, dtype, device):
     # aten::sparse_bsc_tensor.ccol_row_value: same components, logical size
-    # inferred by the native estimator.
+    # inferred by the native estimator. No dtype= kwarg for the same reason as
+    # the explicit-size form above.
     ccol, row, values = _bsc_components(shape, dtype, device)
     yield {
         "ccol_indices": ccol,
