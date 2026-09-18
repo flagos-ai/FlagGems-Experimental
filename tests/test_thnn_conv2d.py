@@ -223,7 +223,7 @@ def test_accuracy_thnn_conv2d_1x1(c_out, stride, dtype):
     # BLOCK_N derived from C_out) and has no im2col padding mask at all.
     inp = _gen_input((2, 3, 9, 9), dtype)
     weight = _gen_input((c_out, 3, 1, 1), dtype)
-    _check(inp, weight, 1, stride, 0)
+    _check(inp, weight, None, (1, 1), stride, (0, 0))
 
 
 @pytest.mark.thnn_conv2d
