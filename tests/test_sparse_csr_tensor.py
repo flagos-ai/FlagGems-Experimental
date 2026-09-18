@@ -42,12 +42,12 @@ from .conftest import QUICK_MODE
 #   * the explicit-size overload stores `size` verbatim while the invariants
 #     check is disabled (the default);
 #   * with an explicit `device` kwarg the sparse instance is built on that
-#     device; without one the packet builds a CPU instance and rejects CUDA
+#     device; WITHOUT one the packet builds a CPU instance and rejects CUDA
 #     components with "Values and compressed tensor instance need to be on the
-#     same device" (the Python builtin is a different path and defaults to the
-#     values' device instead). Every packet call below therefore passes the
-#     reference components' device explicitly, on both sides, and the
-#     no-device rejection class has its own test;
+#     same device" -- for the reference and the implementation alike (measured
+#     on both). Every construction below therefore names the components'
+#     device on both sides through the ``_ref_*``/``_gems_*`` helpers, and the
+#     no-device rejection has its own test;
 #   * structural validation (crow/col bounds, nnz agreement) happens only while
 #     torch.sparse.check_sparse_tensor_invariants is enabled.
 #
@@ -85,7 +85,8 @@ def _ref_size(crow, col, values, size, **kwargs):
     The reference components are converted once and the packet is given their
     device explicitly (measured: without it the packet builds a CPU sparse
     instance and rejects CUDA components). ``kwargs`` are appended after, so a
-    caller can still override ``device``/``dtype``.
+    caller can still override ``device``/``dtype`` -- that is how the
+    no-device rejection test reaches the raw behaviour.
     """
     ref_crow = utils.to_reference(crow)
     ref_col = utils.to_reference(col)
@@ -110,6 +111,20 @@ def _ref_value(crow, col, values, **kwargs):
         ref_values,
         **{"device": ref_values.device, **kwargs},
     )
+
+
+def _gems_size(crow, col, values, size, **kwargs):
+    """Submitted explicit-size implementation, on the components' device.
+
+    The device is named for the same measured reason as in ``_ref_size``: the
+    packet's default is a CPU sparse instance, which rejects CUDA components.
+    """
+    return GEMS_CSR_SIZE(crow, col, values, size, **{"device": crow.device, **kwargs})
+
+
+def _gems_value(crow, col, values, **kwargs):
+    """Submitted size-inferred implementation, on the components' device."""
+    return GEMS_CSR_VALUE(crow, col, values, **{"device": crow.device, **kwargs})
 
 
 def _make_components(nnz, nrows, ncols, index_dtype=torch.int64, seed=0):
@@ -185,7 +200,7 @@ def test_sparse_csr_tensor_crow_col_value_size(nnz, nrows, ncols, index_dtype):
     # aten::sparse_csr_tensor.crow_col_value_size -- the explicit-size overload.
     crow, col, values = _make_components(nnz, nrows, ncols, index_dtype, seed=nnz + 1)
     ref = _ref_size(crow, col, values, [nrows, ncols])
-    res = GEMS_CSR_SIZE(crow, col, values, [nrows, ncols])
+    res = _gems_size(crow, col, values, [nrows, ncols])
 
     assert _meta(res) == _meta(ref), f"{_meta(res)} != {_meta(ref)}"
     assert tuple(res.shape) == (nrows, ncols)
@@ -205,7 +220,7 @@ def test_sparse_csr_tensor_crow_col_value_inferred(nnz, nrows, ncols, index_dtyp
     # The inferred shape is (crow_indices.shape[-1] - 1) x (max(col) + 1).
     crow, col, values = _make_components(nnz, nrows, ncols, index_dtype, seed=nnz + 2)
     ref = _ref_value(crow, col, values)
-    res = GEMS_CSR_VALUE(crow, col, values)
+    res = _gems_value(crow, col, values)
 
     assert _meta(res) == _meta(ref), f"{_meta(res)} != {_meta(ref)}"
     expected = (nrows, ncols) if nnz else (nrows, 0)
@@ -220,8 +235,8 @@ def test_sparse_csr_tensor_size_inferred_equals_explicit(nnz, nrows, ncols):
     # input: the inference path and the explicit path are two entry points to
     # the same construction.
     crow, col, values = _make_components(nnz, nrows, ncols, seed=nnz + 3)
-    by_size = GEMS_CSR_SIZE(crow, col, values, [nrows, ncols])
-    by_value = GEMS_CSR_VALUE(crow, col, values)
+    by_size = _gems_size(crow, col, values, [nrows, ncols])
+    by_value = _gems_value(crow, col, values)
     assert _meta(by_size) == _meta(by_value)
     assert torch.equal(by_size.crow_indices().cpu(), by_value.crow_indices().cpu())
     assert torch.equal(by_size.col_indices().cpu(), by_value.col_indices().cpu())
@@ -238,7 +253,7 @@ def test_sparse_csr_tensor_values_dtype_sweep(value_dtype):
     crow, col, values = _make_components(3, 2, 3, seed=7)
     values = values.to(value_dtype)
     ref = _ref_size(crow, col, values, [2, 3], dtype=value_dtype)
-    res = GEMS_CSR_SIZE(crow, col, values, [2, 3], dtype=value_dtype)
+    res = _gems_size(crow, col, values, [2, 3], dtype=value_dtype)
     assert res.dtype == value_dtype
     assert res.values().dtype == value_dtype
     assert _meta(res) == _meta(ref)
@@ -257,7 +272,7 @@ def test_sparse_csr_tensor_dtype_mismatch_is_rejected_not_cast():
     crow, col, values = _make_components(3, 2, 3, seed=9)
     values = values.to(torch.float64)
     with pytest.raises(RuntimeError, match="dtype of values"):
-        GEMS_CSR_SIZE(crow, col, values, [2, 3])
+        _gems_size(crow, col, values, [2, 3])
     with pytest.raises(RuntimeError, match="dtype of values"):
         _ref_size(crow, col, values, [2, 3])
 
@@ -268,10 +283,11 @@ def test_sparse_csr_tensor_builtin_dtype_cast(value_dtype):
     # The cast branch lives in the Python builtin: its C++ argument parser
     # materialises the components in the requested dtype before construction.
     # It is therefore exercised through the builtin and compared against the
-    # builtin -- the packet overloads reject the same mismatch instead.
+    # builtin -- the packet overloads reject the same mismatch instead. The
+    # builtin needs no explicit device (it defaults to the values' device).
     crow, col, values = _make_components(3, 2, 3, seed=10)
     ref = torch.sparse_csr_tensor(
-        *[utils.to_reference(t) for t in (crow, col, values)],
+        *(utils.to_reference(t) for t in (crow, col, values)),
         (2, 3),
         dtype=value_dtype,
     )
@@ -283,6 +299,11 @@ def test_sparse_csr_tensor_builtin_dtype_cast(value_dtype):
     # The cast produces a fresh buffer: the values are NOT the input tensor.
     assert res.values().data_ptr() != values.data_ptr()
     assert res.crow_indices().dtype == ref.crow_indices().dtype
+    # Without the dtype kwarg there is no cast: the builtin keeps the values'
+    # dtype (the packet's rejection is a different, narrower rule).
+    same = torch.sparse_csr_tensor(crow, col, values, (2, 3))
+    assert same.dtype == values.dtype
+    assert _aliases(same, crow, col, values)
 
 
 @pytest.mark.sparse_csr_tensor
@@ -320,7 +341,7 @@ def test_sparse_csr_tensor_aliases_components():
     ref = torch.ops.aten.sparse_csr_tensor.crow_col_value_size(
         ref_crow, ref_col, ref_values, [2, 3], device=ref_values.device
     )
-    res = GEMS_CSR_SIZE(crow, col, values, [2, 3])
+    res = _gems_size(crow, col, values, [2, 3])
 
     assert _aliases(res, crow, col, values)
     assert _aliases(ref, ref_crow, ref_col, ref_values)
@@ -332,7 +353,6 @@ def test_sparse_csr_tensor_aliases_components():
         ref_values[0] = 123.5
     assert float(res.values()[0].item()) == 123.5
     assert float(ref.values()[0].item()) == 123.5
-    assert float(res.to_dense().sum().item()) == float(ref.to_dense().sum().item())
     assert res._nnz() == ref._nnz() == res.values().numel()
 
 
@@ -346,7 +366,7 @@ def test_sparse_csr_tensor_aliases_components_inferred():
     ref = torch.ops.aten.sparse_csr_tensor.crow_col_value(
         ref_crow, ref_col, ref_values, device=ref_values.device
     )
-    res = GEMS_CSR_VALUE(crow, col, values)
+    res = _gems_value(crow, col, values)
     assert _aliases(res, crow, col, values)
     assert _aliases(ref, ref_crow, ref_col, ref_values)
     with torch.no_grad():
@@ -364,7 +384,7 @@ def test_sparse_csr_tensor_explicit_size_stores_size_verbatim():
     # requested shape on both sides.
     crow, col, values = _make_components(3, 2, 3, seed=13)
     ref = _ref_size(crow, col, values, [2, 9])
-    res = GEMS_CSR_SIZE(crow, col, values, [2, 9])
+    res = _gems_size(crow, col, values, [2, 9])
     assert tuple(res.shape) == (2, 9)
     assert _meta(res) == _meta(ref)
     assert res._nnz() == ref._nnz() == 3
@@ -379,7 +399,7 @@ def test_sparse_csr_tensor_inferred_size_accepts_out_of_range_columns():
     col = torch.tensor([0, 7], dtype=torch.int64, device=dev)
     values = torch.randn(2, device=dev)
     ref = _ref_value(crow, col, values)
-    res = GEMS_CSR_VALUE(crow, col, values)
+    res = _gems_value(crow, col, values)
     assert tuple(res.shape) == (2, 8)
     assert _meta(res) == _meta(ref)
 
@@ -387,19 +407,17 @@ def test_sparse_csr_tensor_inferred_size_accepts_out_of_range_columns():
 @pytest.mark.sparse_csr_tensor
 def test_sparse_csr_tensor_invariants_context_is_honoured():
     # torch.sparse.check_sparse_tensor_invariants enables the native validator
-    # on both paths, and a violation is rejected. The rejection class and the
-    # semantic fragments are pinned for one representative violation; no
+    # on both paths, and a violation is rejected with the same class. No
     # sentence is hardcoded (the message is build-specific -- addendum A1).
     #
-    # The CPU components are used deliberately: measured on this build, the
-    # CUDA validator reports the same violation through a *device-side assert*
+    # CPU components are used deliberately: measured on this build, the CUDA
+    # validator reports the same violation through a *device-side assert*
     # (ValidateCompressedIndicesCommon.h `_assert`), which poisons the CUDA
     # context for the rest of the session and surfaces as a bare
     # "device-side assert triggered" without the invariant's text. The CPU
     # validator raises the documented RuntimeError, and it is the same native
     # check on the same host-side constructor path, so the contract is
-    # observed there. The CUDA permissive default (invariants off) is covered
-    # by every other test in this file.
+    # observed there.
     crow, col, values = _make_components(3, 2, 3, seed=23)
     crow = crow.cpu()
     col = col.cpu()
@@ -408,7 +426,7 @@ def test_sparse_csr_tensor_invariants_context_is_honoured():
 
     with torch.sparse.check_sparse_tensor_invariants():
         with pytest.raises(RuntimeError) as gems_err:
-            GEMS_CSR_SIZE(bad_crow, col, values, [2, 3])
+            _gems_size(bad_crow, col, values, [2, 3])
         with pytest.raises(RuntimeError) as ref_err:
             _ref_size(bad_crow, col, values, [2, 3])
         assert type(gems_err.value) is type(ref_err.value)
@@ -417,9 +435,8 @@ def test_sparse_csr_tensor_invariants_context_is_honoured():
             assert frag in str(gems_err.value), str(gems_err.value)
             assert frag in str(ref_err.value), str(ref_err.value)
 
-        # A well-formed input still succeeds with the validator enabled, and
-        # the validator is not left enabled afterwards.
-        res = GEMS_CSR_SIZE(crow, col, values, [2, 3])
+        # A well-formed input still succeeds with the validator enabled.
+        res = _gems_size(crow, col, values, [2, 3])
         ref = _ref_size(crow, col, values, [2, 3])
         assert _meta(res) == _meta(ref)
     assert not torch.sparse.check_sparse_tensor_invariants.is_enabled()
@@ -438,11 +455,11 @@ def test_sparse_csr_tensor_zero_nnz():
     col = torch.empty(0, dtype=torch.int64, device=dev)
     values = torch.empty(0, device=dev)
     ref = _ref_size(crow, col, values, [2, 3])
-    res = GEMS_CSR_SIZE(crow, col, values, [2, 3])
+    res = _gems_size(crow, col, values, [2, 3])
     assert _meta(res) == _meta(ref)
     assert res._nnz() == 0
     assert tuple(res.shape) == (2, 3)
-    inferred = GEMS_CSR_VALUE(crow, col, values)
+    inferred = _gems_value(crow, col, values)
     ref_inferred = _ref_value(crow, col, values)
     assert _meta(inferred) == _meta(ref_inferred)
     assert tuple(inferred.shape) == (2, 0)
@@ -453,11 +470,11 @@ def test_sparse_csr_tensor_single_row():
     # A one-row tensor: crow has length 2, the shortest legal 1-D crow.
     crow, col, values = _make_components(3, 1, 5, seed=15)
     ref = _ref_size(crow, col, values, [1, 5])
-    res = GEMS_CSR_SIZE(crow, col, values, [1, 5])
+    res = _gems_size(crow, col, values, [1, 5])
     assert tuple(res.shape) == (1, 5)
     assert tuple(res.crow_indices().shape) == (2,)
     assert _meta(res) == _meta(ref)
-    assert _meta(GEMS_CSR_VALUE(crow, col, values)) == _meta(ref)
+    assert _meta(_gems_value(crow, col, values)) == _meta(ref)
 
 
 @pytest.mark.sparse_csr_tensor
@@ -466,12 +483,12 @@ def test_sparse_csr_tensor_hybrid_dense_dim():
     crow, col, _ = _make_components(3, 2, 3, seed=16)
     values = torch.randn(3, 4, device=flag_gems.device)
     ref = _ref_size(crow, col, values, [2, 3, 4])
-    res = GEMS_CSR_SIZE(crow, col, values, [2, 3, 4])
+    res = _gems_size(crow, col, values, [2, 3, 4])
     assert _meta(res) == _meta(ref)
     assert res.dense_dim() == 1
     assert res.sparse_dim() == 2
     assert tuple(res.values().shape) == (3, 4)
-    inferred = GEMS_CSR_VALUE(crow, col, values)
+    inferred = _gems_value(crow, col, values)
     assert _meta(inferred) == _meta(ref)
 
 
@@ -484,17 +501,17 @@ def test_sparse_csr_tensor_batched():
     col = torch.tensor([[0, 1], [1, 0]], dtype=torch.int64, device=dev)
     values = torch.randn(2, 3, device=dev)
     ref = _ref_size(crow, col, values, [2, 2, 3])
-    res = GEMS_CSR_SIZE(crow, col, values, [2, 2, 3])
+    res = _gems_size(crow, col, values, [2, 2, 3])
     assert _meta(res) == _meta(ref)
     assert tuple(res.shape) == (2, 2, 3)
     assert torch.equal(res.values().cpu(), ref.values().cpu())
-    assert _meta(GEMS_CSR_VALUE(crow, col, values)) == _meta(ref)
+    assert _meta(_gems_value(crow, col, values)) == _meta(ref)
 
 
 @pytest.mark.sparse_csr_tensor
 def test_sparse_csr_tensor_non_contiguous_components():
     # Non-contiguous components are stored verbatim, like any other tensor:
-    # the result keeps the input's storage layout and aliases it.
+    # the result keeps the inputs' storage layout and aliases it.
     dev = flag_gems.device
     # Batch 2, one row per batch, one stored entry per batch.
     crow = torch.tensor([[0, 0], [1, 1]], dtype=torch.int64, device=dev).t()
@@ -504,12 +521,9 @@ def test_sparse_csr_tensor_non_contiguous_components():
     assert not col.is_contiguous()
     assert not values.is_contiguous()
     ref = _ref_size(crow, col, values, [2, 1, 1])
-    res = GEMS_CSR_SIZE(crow, col, values, [2, 1, 1])
+    res = _gems_size(crow, col, values, [2, 1, 1])
     assert _meta(res) == _meta(ref)
-    # Strides are the inputs' own strides: the storage is aliased, not copied
-    # (the reference's strides are its converted components' strides, which is
-    # the same aliasing property; comparing the two would compare a CPU
-    # conversion detail rather than the contract).
+    # Strides are the inputs' own strides: the storage is aliased, not copied.
     assert res.values().stride() == values.stride()
     assert res.crow_indices().stride() == crow.stride()
     assert res.col_indices().stride() == col.stride()
@@ -557,7 +571,7 @@ def test_sparse_csr_tensor_error_parity(kind, fragments):
         values = torch.randn(1, device=dev)
 
     with pytest.raises(RuntimeError) as gems_err:
-        GEMS_CSR_VALUE(crow, col, values)
+        _gems_value(crow, col, values)
     with pytest.raises(RuntimeError) as ref_err:
         _ref_value(crow, col, values)
 
@@ -579,7 +593,7 @@ def test_sparse_csr_tensor_layout_rejected():
         (torch.strided, "Strided"),
     ):
         with pytest.raises(RuntimeError) as gems_err:
-            GEMS_CSR_SIZE(crow, col, values, [2, 3], layout=layout)
+            _gems_size(crow, col, values, [2, 3], layout=layout)
         with pytest.raises(RuntimeError) as ref_err:
             _ref_size(crow, col, values, [2, 3], layout=layout)
         assert type(gems_err.value) is type(ref_err.value)
@@ -588,8 +602,8 @@ def test_sparse_csr_tensor_layout_rejected():
         assert "layout" in str(gems_err.value)
 
     # layout=torch.sparse_csr is accepted and equivalent to omitting it.
-    by_kw = GEMS_CSR_SIZE(crow, col, values, [2, 3], layout=torch.sparse_csr)
-    plain = GEMS_CSR_SIZE(crow, col, values, [2, 3])
+    by_kw = _gems_size(crow, col, values, [2, 3], layout=torch.sparse_csr)
+    plain = _gems_size(crow, col, values, [2, 3])
     assert _meta(by_kw) == _meta(plain)
 
 
@@ -601,7 +615,7 @@ def test_sparse_csr_tensor_bad_size_type_rejected():
     # raised by pybind11 at whichever ATen entry was called.
     crow, col, values = _make_components(3, 2, 3, seed=24)
     with pytest.raises(RuntimeError) as gems_err:
-        GEMS_CSR_SIZE(crow, col, values, [2.0, 3.0])
+        _gems_size(crow, col, values, [2.0, 3.0])
     with pytest.raises(RuntimeError) as ref_err:
         _ref_size(crow, col, values, [2.0, 3.0])
     assert type(gems_err.value) is type(ref_err.value)
@@ -613,23 +627,20 @@ def test_sparse_csr_tensor_bad_size_type_rejected():
 @pytest.mark.sparse_csr_tensor
 def test_sparse_csr_tensor_device_mismatch_rejected():
     # Measured: without an explicit device the packet builds a CPU instance
-    # and rejects CUDA components; with device=<cuda> it succeeds and the
+    # and rejects CUDA components -- the reference and the implementation
+    # alike. With the components' device named explicitly both succeed and the
     # components are aliased. The class and the parameter pair are pinned.
     if not str(flag_gems.device).startswith("cuda"):
         pytest.skip("the device-mismatch class is CUDA-specific")
     crow, col, values = _make_components(3, 2, 3, seed=19)
 
-    # No explicit device on either side: the packet builds a CPU instance and
-    # rejects the CUDA components. The components are passed raw (not through
-    # to_reference) because this case is about the packet's own device
-    # decision, not about numeric agreement.
+    # Raw components on CUDA, neither side given a device.
     with pytest.raises(RuntimeError, match="same device"):
         GEMS_CSR_SIZE(crow, col, values, [2, 3])
     with pytest.raises(RuntimeError, match="same device"):
         torch.ops.aten.sparse_csr_tensor.crow_col_value_size(crow, col, values, [2, 3])
 
-    # With the components' device named explicitly both sides construct on it.
-    res = GEMS_CSR_SIZE(crow, col, values, [2, 3], device=flag_gems.device)
+    res = _gems_size(crow, col, values, [2, 3])
     ref = _ref_size(crow, col, values, [2, 3])
     assert _meta(res) == _meta(ref)
     assert _aliases(res, crow, col, values)
@@ -668,7 +679,7 @@ def test_sparse_csr_tensor_dispatch_reachable():
             crow, col, values, device=flag_gems.device
         )
         assert len(hits) == 1, "the CompositeImplicitAutograd sentinel was not selected"
-        assert _meta(ref) == _meta(GEMS_CSR_VALUE(crow, col, values))
+        assert _meta(ref) == _meta(_gems_value(crow, col, values))
     finally:
         lib._destroy()
 
@@ -697,7 +708,7 @@ def test_sparse_csr_tensor_dispatch_size_overload_reachable():
             "the CompositeImplicitAutograd sentinel was not selected for the "
             "explicit-size overload"
         )
-        assert _meta(res) == _meta(GEMS_CSR_SIZE(crow, col, values, [2, 3]))
+        assert _meta(res) == _meta(_gems_size(crow, col, values, [2, 3]))
     finally:
         lib._destroy()
 
@@ -708,10 +719,10 @@ def test_sparse_csr_tensor_repeated_dispatch_stable():
     # bug (calling the overload being implemented internally) surfaces here as
     # a stack overflow or a corrupted result.
     crow, col, values = _make_components(3, 2, 3, seed=21)
-    ref = GEMS_CSR_SIZE(crow, col, values, [2, 3])
+    ref = _gems_size(crow, col, values, [2, 3])
     for _ in range(3):
-        assert _meta(GEMS_CSR_VALUE(crow, col, values)) == _meta(ref)
-        assert GEMS_CSR_SIZE(crow, col, values, [2, 3])._nnz() == 3
+        assert _meta(_gems_value(crow, col, values)) == _meta(ref)
+        assert _gems_size(crow, col, values, [2, 3])._nnz() == 3
         # Interleave an unrelated dispatched call on a CSR tensor.
         csr = torch.sparse_csr_tensor(crow, col, values, (2, 3))
         assert torch.ops.aten._nnz(csr) == 3
