@@ -53,15 +53,25 @@ CHAIN_SHAPES = [
 # dtypes: chain_matmul is a float-only operator. fp32 (hi/lo split path),
 # fp16/bf16 (native tensor-core dot, the fused path's dtype class) and fp64
 # (the fp64 path). Integer/bool inputs have no tensor-core dot and no native
-# reference for a chain on this build, so they are excluded with that reason;
-# `utils.generate_tensor_input` is used for every dtype built here.
+# reference for a chain on this build, so they are excluded with that reason.
 BENCH_DTYPES = consts.FLOAT_DTYPES + [torch.float64]
+
+
+def _randn(shape, cur_dtype, device):
+    """Floating-point input of any dtype in the sweep.
+
+    `utils.generate_tensor_input` covers consts.FLOAT_DTYPES/INT_DTYPES/
+    BOOL_DTYPES/COMPLEX_DTYPES only; it returns None for float64, which is
+    part of this op's dtype sweep (the fp64 path of the implementation).
+    """
+    if cur_dtype in consts.FLOAT_DTYPES:
+        return utils.generate_tensor_input(shape, cur_dtype, device)
+    return torch.randn(shape, dtype=cur_dtype, device=device)
 
 
 def _build_matrices(dims, cur_dtype, device):
     return [
-        utils.generate_tensor_input((dims[i], dims[i + 1]), cur_dtype, device)
-        for i in range(len(dims) - 1)
+        _randn((dims[i], dims[i + 1]), cur_dtype, device) for i in range(len(dims) - 1)
     ]
 
 
