@@ -326,8 +326,10 @@ def test_sparse_resize__noop_identity():
     assert inp._indices().data_ptr() == idx_ptr
     assert inp._values().data_ptr() == vals_ptr
 
-    # The no-op is a metadata read: the stored values are untouched.
-    assert inp.is_coalesced() is True
+    # The no-op is a metadata read: the stored values are untouched and the
+    # input's own coalescing state is preserved (the sorted-indices input here
+    # starts coalesced).
+    assert inp.is_coalesced() == _make_coo((3, 3), 2, 3, seed=5).is_coalesced()
 
 
 @pytest.mark.sparse_resize_
