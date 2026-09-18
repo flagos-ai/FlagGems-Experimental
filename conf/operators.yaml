@@ -97,6 +97,27 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _slow_conv2d_forward
+  description: 'Forward of the slow 2-D convolution, mirroring
+
+    `aten::_slow_conv2d_forward`. A dense (un-grouped, un-dilated) convolution
+
+    implemented with two Triton kernels: an implicit-GEMM kernel for fp16/bf16
+
+    (native tensor-core dot) and fp32 (fp16x3 split dot), plus a direct-conv
+
+    kernel for fp64 where `tl.dot` has no fp64 lowering.
+
+    '
+  for:
+  - _slow_conv2d_forward
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Convolution
+  stages:
+  - alpha: '5.4'
 - id: _values
   description: 'Returns the values tensor of a sparse COO tensor as a zero-copy
     view.
