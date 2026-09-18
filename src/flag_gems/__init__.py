@@ -68,6 +68,16 @@ registrar = GeneralOpRegistrar
 current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
+# sparse_csr_tensor's two overloads are tensor-input constructors whose native
+# kernels live on CompositeImplicitAutograd only (measured per key with raising
+# sentinels in a fresh process per key: the plain device key, the sparse
+# backend keys and the Autograd/ADInplaceOrView keys are never selected for
+# either overload). A device-key registration would be dead code for every real
+# call form, so the entry below carries this key instead -- same reasoning as
+# sparse_coo_tensor.indices / can_cast.
+COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
+    torch._C.DispatchKey.CompositeImplicitAutograd.name
+)
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
 SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 
@@ -1075,6 +1085,33 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    # sparse_csr_tensor: two ATen overloads, measured per key with labelled
+    # raising sentinels in a fresh process per (overload, key) pair
+    # (runs/sparse_csr_tensor/probe_grid.py, run_grid.sh). Neither overload has
+    # a backend kernel -- they are pure composite constructors whose only
+    # native registration is CompositeImplicitAutograd, and the composite key
+    # is the one every real call form selects. The plain device key, the sparse
+    # backend keys and the Autograd / ADInplaceOrView keys were all measured to
+    # be dead for both call forms, so registering on those alone would ship an
+    # unreachable implementation.
+    #
+    # The Python builtin torch.sparse_csr_tensor does NOT route through either
+    # overload: its C++ argument parser calls the shared
+    # aten::sparse_compressed_tensor.comp_plain_value[_size] op (owned by the
+    # sparse_compressed_tensor integration). What the tests and the benchmark
+    # exercise is the packet surface registered here.
+    (
+        "sparse_csr_tensor.crow_col_value",
+        sparse_csr_tensor_crow_col_value,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_csr_tensor.crow_col_value_size",
+        sparse_csr_tensor_crow_col_value_size,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
     ("sparse_sampled_addmm", sparse_sampled_addmm, None, (SPARSE_CSR_DISPATCH_KEY,)),
     (
         "sparse_sampled_addmm.out",
