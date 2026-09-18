@@ -2383,6 +2383,24 @@ ops:
   - NeuralNetwork
   stages:
   - stable: '4.0'
+- id: chain_matmul
+  description: 'Returns the product of a chain of 2-D matrices using an optimal (minimum-flop)
+    parenthesization, mirroring aten::chain_matmul / torch.linalg.multi_dot. Each
+    matrix product is computed by a Triton matmul kernel; the fp32 and fp64 paths
+    use three exact fp16 tensor-core products (hi/lo split) accumulated in fp32.
+    Registered on the default overload and the out overload.
+
+    '
+  for:
+  - chain_matmul
+  - chain_matmul.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: chalf
   description: 'Returns a copy of the tensor cast to the ``complex32`` dtype. Real
     inputs are
