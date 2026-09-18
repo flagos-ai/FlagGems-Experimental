@@ -55,18 +55,20 @@ def _input_fn(shape, dtype, device):
     input = gen((batch, input_c, input_h, input_w))
     weight = gen((out_c, input_c, kernel_h, kernel_w))
     bias = gen((out_c,))
-    # A dict is merged into the call kwargs by Benchmark.unpack_to_args_kwargs,
-    # so the position of the tensors in the tuple is irrelevant; passing the
-    # whole call signature also guarantees the reference and the implementation
-    # receive exactly the same arguments.
-    yield {
-        "self": input,
-        "weight": weight,
-        "kernel_size": (kernel_h, kernel_w),
-        "bias": bias,
-        "stride": (stride, stride),
-        "padding": (padding, padding),
-    },
+    # Passed positionally, exactly like benchmark/test_conv_depthwise2d.py: the
+    # first schema argument of aten::thnn_conv2d is named `self`, so a keyword
+    # form would collide with the bound-method receiver on the harness helper
+    # (`record_shapes(self, *args, **kwargs)`), and the reference and the
+    # implementation share the same (self, weight, kernel_size, bias, stride,
+    # padding) order, so one positional call drives both.
+    yield (
+        input,
+        weight,
+        [kernel_h, kernel_w],
+        bias,
+        [stride, stride],
+        [padding, padding],
+    )
 
 
 @pytest.mark.thnn_conv2d
