@@ -76,14 +76,14 @@ def _gen_input(shape, dtype):
 
 
 def _h_out(case, index):
-    (n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw) = case
+    n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw = case
     if index == 0:
         return (h + 2 * ph - kh) // sh + 1
     return (w + 2 * pw - kw) // sw + 1
 
 
 def _assert_matches(case, dtype, res_out, ref_out):
-    (n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw) = case
+    n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw = case
     assert res_out.shape == (n, c_out, _h_out(case, 0), _h_out(case, 1))
     assert res_out.dtype == dtype
     assert res_out.shape == ref_out.shape
@@ -110,7 +110,7 @@ def _assert_matches(case, dtype, res_out, ref_out):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES + FP64_DTYPES)
 @pytest.mark.parametrize("bias", [False, True])
 def test_accuracy__slow_conv2d_forward(case, dtype, bias):
-    (n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw) = case
+    n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw = case
     inp = _gen_input((n, c_in, h, w), dtype)
     weight = _gen_input((c_out, c_in, kh, kw), dtype)
     b = _gen_input((c_out,), dtype) if bias else None
@@ -155,7 +155,7 @@ def test_accuracy__slow_conv2d_forward_non_contiguous(case, layout, dtype):
     before the launch; native's CUDA kernel accepts strided operands directly.
     The measured result is value-identical, so both sides are compared as-is.
     """
-    (n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw) = case
+    n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw = case
     inp = _gen_input((n, c_in, h, w), dtype)
     weight = _gen_input((c_out, c_in, kh, kw), dtype)
     if layout in ("input_nc", "both_nc"):
@@ -214,7 +214,7 @@ def test_accuracy__slow_conv2d_forward_batch4_cases(dtype, bias_present):
     stride/padding and a masked K tail chunk, on one tensor-generation
     function shared with the main sweep."""
     for case in CONV2D_CASES:
-        (n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw) = case
+        n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw = case
         inp = _gen_input((n, c_in, h, w), dtype)
         weight = _gen_input((c_out, c_in, kh, kw), dtype)
         b = _gen_input((c_out,), dtype) if bias_present else None
