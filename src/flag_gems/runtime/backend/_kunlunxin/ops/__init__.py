@@ -40,7 +40,7 @@ from .arange import arange, arange_start
 from .arccos import arccos, arccos_
 from .arcsin import arcsin, arcsin_, arcsin_out
 from .arctan import arctan_
-from .arctan_kernelgen import arctan
+from .arctan import arctan
 from .argmax import argmax
 from .argmin import argmin
 from .as_strided_copy import as_strided_copy, as_strided_copy_out
