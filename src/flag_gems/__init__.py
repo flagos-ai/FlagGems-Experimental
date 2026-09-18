@@ -193,6 +193,8 @@ _FULL_CONFIG = (
         "_native_batch_norm_legit_no_training",
         _native_batch_norm_legit_no_training,
     ),
+    ("_neg_view_copy", _neg_view_copy),
+    ("_neg_view_copy.out", _neg_view_copy_out),
     ("_nested_sum_backward", _nested_sum_backward),
     ("_nested_view_from_buffer_copy", _nested_view_from_buffer_copy),
     ("_pdist_backward", _pdist_backward),

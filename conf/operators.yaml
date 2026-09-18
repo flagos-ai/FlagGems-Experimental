@@ -53,6 +53,36 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.4'
+- id: _neg_view_copy
+  description: >-
+    Returns a freshly allocated contiguous tensor holding the negated values
+    of `self`, mirroring `aten::_neg_view_copy`. Unlike `aten::_neg_view`
+    (which returns a view carrying the neg bit), the result never aliases the
+    input and never sets the neg bit.
+  for:
+  - _neg_view_copy
+  labels:
+  - aten
+  - KernelGen
+  - pointwise
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
+- id: _neg_view_copy_out
+  description: >-
+    A variant of `_neg_view_copy()` that writes the negated values into the
+    `out` tensor and returns it.
+  for:
+  - _neg_view_copy.out
+  labels:
+  - aten
+  - KernelGen
+  - pointwise
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _reshape_alias
   description: 'Creates a view of the input tensor with the given size and stride,
 
