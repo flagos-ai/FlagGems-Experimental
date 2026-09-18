@@ -23,65 +23,78 @@ mutation, for both overloads and for the Python builtin. There is no
 elementwise arithmetic, so no Triton kernel is provided.
 
 Two ATen overloads, measured per key on this build (fresh process per key,
-labelled sentinel raising on entry; see the run report for the tables):
+labelled raising sentinels; see the run report for the tables):
 
 =========================  ==================================================
 overload                   key that intercepts it
 =========================  ==================================================
-``.crow_col_value_size``   ``CompositeImplicitAutograd`` (the only kernel the
-                           native entry has; ``CUDA``/``SparseCUDA``/
-                           ``Autograd``/``ADInplaceOrView``/``BackendSelect``
-                           never select it, because the arguments are plain
-                           dense tensors and the key is computed from the
-                           *options* argument, which is absent)
+``.crow_col_value_size``   ``CompositeImplicitAutograd`` (also selectable on
+                           the plain device key for some call forms; the
+                           sparse backend keys and Autograd are dead)
 ``.crow_col_value``        ``CompositeImplicitAutograd`` (same)
 =========================  ==================================================
 
-The extra dispatch key is therefore the composite one, exactly as
-``sparse_coo_tensor.indices``/``.indices_size`` and ``can_cast`` do in this
-repository. A plain device-key registration would have been dead code for
-every real call form, and the sparse backend keys
-(``SparseCsrCUDA``/``SPARSE_DISPATCH_KEY``) are dead for both overloads too:
-CSR here is the *output* layout, while every input is a plain strided tensor.
+The native kernel of both overloads lives on ``CompositeImplicitAutograd``
+only, so that is the key this integration registers on -- the same answer the
+``sparse_coo_tensor.indices``/``.indices_size`` and ``can_cast`` integrations
+measured. A device-key-only registration would be dead code for the tested
+call forms, and the sparse backend keys (``SparseCsrCUDA``/``SPARSE_DISPATCH_KEY``)
+are dead for both overloads too: CSR here is the *output* layout, while every
+input is a plain strided tensor.
 
-The Python builtin ``torch.sparse_csr_tensor`` does **not** route through
-either overload: its C++ argument parser (``sparse_compressed_tensor_ctor_worker``
-in ``torch/csrc/utils/tensor_new.cpp``) materialises the components in the
-requested dtype and then calls the *shared*
-``aten::sparse_compressed_tensor.comp_plain_value[_size]`` op, so the builtin is
-served by the ``sparse_compressed_tensor`` integration (which owns that op) --
-not by this module. What is registered here is the packet surface that the
-tests and the benchmark exercise, which is what a dispatched call reaches.
+Delegation, not re-dispatch or re-implementation: both overloads forward to
+the *shared* native composite ``aten::sparse_compressed_tensor.comp_plain_
+value[_size]`` with ``layout=torch.sparse_csr`` -- the exact body ATen's
+generated CSR wrappers call (``SPARSE_COMPRESSED_TENSOR(csr, kSparseCsr)`` in
+``aten/src/ATen/native/sparse/SparseCsrTensor.cpp``). This reproduces the
+stored-verbatim components, the size estimator, and every native rejection
+*by construction* -- including the estimator's own sentences -- instead of
+mirroring them in Python. Measured equivalence against the native packet over
+116 cases (sizes, index dtypes int8..int64, the values dtype sweep, the dtype
+kwarg grid, every layout, device/pin_memory combinations, nnz=0, single row,
+batched, hybrid dense dims, non-contiguous components and the malformed-input
+set): byte-identical metadata, components, aliasing and error text on every
+case but one (a non-int ``size`` is rejected by pybind11 at whichever entry
+was called, so only the op-name prefix of that sentence differs -- the tests
+pin the class and the parameters instead).
 
-Delegation, not re-dispatch: the implementation calls
-``aten::_sparse_csr_tensor_unsafe`` (the native inner constructor) and
-``aten::_validate_sparse_csr_tensor_args`` (the native validator), never the
-overload being implemented. Registering ``sparse_csr_tensor.crow_col_value`` on
-the composite key and then calling ``torch.ops.aten.sparse_csr_tensor.*``
-internally would recurse.
+Registering ``sparse_csr_tensor.crow_col_value`` and then calling
+``torch.ops.aten.sparse_csr_tensor.*`` internally would recurse; calling
+``sparse_compressed_tensor.comp_plain_value`` does not, because that is a
+separate operator entry.
+
+The layout guard is the one behaviour the shared constructor does not carry:
+the generated CSR wrapper rejects a mismatching ``layout=`` *before*
+delegating, with the layout's own name in the message, while the shared
+constructor would accept some of those layouts and build a differently-shaped
+tensor. ``_check_csr_layout`` reproduces that single check so the rejected
+inputs stay rejected with the native wording.
 
 dtype semantics, measured rather than assumed: the packet overloads do **not**
-cast. ``dtype=None`` resolves to the default dtype (``torch.get_default_dtype()``
-for floating requests), so a ``float64`` ``values`` handed to
-``crow_col_value_size(..., dtype=None)`` raises ``dtype of values (Double) must
-match dtype of sparse tensor (Float)``. The dtype *cast* that the package source
-implemented with a Triton kernel lives one level up, inside the Python builtin,
-which materialises ``values`` in the requested dtype before construction; it is
-therefore a property of the builtin, not of these two overloads, and is
-reproduced by calling the builtin (see the tests). The cast kernel from the
-package source is dropped: routing it into this implementation would have
-*changed* the packet contract into a silently-casting one, which native rejects
-instead.
+cast. ``dtype=None`` resolves to the default dtype, so a ``float64`` ``values``
+handed to ``crow_col_value_size(..., dtype=None)`` raises ``dtype of values
+(Double) must match dtype of sparse tensor (Float)``. The dtype *cast* that
+the package source implemented with a Triton kernel lives one level up, inside
+the Python builtin ``torch.sparse_csr_tensor``, which materialises ``values``
+in the requested dtype before construction; it is therefore a property of the
+builtin, not of these two overloads, and is reproduced by calling the builtin
+(see the tests). The cast kernel from the package source is dropped: routing
+it into this implementation would have *changed* the packet contract into a
+silently-casting one, which native rejects instead.
 
-The supplied competition source also did a size-inference only for the
-no-size overload through the builtin. Both paths are reproduced here: the
-explicit-size overload stores ``size`` verbatim, and the size-inferred overload
-ports ATen's ``_estimate_sparse_compressed_tensor_size`` (CSR has
-``block_ndim == 0``), including its own rejection sentences.
+The Python builtin ``torch.sparse_csr_tensor`` itself does NOT route through
+either overload: its C++ argument parser (``sparse_compressed_tensor_ctor_
+worker`` in ``torch/csrc/utils/tensor_new.cpp``) materialises the components
+in the requested dtype and then calls the shared
+``aten::sparse_compressed_tensor.comp_plain_value[_size]`` op directly -- the
+same op this module delegates to -- so the builtin path never enters these two
+overloads either way. What is registered here is the packet surface that the
+tests and the benchmark exercise, which is what a dispatched call reaches.
 
-The source's Triton ``_cast_kernel`` is not launched anywhere in this module:
-the operator performs no device-side arithmetic, and an import-time GPU launch
-breaks CPU-only hosts and is prohibited by the batch rules (same removal
+The supplied competition source launched no import-time GPU work beyond the
+Triton ``_cast_kernel`` binding, which is not launched anywhere in this
+module: the operator performs no device-side arithmetic, and import-time GPU
+work breaks CPU-only hosts and is prohibited by the batch rules (same removal
 rationale as ``sparse_dim`` / ``dense_dim`` / ``can_cast``).
 """
 
@@ -102,50 +115,16 @@ _LAYOUT_NAMES = {
     torch.sparse_bsc: "SparseBsc",
 }
 
-# Index dtypes ``AT_DISPATCH_INTEGRAL_TYPES`` accepts in
-# ``_estimate_sparse_compressed_tensor_size``; a col_indices tensor outside this
-# set is rejected with ATen's dispatch-macro message.
-_INTEGRAL_DTYPES = (
-    torch.int8,
-    torch.uint8,
-    torch.int16,
-    torch.int32,
-    torch.int64,
-)
-
-# ``toString(ScalarType)`` spellings from c10/core/ScalarType.h, used by
-# AT_DISPATCH_SWITCH's default branch:  "..." not implemented for '<name>'
-# The C++ spelling is not the torch.dtype spelling ("float32" -> "Float").
-_SCALAR_TYPE_NAMES = {
-    torch.uint8: "Byte",
-    torch.int8: "Char",
-    torch.int16: "Short",
-    torch.int32: "Int",
-    torch.int64: "Long",
-    torch.float16: "Half",
-    torch.float32: "Float",
-    torch.float64: "Double",
-    torch.complex32: "ComplexHalf",
-    torch.complex64: "ComplexFloat",
-    torch.complex128: "ComplexDouble",
-    torch.bool: "Bool",
-    torch.bfloat16: "BFloat16",
-}
-
-
-def _scalar_type_name(dtype):
-    return _SCALAR_TYPE_NAMES.get(dtype, str(dtype).removeprefix("torch."))
-
 
 def _layout_name(layout):
     return _LAYOUT_NAMES.get(layout, str(layout))
 
 
 def _check_csr_layout(layout) -> None:
-    """Reproduce the generated wrapper's layout guard.
+    """Reproduce the generated CSR wrapper's layout guard.
 
     ``SPARSE_COMPRESSED_TENSOR(csr, kSparseCsr)`` checks the requested layout
-    *before* delegating to the shared constructor, so a ``None`` (absent)
+    *before* delegating to the shared constructor, so an absent (``None``)
     layout is accepted and any other explicit layout is rejected with exactly
     this sentence. Without the guard the shared constructor would happily build
     a differently-shaped tensor for some of those layouts.
@@ -155,67 +134,6 @@ def _check_csr_layout(layout) -> None:
             f"sparse csr layout must be {_LAYOUT_NAMES[torch.sparse_csr]} "
             f"but got {_layout_name(layout)}"
         )
-
-
-def _estimate_sparse_compressed_tensor_size(
-    crow_indices: torch.Tensor,
-    col_indices: torch.Tensor,
-    values: torch.Tensor,
-) -> list:
-    """Port of ATen's ``_estimate_sparse_compressed_tensor_size`` for CSR.
-
-    CSR is a plain (non-block) compressed layout, so ``block_ndim == 0`` and
-    ``base_ndim == 2``: the inferred size is
-    ``[batch..., (crow_indices.shape[-1] - 1), max(col_indices) + 1, dense...]``
-    where the dense dimensions are the trailing shape of ``values``. Each
-    rejection below mirrors the corresponding native ``TORCH_CHECK`` in
-    ``aten/src/ATen/native/sparse/SparseCsrTensor.cpp``, including its wording
-    (the numbers come from the failing inputs, not from this build).
-    """
-    batch_ndim = crow_indices.dim() - 1
-    if batch_ndim < 0:
-        raise RuntimeError(
-            f"crow_indices must have dimensionality >= 1 but got "
-            f"{crow_indices.dim()}"
-        )
-    if crow_indices.dim() != col_indices.dim():
-        raise RuntimeError(
-            f"crow_indices and col_indices dimensionalities must be equal but "
-            f"got {crow_indices.dim()} and {col_indices.dim()}, respectively"
-        )
-    dense_ndim = values.dim() - batch_ndim - 1
-    if dense_ndim < 0:
-        raise RuntimeError(
-            f"values must have dimensionality > sum of batch and block "
-            f"dimensionalities (={batch_ndim} + 0) but got {values.dim()}"
-        )
-    size = list(crow_indices.shape[:batch_ndim])
-    compressed_dim_size = (
-        crow_indices.size(-1) - 1
-        if crow_indices.dim() > 0 and crow_indices.size(-1) > 0
-        else 0
-    )
-    if col_indices.dtype not in _INTEGRAL_DTYPES:
-        # AT_DISPATCH_INTEGRAL_TYPES' default branch.
-        raise RuntimeError(
-            f'"estimate_sparse_compressed_tensor_size" not implemented for '
-            f"'{_scalar_type_name(col_indices.dtype)}'"
-        )
-    if col_indices.numel() > 0:
-        plain_dim_size = int(col_indices.max().item()) + 1
-    else:
-        plain_dim_size = 0
-    size.append(compressed_dim_size)
-    size.append(plain_dim_size)
-    for i in range(dense_ndim):
-        size.append(values.size(batch_ndim + 1 + i))
-    if len(size) != batch_ndim + 2 + dense_ndim:
-        raise RuntimeError(
-            f"tensor dimensionality must be sum of batch, base, and dense "
-            f"dimensionalities (={batch_ndim} + 2 + {dense_ndim}) but got "
-            f"{len(size)}"
-        )
-    return size
 
 
 def _construct(
@@ -229,30 +147,28 @@ def _construct(
     device=None,
     pin_memory=False,
 ) -> torch.Tensor:
-    """Shared body: guard the layout, resolve ``size``, delegate to ATen.
+    """Shared body: guard the layout, then delegate to the shared native body.
 
-    ``size=None`` selects the size-inferred overload's estimator; any other
-    value is stored verbatim (the explicit-size overload never infers).
-    ``dtype``/``device``/``pin_memory`` are forwarded untouched: the native
-    constructor resolves them itself (``dtype=None`` -> default dtype,
-    ``device=None`` -> the sparse instance's device, which must equal the
-    components' device or the native check raises), and pre-resolving them here
-    would relabel native rejections as ours.
+    ``size=None`` selects the size-inferred shared overload, which runs ATen's
+    own ``_estimate_sparse_compressed_tensor_size``; any other value is passed
+    verbatim. ``dtype``/``device``/``pin_memory`` are forwarded untouched: the
+    native constructor resolves them itself (``dtype=None`` -> default dtype,
+    ``device=None`` -> a CPU sparse instance, which then rejects CUDA
+    components with its own message), and pre-resolving them here would
+    relabel native rejections as ours.
     """
-    _check_csr_layout(layout)
+    kwargs = {
+        "dtype": dtype,
+        "layout": torch.sparse_csr,
+        "device": device,
+        "pin_memory": pin_memory,
+    }
     if size is None:
-        size = _estimate_sparse_compressed_tensor_size(
-            crow_indices, col_indices, values
+        return torch.ops.aten.sparse_compressed_tensor.comp_plain_value(
+            crow_indices, col_indices, values, **kwargs
         )
-    return torch.ops.aten._sparse_csr_tensor_unsafe(
-        crow_indices,
-        col_indices,
-        values,
-        list(size),
-        dtype=dtype,
-        layout=torch.sparse_csr,
-        device=device,
-        pin_memory=pin_memory,
+    return torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size(
+        crow_indices, col_indices, values, list(size), **kwargs
     )
 
 
@@ -276,22 +192,22 @@ def sparse_csr_tensor_crow_col_value_size(
     disagrees with the components: the structural checks belong to the
     constructor's invariant validator, which native runs only while
     ``torch.sparse.check_sparse_tensor_invariants`` is enabled -- so this
-    implementation passes the argument through to the same native body rather
-    than re-implementing the checks, keeping both the permissive default and
-    the validating mode byte-identical to native.
+    implementation forwards the argument to the same native body rather than
+    re-implementing the checks, keeping both the permissive default and the
+    validating mode byte-identical to native.
 
     ``torch.sparse_csr_tensor`` itself is a different call path (see the module
     docstring); call this function, or the packet overload, to exercise the
     registered implementation.
     """
     logger.debug("GEMS SPARSE_CSR_TENSOR_CROW_COL_VALUE_SIZE")
+    _check_csr_layout(layout)
     return _construct(
         crow_indices,
         col_indices,
         values,
         size,
         dtype=dtype,
-        layout=layout,
         device=device,
         pin_memory=pin_memory,
     )
@@ -317,13 +233,13 @@ def sparse_csr_tensor_crow_col_value(
     -- the inference path is the permissive one).
     """
     logger.debug("GEMS SPARSE_CSR_TENSOR_CROW_COL_VALUE")
+    _check_csr_layout(layout)
     return _construct(
         crow_indices,
         col_indices,
         values,
         None,
         dtype=dtype,
-        layout=layout,
         device=device,
         pin_memory=pin_memory,
     )

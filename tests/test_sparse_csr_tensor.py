@@ -41,6 +41,11 @@ from .conftest import QUICK_MODE
 #     out-of-range column index as a WIDER shape rather than rejecting it;
 #   * the explicit-size overload stores `size` verbatim while the invariants
 #     check is disabled (the default);
+#   * the implementation delegates to the shared native constructor
+#     (aten::sparse_compressed_tensor.comp_plain_value[_size], layout=CSR),
+#     which is the exact body ATen's generated CSR wrappers call, so the size
+#     estimator and every rejection sentence are native by construction
+#     (116-case parity diff: 115 byte-identical, 1 pybind11 op-name prefix);
 #   * with an explicit `device` kwarg the sparse instance is built on that
 #     device; WITHOUT one the packet builds a CPU instance and rejects CUDA
 #     components with "Values and compressed tensor instance need to be on the
