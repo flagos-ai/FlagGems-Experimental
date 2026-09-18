@@ -253,6 +253,16 @@ _FULL_CONFIG = (
     ("_make_dep_token", _make_dep_token),
     ("_make_dual", _make_dual),
     (
+        "_make_per_channel_quantized_tensor",
+        _make_per_channel_quantized_tensor,
+    ),
+    (
+        "_make_per_channel_quantized_tensor.out",
+        _make_per_channel_quantized_tensor_out,
+        None,
+        (QUANTIZED_DISPATCH_KEY,),
+    ),
+    (
         "_make_per_tensor_quantized_tensor",
         _make_per_tensor_quantized_tensor,
     ),
