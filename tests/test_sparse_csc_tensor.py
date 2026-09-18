@@ -771,20 +771,25 @@ def test_sparse_csc_tensor_enabled_registration_reaches_the_impl():
     # flag_gems.enable() registers _FULL_CONFIG exactly as a user would
     # trigger it, then poisoning the delegate the implementation calls proves
     # the shipped code -- not a native kernel -- executes for every packet
-    # call form. The builtin is not listed: its C++ parser never enters these
-    # overloads (measured), so a poison on the delegate cannot affect it.
+    # call form. Each overload is poisoned on its own delegate (the size form
+    # goes through comp_plain_value_size, the inferred form through
+    # comp_plain_value; measured on this build). The builtin is not listed:
+    # its C++ parser never enters these overloads (measured), so a poison on
+    # the delegates cannot affect it.
     dev = torch.device(str(flag_gems.device))
     ccol = torch.tensor([0, 1, 2, 3], dtype=torch.int64, device=dev)
     row = torch.tensor([0, 1, 2], dtype=torch.int64, device=dev)
     values = torch.tensor([3.0, 4.0, 5.0], device=dev)
     flag_gems.enable()
 
-    original = torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size._op
+    size_ov = torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size
+    value_ov = torch.ops.aten.sparse_compressed_tensor.comp_plain_value
+    original_size, original_value = size_ov._op, value_ov._op
 
     def poison(*args, **kwargs):
         raise RuntimeError("POISON-COMPOSITE")
 
-    forms = [
+    size_forms = [
         (
             "size, device",
             lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
@@ -797,6 +802,8 @@ def test_sparse_csc_tensor_enabled_registration_reaches_the_impl():
                 ccol, row, values, [5, 4], layout=torch.sparse_csc, device=dev
             ),
         ),
+    ]
+    value_forms = [
         (
             "infer, device",
             lambda: torch.ops.aten.sparse_csc_tensor.ccol_row_value(
@@ -811,14 +818,20 @@ def test_sparse_csc_tensor_enabled_registration_reaches_the_impl():
         ),
     ]
     try:
-        torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size._op = poison
-        for label, fn in forms:
+        size_ov._op = poison
+        for label, fn in size_forms:
+            with pytest.raises(RuntimeError, match="POISON-COMPOSITE"):
+                fn()
+        size_ov._op = original_size
+        value_ov._op = poison
+        for label, fn in value_forms:
             with pytest.raises(RuntimeError, match="POISON-COMPOSITE"):
                 fn()
     finally:
-        torch.ops.aten.sparse_compressed_tensor.comp_plain_value_size._op = original
+        size_ov._op = original_size
+        value_ov._op = original_value
 
-    # Health after the poison is removed: the routed path is still correct.
+    # Health after the poisons are removed: the routed path is still correct.
     res = torch.ops.aten.sparse_csc_tensor.ccol_row_value_size(
         ccol, row, values, [5, 4], device=dev
     )
@@ -828,6 +841,11 @@ def test_sparse_csc_tensor_enabled_registration_reaches_the_impl():
             ccol, row, values, [5, 4], device=dev
         )
     )
+    infer = torch.ops.aten.sparse_csc_tensor.ccol_row_value(
+        ccol, row, values, device=dev
+    )
+    assert tuple(infer.shape) == (3, 3)
+    assert _alias(infer, ccol, row, values)
 
 
 @pytest.mark.sparse_csc_tensor
