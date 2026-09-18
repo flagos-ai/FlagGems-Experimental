@@ -39,9 +39,13 @@ OFFSET_LIST = [-2, -1, 0, 1] if QUICK_MODE else [-5, -2, -1, 0, 1, 2, 7]
 
 
 def _gen_input(shape, dtype):
-    if dtype in utils.FLOAT_DTYPES or dtype is torch.float64:
+    # Branch on the dtype's own category, NOT on the QUICK_MODE-trimmed
+    # utils dtype lists: under --quick those lists shrink (e.g. FLOAT_DTYPES
+    # drops float16, INT_DTYPES drops int16), which would route those dtypes
+    # into the bool branch below.
+    if dtype.is_floating_point:
         return torch.randn(shape, dtype=dtype, device=flag_gems.device)
-    if dtype in utils.INT_DTYPES or dtype in (torch.int8, torch.int64):
+    if dtype in (torch.int8, torch.int16, torch.int32, torch.int64):
         return torch.randint(
             torch.iinfo(dtype).min,
             torch.iinfo(dtype).max,
