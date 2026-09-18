@@ -111,13 +111,13 @@ if QUICK_MODE:
 # Structural growth: dst starts empty (all zeros-nnz shapes are legal) and the
 # copy has to resize + allocate fresh buffers.
 GROW_CASES = [
-    ("grow-from-empty", (3, 4), 6, (3, 4), 6),
-    ("grow-shape", (3, 4), 6, (5, 6), 6),
-    ("grow-nnz", (3, 4), 2, (3, 4), 8),
-    ("shrink-nnz-on-empty", (3, 4), 0, (3, 4), 3),
-    ("shrink-shape-on-empty", (5, 6), 0, (3, 4), 4),
-    ("3d-grow", (4, 5, 6), 6, (4, 6, 7), 10),
-    ("hybrid-empty-to-full", (2, 3, 4), 0, (2, 3, 4), 4),
+    ("grow-from-empty", (3, 4), 6, (3, 4), 6, 2),
+    ("grow-shape", (3, 4), 6, (5, 6), 6, 2),
+    ("grow-nnz", (3, 4), 2, (3, 4), 8, 2),
+    ("shrink-nnz-on-empty", (3, 4), 0, (3, 4), 3, 2),
+    ("shrink-shape-on-empty", (5, 6), 0, (3, 4), 4, 2),
+    ("3d-grow", (4, 5, 6), 6, (4, 6, 7), 10, 3),
+    ("hybrid-empty-to-full", (2, 3, 4), 0, (2, 3, 4), 4, 1),
 ]
 if QUICK_MODE:
     GROW_CASES = GROW_CASES[:2] + [GROW_CASES[2], GROW_CASES[5]]
@@ -195,24 +195,21 @@ def test_copy_sparse_to_sparse__inplace_same_structure(tag, shape, nnz, nnz_src)
 
 
 @pytest.mark.copy_sparse_to_sparse_
-@pytest.mark.parametrize("tag,dst_shape,dst_nnz,src_shape,src_nnz", GROW_CASES)
-def test_copy_sparse_to_sparse__structural(tag, dst_shape, dst_nnz, src_shape, src_nnz):
+@pytest.mark.parametrize("tag,dst_shape,dst_nnz,src_shape,src_nnz,nnd", GROW_CASES)
+def test_copy_sparse_to_sparse__structural(
+    tag, dst_shape, dst_nnz, src_shape, src_nnz, nnd
+):
     # Structural difference (shape / nnz / split): native resizes and copies
     # into fresh buffers cast to dst's dtype; the result is dst itself.
+    # ``nnd`` selects the sparse-dimension count (a value below len(shape)
+    # builds hybrid tensors on both sides, values carrying dense trailing
+    # dimensions).
     ref = utils.to_reference(
-        _make_coo(dst_shape, dst_nnz, seed=11).to(flag_gems.device)
+        _make_coo(dst_shape, dst_nnz, seed=11, nnd=nnd).to(flag_gems.device)
     )
-    ref_src = _make_coo(src_shape, src_nnz, seed=12).to(flag_gems.device)
-    dst = _make_coo(dst_shape, dst_nnz, seed=11).to(flag_gems.device)
-    src = _make_coo(src_shape, src_nnz, seed=12).to(flag_gems.device)
-    if dst_shape == (2, 3, 4) and dst_nnz == 0:
-        # hybrid split (1 sparse dim) on both sides
-        ref = utils.to_reference(
-            _make_coo(dst_shape, dst_nnz, seed=11, nnd=1).to(flag_gems.device)
-        )
-        ref_src = _make_coo(src_shape, src_nnz, seed=12, nnd=1).to(flag_gems.device)
-        dst = _make_coo(dst_shape, dst_nnz, seed=11, nnd=1).to(flag_gems.device)
-        src = _make_coo(src_shape, src_nnz, seed=12, nnd=1).to(flag_gems.device)
+    ref_src = _make_coo(src_shape, src_nnz, seed=12, nnd=nnd).to(flag_gems.device)
+    dst = _make_coo(dst_shape, dst_nnz, seed=11, nnd=nnd).to(flag_gems.device)
+    src = _make_coo(src_shape, src_nnz, seed=12, nnd=nnd).to(flag_gems.device)
 
     ref_out = torch.ops.aten.copy_sparse_to_sparse_(ref, ref_src)
     res_out = flag_gems.copy_sparse_to_sparse_(dst, src)
@@ -222,6 +219,7 @@ def test_copy_sparse_to_sparse__structural(tag, dst_shape, dst_nnz, src_shape, s
     assert _state(dst) == _state(ref), f"{tag}: {_state(dst)} != {_state(ref)}"
     assert tuple(dst.shape) == tuple(src_shape), tag
     assert dst._nnz() == src_nnz, tag
+    assert dst.sparse_dim() == nnd, tag
     utils.gems_assert_equal(dst._indices(), ref._indices())
     utils.gems_assert_close(dst._values(), ref._values(), dst._values().dtype)
 
@@ -629,9 +627,11 @@ def test_copy_sparse_to_sparse__dispatcher_path():
         t, _make_coo((3, 4), 4, seed=38).to(flag_gems.device)
     )
     assert t._version == v0 + 1
-    # Repeated dispatch must not recurse or accumulate state.
+    # The self-copy short-circuit is also a dispatched in-place call: native
+    # bumps the counter once for it too (measured), and the implementation's
+    # early return must leave the dispatcher-provided bump as the only one.
     torch.ops.aten.copy_sparse_to_sparse_(t, t)
-    assert t._version == v0 + 1
+    assert t._version == v0 + 2
 
 
 @pytest.mark.copy_sparse_to_sparse_
