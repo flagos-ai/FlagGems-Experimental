@@ -2712,6 +2712,19 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: combinations
+  description: Returns all size-r combinations of the elements of a 1-D tensor in
+    lexicographic order, or all size-r combinations with repetition when
+    with_replacement is set.
+  for:
+  - combinations
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: combine_topk_swa_indices
   description: 'Combines compressed top-k sparse attention indices with sliding-window
     attention indices
