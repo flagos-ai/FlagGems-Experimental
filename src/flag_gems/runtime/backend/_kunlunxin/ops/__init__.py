@@ -207,6 +207,10 @@ from .mvlgamma import mvlgamma
 from .nan_to_num import nan_to_num
 from .nanmedian import nanmedian, nanmedian_dim, nanmedian_dim_values, nanmedian_out
 from .narrow_copy import narrow_copy
+from .native_batch_norm_legit_no_training import (
+    _native_batch_norm_legit_no_training,
+    native_batch_norm_legit_no_training,
+)
 from .ne import ne, ne_scalar
 from .neg import neg, neg_
 from .negative import negative
@@ -342,6 +346,7 @@ __all__ = [
     "_functional_sym_constrain_range",
     "_functional_sym_constrain_range_for_size",
     "_is_all_true",
+    "_native_batch_norm_legit_no_training",
     "_safe_softmax",
     "_thnn_fused_lstm_cell_backward_impl",
     "_unique2",
@@ -609,6 +614,7 @@ __all__ = [
     "nanmedian_dim_values",
     "nanmedian_out",
     "narrow_copy",
+    "native_batch_norm_legit_no_training",
     "ne",
     "ne_scalar",
     "neg",
