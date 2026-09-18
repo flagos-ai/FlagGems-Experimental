@@ -936,16 +936,17 @@ def test_accuracy_make_per_channel_quantized_tensor_out_rejects_device():
 def test_accuracy_make_per_channel_quantized_tensor_out_shape_guard():
     # A buffer with the wrong shape must be resized by the call. On this CUDA
     # build no resize_ kernel exists for a quantized buffer, so the resize
-    # raises on both sides; a build with a working quantized resize_ would
-    # resize instead and the value contract would hold. Which of the two
-    # behaviours happens is decided by the RESIZE itself, not by the side, and
-    # the reference input lives on a different device than the implementation's
-    # (quick-cpu moves only the reference), so the error CLASSES can differ
-    # across devices: the CUDA resize dies with the missing-backend-kernel
-    # NotImplementedError while a CPU quantized resize_ is a "Can only resize
-    # quantized tensors with per-tensor schemes!" RuntimeError. The assertion
-    # therefore pins the semantic fragment (resize of a quantized buffer) on
-    # both sides, not one build's class or sentence.
+    # raises; a build with a working quantized resize_ would resize instead and
+    # the value contract would hold. Which of the two happens is a property of
+    # the BUILD, so the assertion requires both sides to do the same thing:
+    # either both resize (then the values and shape must match) or both raise
+    # the resize rejection of a quantized buffer. The error CLASS cannot be
+    # compared across the reference shift -- the CUDA build dies with the
+    # missing-backend-kernel NotImplementedError while a CPU build's quantized
+    # resize_ is a "Can only resize quantized tensors with per-tensor
+    # schemes!" RuntimeError -- so only the semantic fragment is pinned on the
+    # reference side, and the implementation's side is checked against native
+    # ON ITS OWN DEVICE separately below.
     inp, ref_inp = _ref_pair((3, 4), torch.uint8)
     scale, zp = _qparams((3, 4), 0)
     ref_bad = _q_buffer(ref_inp, (4, 3), torch.quint8, 0)
@@ -956,7 +957,7 @@ def test_accuracy_make_per_channel_quantized_tensor_out_shape_guard():
         torch.ops.aten._make_per_channel_quantized_tensor.out(
             ref_inp, utils.to_reference(scale), utils.to_reference(zp), 0, out=ref_bad
         )
-    except Exception as exc:  # noqa: BLE001 - class/type parity is the point
+    except Exception as exc:  # noqa: BLE001 - behaviour parity is the point
         ref_err = exc
     res_err = None
     try:
@@ -964,16 +965,34 @@ def test_accuracy_make_per_channel_quantized_tensor_out_shape_guard():
     except Exception as exc:  # noqa: BLE001
         res_err = exc
 
-    if ref_err is None and res_err is None:
-        # A build that resizes quantized buffers: the value contract holds on
-        # both sides (same shape and values after the call).
+    if ref_err is None:
+        # This build resizes quantized buffers: the implementation must do the
+        # same and produce the same values.
+        assert res_err is None, str(res_err)
+        assert tuple(res_bad.shape) == (3, 4)
         _assert_int_repr_matches(res_bad, ref_bad)
     else:
-        # The resize is rejected: same on both sides, each with its own
-        # device's wording.
-        assert res_err is not None and ref_err is not None
+        # Both sides reject the resize of a quantized buffer, each in its own
+        # device's wording (semantic fragment only, per the batch-3 rule).
+        assert res_err is not None
         assert "resize" in str(res_err) or "quantized" in str(res_err)
         assert "resize" in str(ref_err) or "quantized" in str(ref_err)
+
+    # Device-matched parity: native driven on the implementation's OWN device
+    # (same input/qparams/buffer device), where the two must agree exactly.
+    dev_inp = inp
+    dev_bad = _q_buffer(dev_inp, (4, 3), torch.quint8, 0)
+    dev_bad2 = _q_buffer(dev_inp, (4, 3), torch.quint8, 0)
+    with pytest.raises(Exception) as dev_ref_exc:
+        torch.ops.aten._make_per_channel_quantized_tensor.out(
+            dev_inp, scale, zp, 0, out=dev_bad
+        )
+    with pytest.raises(Exception) as dev_res_exc:
+        flag_gems._make_per_channel_quantized_tensor_out(
+            dev_inp, scale, zp, 0, out=dev_bad2
+        )
+    assert type(dev_res_exc.value) is type(dev_ref_exc.value)
+    assert "resize" in str(dev_res_exc.value) or "quantized" in str(dev_res_exc.value)
 
 
 @pytest.mark._make_per_channel_quantized_tensor_out
@@ -983,31 +1002,27 @@ def test_accuracy_make_per_channel_quantized_tensor_out_shape_guard():
 def test_accuracy_make_per_channel_quantized_tensor_out_rejects_input_dtype(in_dtype):
     # The functional runs first, so an unsupported input dtype raises the
     # factory error even when the buffer is also unusable -- on both sides.
-    # Each side's call is internally consistent (the reference side gets the
-    # reference-shifted input AND reference-shifted qparams, both derived from
-    # the same gems-side tensors), so the quick-cpu phase keeps one device per
-    # call. The factory rejection is device dependent, so what is pinned is the
-    # error class plus the op name fragment that both devices' spellings
-    # contain -- NOT one build's full sentence.
+    # The native comparison is made ON THE IMPLEMENTATION'S OWN DEVICE (a
+    # second input built there), because that rejection is device dependent:
+    # CUDA reports the missing backend kernel (NotImplementedError) while CPU
+    # reports "Creation of quantized tensor requires quantized dtype ..."
+    # (RuntimeError). Comparing across the reference shift would compare two
+    # different errors; comparing on one device pins the real contract -- same
+    # class and same text, i.e. the functional ran before `out` was touched.
     inp = torch.zeros((3, 4), dtype=in_dtype, device=flag_gems.device)
     scale, zp = _qparams((3, 4), 0)
-    ref_scale, ref_zp = utils.to_reference(scale), utils.to_reference(zp)
-    ref_inp = utils.to_reference(inp)
-    ref_bad = _q_buffer(ref_inp, (3, 4), torch.quint8, 0)
+    ref_inp = torch.zeros((3, 4), dtype=in_dtype, device=flag_gems.device)
+    ref_bad = _q_buffer(inp, (3, 4), torch.quint8, 0)
     res_bad = _q_buffer(inp, (3, 4), torch.quint8, 0)
 
     with pytest.raises(Exception) as ref_exc:
         torch.ops.aten._make_per_channel_quantized_tensor.out(
-            ref_inp, ref_scale, ref_zp, 0, out=ref_bad
+            ref_inp, scale, zp, 0, out=ref_bad
         )
     with pytest.raises(Exception) as res_exc:
         flag_gems._make_per_channel_quantized_tensor_out(inp, scale, zp, 0, out=res_bad)
     assert type(res_exc.value) is type(ref_exc.value)
-    assert "_empty_per_channel_affine_quantized" in str(res_exc.value)
-    assert "_empty_per_channel_affine_quantized" in str(ref_exc.value)
-    if ref_inp.device == inp.device:
-        # Same device: the identical validator produced both messages.
-        assert str(res_exc.value) == str(ref_exc.value)
+    assert str(res_exc.value) == str(ref_exc.value)
 
 
 @pytest.mark._make_per_channel_quantized_tensor_out
