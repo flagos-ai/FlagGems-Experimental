@@ -164,10 +164,11 @@ def test_accuracy_slow_conv_dilated2d_int64(shape):
 @pytest.mark.slow_conv_dilated2d
 @pytest.mark.parametrize("shape", SHAPES)
 def test_accuracy_slow_conv_dilated2d_non_contiguous_input(shape):
-    # Transposed (non-contiguous) input: the kernels address `self` through
-    # explicit n/c/h/w offsets, which assume a dense layout; both sides go
-    # through the same measured contract (native accepts and answers a
-    # contiguous fresh output).
+    # Transposed (non-contiguous) input: native honours the LOGICAL strides, so
+    # the wrapper materializes strided operands before launching the dense-
+    # addressing kernels (measured: without it the values differ, maxdiff ~23
+    # on this shape class). Pinned against native on the strided tensor itself,
+    # which is the contract a user sees.
     in_shape, w_shape = shape
     inp = torch.randn(in_shape, device=flag_gems.device).transpose(2, 3)
     assert not inp.is_contiguous()
@@ -188,8 +189,8 @@ def test_accuracy_slow_conv_dilated2d_non_contiguous_input(shape):
 @pytest.mark.parametrize("w_shape", [(4, 3, 3, 3), (4, 3, 5, 5)])
 def test_accuracy_slow_conv_dilated2d_non_contiguous_weight(in_shape, w_shape):
     # A non-contiguous weight (transposed spatial dims) must produce the same
-    # values as its contiguous materialization: native accepts strided
-    # weights and the kernels index w by (co, ci, kh, kw) logical offsets.
+    # values as its contiguous materialization: native honours the logical
+    # strides and the wrapper materializes strided operands first.
     inp = torch.randn(in_shape, device=flag_gems.device)
     weight_base = torch.randn(
         (w_shape[0], w_shape[1], w_shape[3], w_shape[2]), device=flag_gems.device
@@ -201,11 +202,16 @@ def test_accuracy_slow_conv_dilated2d_non_contiguous_weight(in_shape, w_shape):
     ref_out = torch.ops.aten.slow_conv_dilated2d(
         utils.to_reference(inp), utils.to_reference(weight_c), w_shape[2:]
     )
+    ref_nc = torch.ops.aten.slow_conv_dilated2d(
+        utils.to_reference(inp), utils.to_reference(weight), w_shape[2:]
+    )
     res_c = flag_gems.slow_conv_dilated2d(inp, weight_c, w_shape[2:])
     res_nc = flag_gems.slow_conv_dilated2d(inp, weight, w_shape[2:])
 
     assert res_nc.is_contiguous()
     assert res_nc.data_ptr() != weight.data_ptr()
+    # Native's strided answer equals its contiguous answer; so must ours.
+    assert torch.equal(utils.to_cpu(ref_nc, ref_out), ref_out)
     utils.gems_assert_equal(res_nc, ref_out)
     utils.gems_assert_equal(res_nc, res_c)
 
@@ -237,6 +243,38 @@ def test_accuracy_slow_conv_dilated2d_empty_zero_dim(in_shape, w_shape, kernel):
 
     assert res_out.shape == tuple(ref_out.shape)
     assert res_out.numel() == 0
+    utils.gems_assert_equal(res_out, ref_out)
+
+
+@pytest.mark.slow_conv_dilated2d
+@pytest.mark.parametrize("shift", [0, 1, 3])
+def test_accuracy_slow_conv_dilated2d_strided_input_and_bias(shift):
+    # A storage-offset narrow input plus a stride-2 bias: native honours the
+    # logical strides of BOTH operands (measured: native(strided bias) ==
+    # native(contiguous bias)); the wrapper materializes them before the dense
+    # kernels, so both must agree with native here.
+    base = torch.randn(1, 2, 8, 4 + shift, device=flag_gems.device)
+    inp = base.transpose(2, 3)[:, :, shift:, :]
+    assert not inp.is_contiguous()
+    weight = torch.randn(4, 2, 3, 3, device=flag_gems.device)
+    bias_base = torch.randn(8, device=flag_gems.device)
+    bias = bias_base[::2]  # strided 1-D bias of length 4
+    assert not bias.is_contiguous()
+
+    ref_out = torch.ops.aten.slow_conv_dilated2d(
+        utils.to_reference(inp),
+        utils.to_reference(weight),
+        (3, 3),
+        utils.to_reference(bias),
+        (1, 1),
+        (1, 1),
+        (1, 1),
+    )
+    res_out = flag_gems.slow_conv_dilated2d(
+        inp, weight, (3, 3), bias, (1, 1), (1, 1), (1, 1)
+    )
+
+    assert res_out.shape == tuple(ref_out.shape)
     utils.gems_assert_equal(res_out, ref_out)
 
 

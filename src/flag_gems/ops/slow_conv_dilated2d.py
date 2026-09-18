@@ -226,6 +226,20 @@ def slow_conv_dilated2d(
     dil_h, dil_w = _pair(dilation)
     kh, kw = _pair(kernel_size)
 
+    # The kernels address ``self`` and ``weight`` through DENSE n/c/h/w offsets
+    # (x_base + ci*HW + ih*W + iw and co*C_in*KH*KW + ...). Native honours the
+    # LOGICAL strides instead, so a strided operand must be materialized first;
+    # without this the results differ (measured on CPU and GPU, see the task
+    # report). Materializing here is the repo's established convention for the
+    # conv family (conv_transpose2d does exactly this). Disclosed as an
+    # integration-shell change: no kernel or arithmetic was touched.
+    if not self.is_contiguous():
+        self = self.contiguous()
+    if not weight.is_contiguous():
+        weight = weight.contiguous()
+    if bias is not None and not bias.is_contiguous():
+        bias = bias.contiguous()
+
     N, C_in, H_in, W_in = self.shape
     C_out = weight.shape[0]
 
