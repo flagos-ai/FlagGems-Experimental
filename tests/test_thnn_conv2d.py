@@ -242,7 +242,9 @@ def test_accuracy_thnn_conv2d_scalar_args(padding, dtype):
     assert torch.equal(pair, scalar)
     # The scalar form must also match the exact reference (the pair form is
     # already covered by the parameter matrices above).
-    utils.gems_assert_close(scalar, pair, dtype, atol=_atol(dtype, 27, 20.0))
+    ref = _reference(inp, weight, bias, (3, 3), (1, 1), (padding, padding))
+    scale = float(ref.abs().max().item())
+    utils.gems_assert_close(scalar, ref, dtype, atol=_atol(dtype, 27, scale))
 
 
 @pytest.mark.thnn_conv2d
