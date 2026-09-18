@@ -12522,6 +12522,26 @@ ops:
   - NeuralNetwork
   stages:
   - beta: '5.3'
+- id: sparse_compressed_tensor
+  description: 'Host-side sparse compressed constructor for all four compressed
+    layouts (CSR/CSC/BSR/BSC, selected by layout=): validates the compressed and
+    plain index tensors plus the values tensor and wires them into a sparse
+    tensor that aliases all three components. Covers the explicit-size and
+    size-inference overloads; the inferred size follows len(compressed_indices)
+    - 1 compressed blocks and max(plain_indices) + 1 plain blocks, each scaled
+    by the stored block shape.
+
+    '
+  for:
+  - sparse_compressed_tensor.comp_plain_value
+  - sparse_compressed_tensor.comp_plain_value_size
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: sparse_mla_fwd_interface
   description: 'A generic interface for sparse MLA (Multi-head Latent Attention) for
     DeepSeek v3/v3.2.
