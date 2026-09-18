@@ -140,8 +140,14 @@ def test_accuracy_slow_conv_dilated2d_asymmetric_params(shape, dtype):
 @pytest.mark.slow_conv_dilated2d
 @pytest.mark.parametrize("shape", SHAPES)
 def test_accuracy_slow_conv_dilated2d_int64(shape):
-    # int64 is the only integral dtype the native kernel implements on this
-    # build (measured); the FMA kernel must round-trip it exactly.
+    # int64: the CUDA native kernel REJECTS int64 (measured on this build:
+    # RuntimeError "slow_conv_dilated<> not implemented for 'Long'") while the
+    # CPU native kernel accepts it, and the supplied FMA kernel handles it in
+    # its OUT_DTYPE_ID == 0 path. Pin the CUDA implementation against the CPU
+    # native kernel, which is the only frozen int64 reference available on this
+    # build - never against the CUDA reference (that call raises here). The
+    # reference tensor pair is built on CPU and kept there; --ref=cpu already
+    # routes this way and the full GPU phase must not regress.
     in_shape, w_shape = shape
     inp = torch.randint(0, 4, in_shape, dtype=torch.int64, device=flag_gems.device)
     weight = torch.randint(0, 4, w_shape, dtype=torch.int64, device=flag_gems.device)
@@ -150,14 +156,12 @@ def test_accuracy_slow_conv_dilated2d_int64(shape):
     )
 
     ref_out = torch.ops.aten.slow_conv_dilated2d(
-        utils.to_reference(inp),
-        utils.to_reference(weight),
-        w_shape[2:],
-        utils.to_reference(bias),
+        inp.cpu(), weight.cpu(), w_shape[2:], bias.cpu()
     )
     res_out = flag_gems.slow_conv_dilated2d(inp, weight, w_shape[2:], bias)
 
     assert res_out.dtype == torch.int64
+    assert res_out.device.type == flag_gems.device
     utils.gems_assert_equal(res_out, ref_out)
 
 
@@ -226,9 +230,8 @@ def test_accuracy_slow_conv_dilated2d_non_contiguous_weight(in_shape, w_shape):
     ],
 )
 def test_accuracy_slow_conv_dilated2d_empty_zero_dim(in_shape, w_shape, kernel):
-    # N == 0, C_in == 0 and C_out == 0 all short-circuit to an empty output;
-    # native answers the same zero-numel shapes (C_in == 0 keeps the bias:
-    # measured, the output is the bias broadcast).
+    # N == 0, C_in == 0 and C_out == 0 all short-circuit to a zero-numel
+    # output; native answers the same zero-numel shapes.
     bias = torch.randn(w_shape[0], device=flag_gems.device)
     inp = torch.randn(in_shape, device=flag_gems.device)
     weight = torch.randn(w_shape, device=flag_gems.device)
@@ -243,6 +246,31 @@ def test_accuracy_slow_conv_dilated2d_empty_zero_dim(in_shape, w_shape, kernel):
 
     assert res_out.shape == tuple(ref_out.shape)
     assert res_out.numel() == 0
+    utils.gems_assert_equal(res_out, ref_out)
+
+
+@pytest.mark.slow_conv_dilated2d
+@pytest.mark.parametrize("bias_present", [True, False])
+def test_accuracy_slow_conv_dilated2d_cin_zero_fills_bias(bias_present):
+    # C_in == 0 is a legal native input with a NON-empty output: measured, the
+    # native kernel fills every element with that channel's bias (zeros when
+    # bias is None). The source's plain early return left the fresh buffer
+    # uninitialized, which contradicted that; the short-circuit now writes the
+    # value the empty reduction implies (disclosed in the report).
+    in_shape, w_shape = (2, 0, 5, 5), (4, 0, 3, 3)
+    bias = torch.randn(w_shape[0], device=flag_gems.device) if bias_present else None
+    inp = torch.randn(in_shape, device=flag_gems.device)
+    weight = torch.randn(w_shape, device=flag_gems.device)
+
+    ref_out = torch.ops.aten.slow_conv_dilated2d(
+        utils.to_reference(inp),
+        utils.to_reference(weight),
+        (3, 3),
+        utils.to_reference(bias),
+    )
+    res_out = flag_gems.slow_conv_dilated2d(inp, weight, (3, 3), bias)
+
+    assert res_out.shape == tuple(ref_out.shape) == (2, 4, 3, 3)
     utils.gems_assert_equal(res_out, ref_out)
 
 
@@ -301,44 +329,28 @@ def test_accuracy_slow_conv_dilated2d_zero_spatial_output(in_shape, w_shape, ker
 @pytest.mark.slow_conv_dilated2d
 @pytest.mark.parametrize("shape", SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-def test_accuracy_slow_conv_dilated2d_scalar_int_args(shape, dtype):
-    # kernel_size/stride/padding/dilation accept [2]-lists and scalar ints per
-    # the measured native contract (SymInt[2] schema args broadcast a 1-list;
-    # a bare python int does NOT match the List[int] schema and raises
-    # RuntimeError - pinned on the implementation side only, because the
-    # message text is schema-generated and identical on every path).
+def test_accuracy_slow_conv_dilated2d_list_arg_forms(shape, dtype):
+    # The geometry args also accept tuples and length-2 lists; a length-2 list
+    # is the form torch's Python arg parser passes for SymInt[2] (measured).
     in_shape, w_shape = shape
     inp = _gen_input(in_shape, dtype)
     weight = _gen_input(w_shape, dtype)
 
     res_out = flag_gems.slow_conv_dilated2d(
-        inp, weight, [w_shape[2]], None, [2], [1], [1]
+        inp, weight, [w_shape[2], w_shape[3]], None, [2, 2], [1, 1], [1, 1]
     )
     ref_out = torch.ops.aten.slow_conv_dilated2d(
         utils.to_reference(inp),
         utils.to_reference(weight),
-        [w_shape[2]],
+        [w_shape[2], w_shape[3]],
         None,
-        [2],
-        [1],
-        [1],
+        [2, 2],
+        [1, 1],
+        [1, 1],
     )
     assert res_out.shape == tuple(ref_out.shape)
+    assert res_out.dtype == dtype
     utils.gems_assert_close(res_out, ref_out, dtype)
-
-
-@pytest.mark.slow_conv_dilated2d
-def test_accuracy_slow_conv_dilated2d_int_kernel_size_arg_raises():
-    # A scalar int for kernel_size violates the List[int] schema. Both sides
-    # raise RuntimeError (schema-level); only the class + semantic fragments
-    # are pinned, not the sentence (A1).
-    inp = torch.randn(1, 2, 7, 7, device=flag_gems.device)
-    weight = torch.randn(4, 2, 3, 3, device=flag_gems.device)
-
-    with pytest.raises(RuntimeError) as excinfo:
-        flag_gems.slow_conv_dilated2d(inp, weight, 3)
-    assert "kernel_size" in str(excinfo.value)
-    assert "List[int]" in str(excinfo.value) or "int" in str(excinfo.value)
 
 
 @pytest.mark.slow_conv_dilated2d
@@ -374,11 +386,14 @@ def test_accuracy_slow_conv_dilated2d_output_too_small_raises(in_shape, w_shape)
 @pytest.mark.parametrize("shape", SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_slow_conv_dilated2d_out_variant(shape, dtype):
-    # The .out overload exists natively on this build and resizes the buffer
-    # to the result shape, writes it, and returns the SAME object (measured).
-    # Only the dispatched implementation is asserted here (the reference side
-    # under --ref=cpu routes through the same measured contract; the value
-    # check against the base overload happens via the non-out test above).
+    # The .out overload exists natively on this build. Its CUDA-side kernel is
+    # the CompositeExplicitAutograd decomposition (dispatch dump), i.e. it
+    # resizes the buffer to the base overload's shape and then calls the BASE
+    # op - which is the registered FlagGems kernel. So the .out call path
+    # really does execute the submitted implementation (verified with a
+    # sentinel on GPU, see the report), and this test pins native's measured
+    # .out contract: same object returned, buffer written, values equal to the
+    # base overload.
     in_shape, w_shape = shape
     inp = _gen_input(in_shape, dtype)
     weight = _gen_input(w_shape, dtype)
@@ -388,7 +403,9 @@ def test_accuracy_slow_conv_dilated2d_out_variant(shape, dtype):
         inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1)
     )
     out = torch.empty(
-        in_shape[0], w_shape[0], 3, 3, dtype=dtype, device=flag_gems.device
+        (in_shape[0], w_shape[0], res.shape[2], res.shape[3]),
+        dtype=dtype,
+        device=flag_gems.device,
     )
     r = torch.ops.aten.slow_conv_dilated2d.out(
         inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1), out=out
@@ -400,20 +417,28 @@ def test_accuracy_slow_conv_dilated2d_out_variant(shape, dtype):
 
 @pytest.mark.slow_conv_dilated2d
 def test_accuracy_slow_conv_dilated2d_rank_validation_raises():
-    # Native validates ranks in a fixed order: input 4-D/5-D check FIRST,
-    # then weight rank, then bias rank (measured fragments). Assert class +
-    # semantic fragments only (A1).
+    # Rank validation. The implementation's DOCUMENTED order puts the weight
+    # rank check before the input rank check (measured: a 3-D input together
+    # with a kernel_size mismatch reports the kernel_size mismatch, so the
+    # geometry/weight validators run first); assert class + semantic fragments
+    # only, never one build's sentence (A1).
     inp = torch.randn(1, 2, 7, 7, device=flag_gems.device)
     weight = torch.randn(4, 2, 3, 3, device=flag_gems.device)
 
     with pytest.raises(RuntimeError) as excinfo:
         flag_gems.slow_conv_dilated2d(
-            inp.reshape(1, 2, 7, 7, 1)[:, :, :, :, 0].reshape(2, 7, 7), weight, (3, 3)
+            torch.randn(2, 7, 7, device=flag_gems.device), weight, (3, 3)
         )
     assert "4D" in str(excinfo.value) or "dimension" in str(excinfo.value)
 
     with pytest.raises(RuntimeError) as excinfo:
-        flag_gems.slow_conv_dilated2d(inp, weight.reshape(4, 6), (3, 3))
+        flag_gems.slow_conv_dilated2d(
+            torch.randn(1, 2, 3, 7, 7, device=flag_gems.device), weight, (3, 3)
+        )
+    assert "4D" in str(excinfo.value) or "dimension" in str(excinfo.value)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        flag_gems.slow_conv_dilated2d(inp, weight.reshape(4, 2, 9), (3, 3))
     assert "4D" in str(excinfo.value) or "weight" in str(excinfo.value)
 
     with pytest.raises(RuntimeError) as excinfo:
@@ -424,34 +449,126 @@ def test_accuracy_slow_conv_dilated2d_rank_validation_raises():
 
 
 @pytest.mark.slow_conv_dilated2d
+@pytest.mark.parametrize(
+    "bad_arg, value, fragment",
+    [
+        ("kernel_size", [3], "kernel size"),
+        ("kernel_size", (3, 3, 3), "kernel size"),
+        ("kernel_size", 3, "kernel size"),
+        ("stride", [1], "stride"),
+        ("stride", 1, "stride"),
+        ("padding", [0], "padding"),
+        ("padding", 0, "padding"),
+        ("dilation", [1], "dilation"),
+        ("dilation", 1, "dilation"),
+    ],
+)
+def test_accuracy_slow_conv_dilated2d_geometry_arg_form_raises(
+    bad_arg, value, fragment
+):
+    # The schema args are SymInt[2]: a bare int and a 1- or 3-element list all
+    # raise, on both sides (measured on this build). Class + fragment only (A1).
+    inp = torch.randn(1, 2, 7, 7, device=flag_gems.device)
+    weight = torch.randn(4, 2, 3, 3, device=flag_gems.device)
+    geometry = {
+        "kernel_size": (3, 3),
+        "stride": (1, 1),
+        "padding": (0, 0),
+        "dilation": (1, 1),
+    }
+    geometry[bad_arg] = value
+
+    with pytest.raises(RuntimeError) as excinfo:
+        flag_gems.slow_conv_dilated2d(
+            inp,
+            weight,
+            geometry["kernel_size"],
+            None,
+            geometry["stride"],
+            geometry["padding"],
+            geometry["dilation"],
+        )
+    msg = str(excinfo.value)
+    assert fragment in msg
+    assert "length" in msg or "2" in msg or "int" in msg
+
+
+@pytest.mark.slow_conv_dilated2d
+@pytest.mark.parametrize(
+    "field, value, fragment",
+    [
+        ("stride", (0, 0), "stride"),
+        ("stride", (-1, -1), "stride"),
+        ("dilation", (0, 0), "dilation"),
+        ("dilation", (-1, -1), "dilation"),
+    ],
+)
+def test_accuracy_slow_conv_dilated2d_nonpositive_geometry_raises(
+    field, value, fragment
+):
+    # Positive stride/dilation are required (measured: "stride should be greater
+    # than zero", "dilation should be greater than zero"). Same validator shape
+    # on both sides; fragments, not sentences (A1).
+    inp = torch.randn(1, 2, 9, 9, device=flag_gems.device)
+    weight = torch.randn(4, 2, 3, 3, device=flag_gems.device)
+    args = {"stride": (1, 1), "padding": (0, 0), "dilation": (1, 1)}
+    args[field] = value
+
+    with pytest.raises(RuntimeError) as excinfo:
+        flag_gems.slow_conv_dilated2d(
+            inp, weight, (3, 3), None, args["stride"], args["padding"], args["dilation"]
+        )
+    msg = str(excinfo.value)
+    assert fragment in msg and "greater than zero" in msg
+
+    with pytest.raises(RuntimeError) as ref_exc:
+        torch.ops.aten.slow_conv_dilated2d(
+            utils.to_reference(inp),
+            utils.to_reference(weight),
+            (3, 3),
+            None,
+            args["stride"],
+            args["padding"],
+            args["dilation"],
+        )
+    assert isinstance(ref_exc.value, RuntimeError)
+
+
+@pytest.mark.slow_conv_dilated2d
 def test_accuracy_slow_conv_dilated2d_cin_mismatch_raises():
-    # weight.shape[1] must equal input.shape[1]; the fragment is generated
-    # from the same validator on both paths ("input.size[1] == C_in").
+    # weight.shape[1] must equal input.shape[1]; both sides raise RuntimeError.
+    # The fragments asserted are the implementation's own documented wording.
     inp = torch.randn(1, 2, 7, 7, device=flag_gems.device)
     weight = torch.randn(4, 3, 3, 3, device=flag_gems.device)
 
     with pytest.raises(RuntimeError) as excinfo:
         flag_gems.slow_conv_dilated2d(inp, weight, (3, 3))
     msg = str(excinfo.value)
-    assert "input.size[1]" in msg or "dimension 4" in msg or "size" in msg
+    assert "shape[1]" in msg or "size[1]" in msg or "2" in msg
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError) as ref_exc:
         torch.ops.aten.slow_conv_dilated2d(
             utils.to_reference(inp), utils.to_reference(weight), (3, 3)
         )
+    assert isinstance(ref_exc.value, RuntimeError)
 
 
 @pytest.mark.slow_conv_dilated2d
 def test_accuracy_slow_conv_dilated2d_kernel_mismatch_raises():
-    # weight[2:] must equal kernel_size (measured: "weight[2:] shape ... must
-    # be equal to kernel_size ..."). Fragments, not sentences (A1).
+    # weight[2:] must equal kernel_size. Fragments, not sentences (A1).
     inp = torch.randn(1, 2, 7, 7, device=flag_gems.device)
     weight = torch.randn(4, 2, 4, 4, device=flag_gems.device)
 
     with pytest.raises(RuntimeError) as excinfo:
         flag_gems.slow_conv_dilated2d(inp, weight, (3, 3))
     msg = str(excinfo.value)
-    assert "kernel_size" in msg or "weight" in msg
+    assert "kernel_size" in msg
+
+    with pytest.raises(RuntimeError) as ref_exc:
+        torch.ops.aten.slow_conv_dilated2d(
+            utils.to_reference(inp), utils.to_reference(weight), (3, 3)
+        )
+    assert isinstance(ref_exc.value, RuntimeError)
 
 
 @pytest.mark.slow_conv_dilated2d

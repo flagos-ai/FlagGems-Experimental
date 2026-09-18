@@ -25,10 +25,17 @@ from flag_gems.runtime import torch_device_fn
 logger = logging.getLogger(__name__)
 
 
-def _pair(x):
+def _pair(x, name):
+    """The native schema takes ``SymInt[2]`` for all four geometry arguments, so
+    only a length-2 sequence is accepted - a bare int, a 1-element or a
+    3-element list all raise on this build (measured)."""
     if isinstance(x, (tuple, list)):
+        if len(x) != 2:
+            raise RuntimeError(f"{name} length should be 2, but got {len(x)}")
         return int(x[0]), int(x[1])
-    return int(x), int(x)
+    raise RuntimeError(
+        f"{name} must be a pair of ints (SymInt[2]), but got {type(x).__name__}"
+    )
 
 
 @triton.jit
@@ -219,12 +226,66 @@ def slow_conv_dilated2d(
     ``tl.dot`` path for fp16/bf16 (tf32 precision) and fp32 (ieee for the
     1-tap and 5x5-class regimes, tf32x3 for the 3x3 class). The batch
     dimension is flattened into the program id exactly as in the source.
+
+    The kernels are shape/parameter-agnostic, so the native argument contract
+    is validated here. This implementation's DOCUMENTED validation order (used
+    by the tests; the messages are semantic fragments, never copies of one
+    build's sentence) is:
+
+      1. geometry arguments must be length-2 sequences (``SymInt[2]``);
+      2. ``weight`` must be 4-D;
+      3. kernel size / stride / dilation must be positive;
+      4. ``weight.shape[2:]`` must equal ``kernel_size``;
+      5. ``self`` must be 4-D;
+      6. ``self.shape[1]`` must equal ``weight.shape[1]``;
+      7. ``bias`` must be 1-D with ``weight.shape[0]`` elements;
+      8. the spatial output size must be non-negative.
+
+    Steps 2-4 precede step 5 because that is the order the native validators
+    were MEASURED to run in on this build (a 3-D input together with a
+    kernel_size mismatch reports the kernel_size mismatch).
     """
     logger.debug("GEMS SLOW_CONV_DILATED2D")
-    stride_h, stride_w = _pair(stride)
-    pad_h, pad_w = _pair(padding)
-    dil_h, dil_w = _pair(dilation)
-    kh, kw = _pair(kernel_size)
+    stride_h, stride_w = _pair(stride, "stride")
+    pad_h, pad_w = _pair(padding, "padding")
+    dil_h, dil_w = _pair(dilation, "dilation")
+    kh, kw = _pair(kernel_size, "kernel size")
+
+    # --- native argument validation, in the documented order above ---------
+    if weight.dim() != 4:
+        raise RuntimeError(f"weight must be 4D tensor but got {weight.dim()}D tensor")
+    if kh <= 0 or kw <= 0:
+        raise RuntimeError(
+            f"kernel size should be greater than zero, but got [{kh}, {kw}]"
+        )
+    if stride_h <= 0 or stride_w <= 0:
+        raise RuntimeError(
+            f"stride should be greater than zero, but got [{stride_h}, {stride_w}]"
+        )
+    if dil_h <= 0 or dil_w <= 0:
+        raise RuntimeError(
+            f"dilation should be greater than zero, but got [{dil_h}, {dil_w}]"
+        )
+    if tuple(weight.shape[2:]) != (kh, kw):
+        raise RuntimeError(
+            f"weight.shape[2:] {tuple(weight.shape[2:])} must be equal to "
+            f"kernel_size {(kh, kw)}"
+        )
+    if self.dim() != 4:
+        raise RuntimeError(f"input must be 4D tensor but got {self.dim()}D tensor")
+    if self.shape[1] != weight.shape[1]:
+        raise RuntimeError(
+            "Need input.shape[1] == weight.shape[1] but got "
+            f"input {tuple(self.shape)} and weight {tuple(weight.shape)}"
+        )
+    if bias is not None:
+        if bias.dim() != 1:
+            raise RuntimeError(f"bias must be 1D tensor but got {bias.dim()}D tensor")
+        if bias.shape[0] != weight.shape[0]:
+            raise RuntimeError(
+                "Need bias.shape[0] == weight.shape[0] but got "
+                f"bias {tuple(bias.shape)} and weight {tuple(weight.shape)}"
+            )
 
     # The kernels address ``self`` and ``weight`` through DENSE n/c/h/w offsets
     # (x_base + ci*HW + ih*W + iw and co*C_in*KH*KW + ...). Native honours the
@@ -246,9 +307,35 @@ def slow_conv_dilated2d(
     H_out = (H_in + 2 * pad_h - dil_h * (kh - 1) - 1) // stride_h + 1
     W_out = (W_in + 2 * pad_w - dil_w * (kw - 1) - 1) // stride_w + 1
 
+    # Native rejects a NEGATIVE spatial output ("calculated output size ... is
+    # too small", measured) while a ZERO spatial output is legal and returns an
+    # empty tensor. Raise BEFORE allocating, so the reported error is the
+    # semantic one rather than torch.empty's negative-dimension message.
+    if H_out < 0 or W_out < 0:
+        raise RuntimeError(
+            f"calculated output size {H_out} {W_out} is too small "
+            "(all sizes must be non-negative)"
+        )
+
     out = torch.empty((N, C_out, H_out, W_out), device=self.device, dtype=self.dtype)
 
     if H_out <= 0 or W_out <= 0 or N == 0 or C_out == 0 or C_in == 0:
+        # No reduction is possible, so native's answer is fully determined:
+        # measured, ``C_in == 0`` with a bias fills EVERY output element with
+        # that channel's bias (and with zeros when bias is None). The source's
+        # plain early return left the fresh buffer uninitialized, which
+        # contradicts that measured answer, so the short-circuit now writes the
+        # value the kernels would produce for an empty reduction. A5 in the
+        # batch brief: measure first, then fix with a disclosed reason.
+        if C_in == 0 and N > 0 and C_out > 0 and H_out > 0 and W_out > 0:
+            if bias is not None:
+                out.copy_(
+                    bias.to(out.dtype)
+                    .view(1, C_out, 1, 1)
+                    .expand(N, C_out, H_out, W_out)
+                )
+            else:
+                out.zero_()
         return out
 
     total_sp = H_out * W_out
