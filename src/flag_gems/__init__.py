@@ -1075,6 +1075,36 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    # sparse_compressed_tensor: the generic CSR/CSC/BSR/BSC constructor. Two
+    # ATen overloads, measured per dispatch key with labelled sentinel probes in
+    # fresh processes (runs/sparse_compressed_tensor/native_probe_d.log: 2
+    # overloads x 8 keys x 4 call forms) and confirmed by registering a raising
+    # sentinel on every candidate key at once (native_probe_d_all.log, job
+    # ...-other-a2-43c27976: "HIT:Autograd" for both size-taking call forms,
+    # "ok" for the size-inferring ones, and no backend or composite key ever
+    # fired):
+    #   .comp_plain_value_size is reached ONLY with an explicit size argument
+    #   .comp_plain_value      is reached ONLY when size is omitted
+    # Neither overload has a backend kernel: _dispatch_dump_table lists only
+    # BackendSelect + Autograd[alias] + CompositeExplicitAutograd[alias], and
+    # the plain device key was never selected by any call form in any probe
+    # (the SparseCsrCUDA key that fires for these inputs is the *components'*
+    # key, not a native kernel slot). The Autograd key is therefore what the
+    # extra key claims, following the _indices / _make_*_quantized_tensor
+    # precedent -- and the implementation delegates under
+    # _AutoDispatchBelowAutograd() for the same reason.
+    (
+        "sparse_compressed_tensor.comp_plain_value",
+        sparse_compressed_tensor,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_compressed_tensor.comp_plain_value_size",
+        sparse_compressed_tensor_size,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
     ("sparse_sampled_addmm", sparse_sampled_addmm, None, (SPARSE_CSR_DISPATCH_KEY,)),
     (
         "sparse_sampled_addmm.out",
