@@ -134,7 +134,7 @@ from .exponential_ import exponential_
 from .eye import eye
 from .eye_m import eye_m
 from .feature_dropout import feature_dropout_
-from .feature_dropout_kernelgen import feature_dropout
+from .feature_dropout import feature_dropout
 from .fill import (
     fill_scalar,
     fill_scalar_,
