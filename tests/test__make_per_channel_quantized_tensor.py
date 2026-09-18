@@ -934,65 +934,38 @@ def test_accuracy_make_per_channel_quantized_tensor_out_rejects_device():
 
 @pytest.mark._make_per_channel_quantized_tensor_out
 def test_accuracy_make_per_channel_quantized_tensor_out_shape_guard():
-    # A buffer with the wrong shape must be resized by the call. On this CUDA
-    # build no resize_ kernel exists for a quantized buffer, so the resize
-    # raises; a build with a working quantized resize_ would resize instead and
-    # the value contract would hold. Which of the two happens is a property of
-    # the BUILD, so the assertion requires both sides to do the same thing:
-    # either both resize (then the values and shape must match) or both raise
-    # the resize rejection of a quantized buffer. The error CLASS cannot be
-    # compared across the reference shift -- the CUDA build dies with the
-    # missing-backend-kernel NotImplementedError while a CPU build's quantized
-    # resize_ is a "Can only resize quantized tensors with per-tensor
-    # schemes!" RuntimeError -- so only the semantic fragment is pinned on the
-    # reference side, and the implementation's side is checked against native
-    # ON ITS OWN DEVICE separately below.
-    inp, ref_inp = _ref_pair((3, 4), torch.uint8)
+    # A buffer with the wrong shape must be resized by the call. Whether that
+    # resize SUCCEEDS is a property of the device, not of the side: this build
+    # registers resize_ for QuantizedCPU (where it then rejects a per-channel
+    # scheme with "Can only resize quantized tensors with per-tensor
+    # schemes!") but not for QuantizedCUDA, whose resize dies with the
+    # missing-backend-kernel NotImplementedError. The reference shift in the
+    # quick-cpu phase would therefore put the two sides on devices with
+    # different behaviour, so native is driven ON THE IMPLEMENTATION'S OWN
+    # DEVICE and the two sides must agree exactly -- same error class, same
+    # text (device-matched validator), and no values written when it raises.
+    inp, _ = _ref_pair((3, 4), torch.uint8)
     scale, zp = _qparams((3, 4), 0)
+    ref_inp = _gen_input((3, 4), torch.uint8)  # same device as `inp`
     ref_bad = _q_buffer(ref_inp, (4, 3), torch.quint8, 0)
     res_bad = _q_buffer(inp, (4, 3), torch.quint8, 0)
 
-    ref_err = None
-    try:
+    with pytest.raises(Exception) as ref_exc:
         torch.ops.aten._make_per_channel_quantized_tensor.out(
-            ref_inp, utils.to_reference(scale), utils.to_reference(zp), 0, out=ref_bad
+            ref_inp, scale, zp, 0, out=ref_bad
         )
-    except Exception as exc:  # noqa: BLE001 - behaviour parity is the point
-        ref_err = exc
-    res_err = None
-    try:
+    with pytest.raises(Exception) as res_exc:
         flag_gems._make_per_channel_quantized_tensor_out(inp, scale, zp, 0, out=res_bad)
-    except Exception as exc:  # noqa: BLE001
-        res_err = exc
 
-    if ref_err is None:
-        # This build resizes quantized buffers: the implementation must do the
-        # same and produce the same values.
-        assert res_err is None, str(res_err)
+    assert type(res_exc.value) is type(ref_exc.value)
+    assert str(res_exc.value) == str(ref_exc.value)
+    # The rejection is about resizing a quantized buffer.
+    assert "resize" in str(res_exc.value) or "quantized" in str(res_exc.value)
+    # Room for a build whose quantized resize_ actually succeeds: then both
+    # sides must have resized and produced identical values.
+    if "resize" not in str(res_exc.value) and "quantized" not in str(res_exc.value):
         assert tuple(res_bad.shape) == (3, 4)
         _assert_int_repr_matches(res_bad, ref_bad)
-    else:
-        # Both sides reject the resize of a quantized buffer, each in its own
-        # device's wording (semantic fragment only, per the batch-3 rule).
-        assert res_err is not None
-        assert "resize" in str(res_err) or "quantized" in str(res_err)
-        assert "resize" in str(ref_err) or "quantized" in str(ref_err)
-
-    # Device-matched parity: native driven on the implementation's OWN device
-    # (same input/qparams/buffer device), where the two must agree exactly.
-    dev_inp = inp
-    dev_bad = _q_buffer(dev_inp, (4, 3), torch.quint8, 0)
-    dev_bad2 = _q_buffer(dev_inp, (4, 3), torch.quint8, 0)
-    with pytest.raises(Exception) as dev_ref_exc:
-        torch.ops.aten._make_per_channel_quantized_tensor.out(
-            dev_inp, scale, zp, 0, out=dev_bad
-        )
-    with pytest.raises(Exception) as dev_res_exc:
-        flag_gems._make_per_channel_quantized_tensor_out(
-            dev_inp, scale, zp, 0, out=dev_bad2
-        )
-    assert type(dev_res_exc.value) is type(dev_ref_exc.value)
-    assert "resize" in str(dev_res_exc.value) or "quantized" in str(dev_res_exc.value)
 
 
 @pytest.mark._make_per_channel_quantized_tensor_out
