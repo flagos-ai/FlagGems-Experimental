@@ -43,11 +43,10 @@ def _size_of(shape):
 
 
 def _input_fn(shape, dtype, device):
-    # A means of localizing the shape semantics is not needed: the harness
-    # reports the value it passed. Each tensor holds `size` elements, the list
-    # holds 4 of them, so the output holds 4 * size elements.
+    # The harness unpacks the yielded tuple into positional arguments, so the
+    # tensor list itself must be wrapped in a one-element tuple.
     size = _size_of(shape)
-    yield [utils.generate_tensor_input((size,), dtype, device) for _ in range(4)]
+    yield ([utils.generate_tensor_input((size,), dtype, device) for _ in range(4)],)
 
 
 class FlattenDenseTensorsBenchmark(base.GenericBenchmark):
