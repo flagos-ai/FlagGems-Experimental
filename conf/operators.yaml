@@ -12522,6 +12522,23 @@ ops:
   - NeuralNetwork
   stages:
   - beta: '5.3'
+- id: sparse_csc_tensor
+  description: 'Host-side sparse CSC constructor: aliases the ccol/row index and value
+    components and stores them verbatim. The explicit-size overload takes the shape
+    as given; the size-inferred overload derives it as max(row) + 1 by row and ccol.size(-1)
+    - 1 by column, with an nnz == 0 tensor inferring an empty row dimension.
+
+    '
+  for:
+  - sparse_csc_tensor.ccol_row_value
+  - sparse_csc_tensor.ccol_row_value_size
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: sparse_mla_fwd_interface
   description: 'A generic interface for sparse MLA (Multi-head Latent Attention) for
     DeepSeek v3/v3.2.
