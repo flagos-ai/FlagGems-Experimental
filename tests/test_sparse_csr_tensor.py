@@ -231,16 +231,22 @@ def test_sparse_csr_tensor_crow_col_value_inferred(nnz, nrows, ncols, index_dtyp
 @pytest.mark.sparse_csr_tensor
 @pytest.mark.parametrize("nnz, nrows, ncols", CSR_CASES)
 def test_sparse_csr_tensor_size_inferred_equals_explicit(nnz, nrows, ncols):
-    # Both overloads must agree on shape and components for a well-formed
-    # input: the inference path and the explicit path are two entry points to
-    # the same construction.
+    # For a well-formed input with at least one stored column the two overloads
+    # are two entry points to the same construction and must agree completely.
+    # nnz == 0 is the one case where they legitimately differ -- the inferred
+    # plain dimension is max(col_indices) + 1 == 0 with nothing stored, while
+    # the explicit size is the caller's -- and it is pinned separately.
     crow, col, values = _make_components(nnz, nrows, ncols, seed=nnz + 3)
     by_size = _gems_size(crow, col, values, [nrows, ncols])
     by_value = _gems_value(crow, col, values)
-    assert _meta(by_size) == _meta(by_value)
-    assert torch.equal(by_size.crow_indices().cpu(), by_value.crow_indices().cpu())
-    assert torch.equal(by_size.col_indices().cpu(), by_value.col_indices().cpu())
-    assert torch.equal(by_size.values().cpu(), by_value.values().cpu())
+    if nnz == 0:
+        assert tuple(by_value.shape) == (nrows, 0)
+        assert _meta(by_value) == _meta(_ref_value(crow, col, values))
+    else:
+        assert _meta(by_size) == _meta(by_value)
+        assert torch.equal(by_size.crow_indices().cpu(), by_value.crow_indices().cpu())
+        assert torch.equal(by_size.col_indices().cpu(), by_value.col_indices().cpu())
+        assert torch.equal(by_size.values().cpu(), by_value.values().cpu())
 
 
 @pytest.mark.sparse_csr_tensor
@@ -418,10 +424,9 @@ def test_sparse_csr_tensor_invariants_context_is_honoured():
     # validator raises the documented RuntimeError, and it is the same native
     # check on the same host-side constructor path, so the contract is
     # observed there.
-    crow, col, values = _make_components(3, 2, 3, seed=23)
-    crow = crow.cpu()
-    col = col.cpu()
-    values = values.cpu().to(torch.float32)
+    crow = torch.tensor([0, 1, 3], dtype=torch.int64)
+    col = torch.tensor([0, 1, 2], dtype=torch.int64)
+    values = torch.randn(3, dtype=torch.float32)
     bad_crow = torch.tensor([0, 5, 9], dtype=torch.int64)
 
     with torch.sparse.check_sparse_tensor_invariants():
@@ -497,8 +502,10 @@ def test_sparse_csr_tensor_batched():
     # Batched CSR: crow/col are 2-D (batch, ...) and the batch dimension
     # precedes the sparse dimensions in the shape.
     dev = flag_gems.device
+    # col holds ncols - 1 = 2 at least once, so the inferred plain dimension
+    # equals the explicit column count (see the module comment).
     crow = torch.tensor([[0, 1, 2], [0, 2, 3]], dtype=torch.int64, device=dev)
-    col = torch.tensor([[0, 1], [1, 0]], dtype=torch.int64, device=dev)
+    col = torch.tensor([[0, 2], [0, 1]], dtype=torch.int64, device=dev)
     values = torch.randn(2, 3, device=dev)
     ref = _ref_size(crow, col, values, [2, 2, 3])
     res = _gems_size(crow, col, values, [2, 2, 3])
@@ -513,15 +520,16 @@ def test_sparse_csr_tensor_non_contiguous_components():
     # Non-contiguous components are stored verbatim, like any other tensor:
     # the result keeps the inputs' storage layout and aliases it.
     dev = flag_gems.device
-    # Batch 2, one row per batch, one stored entry per batch.
-    crow = torch.tensor([[0, 0], [1, 1]], dtype=torch.int64, device=dev).t()
-    col = torch.tensor([[0, 0]], dtype=torch.int64, device=dev).t()
-    values = torch.tensor([[1.0, 2.0]], device=dev).t()
+    # Batch 2, one row (two columns) per batch, one stored entry per batch.
+    # The transposes leave stride (1, 2), so all three stay non-contiguous.
+    crow = torch.tensor([[0, 1], [1, 2]], dtype=torch.int64, device=dev).t()
+    col = torch.tensor([[0, 1], [0, 1]], dtype=torch.int64, device=dev).t()
+    values = torch.randn(2, 2, device=dev).t()
     assert not crow.is_contiguous()
     assert not col.is_contiguous()
     assert not values.is_contiguous()
-    ref = _ref_size(crow, col, values, [2, 1, 1])
-    res = _gems_size(crow, col, values, [2, 1, 1])
+    ref = _ref_size(crow, col, values, [2, 1, 2])
+    res = _gems_size(crow, col, values, [2, 1, 2])
     assert _meta(res) == _meta(ref)
     # Strides are the inputs' own strides: the storage is aliased, not copied.
     assert res.values().stride() == values.stride()
