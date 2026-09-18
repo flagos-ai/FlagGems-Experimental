@@ -1148,6 +1148,30 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    (
+        "sparse_coo_tensor.indices",
+        sparse_coo_tensor_indices,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_coo_tensor.indices_size",
+        sparse_coo_tensor_indices_size,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_coo_tensor.size",
+        sparse_coo_tensor_size,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_coo_tensor.size_out",
+        sparse_coo_tensor_size_out,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
     # sparse_csc_tensor: two ATen overloads, measured per key with labelled
     # sentinels in a fresh process per (overload, key) pair. Neither overload
     # has a backend kernel: they are pure composite constructors. A call that
@@ -1173,30 +1197,6 @@ _FULL_CONFIG = (
         sparse_csc_tensor_ccol_row_value_size,
         None,
         (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
-    ),
-    (
-        "sparse_coo_tensor.indices",
-        sparse_coo_tensor_indices,
-        None,
-        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
-    ),
-    (
-        "sparse_coo_tensor.indices_size",
-        sparse_coo_tensor_indices_size,
-        None,
-        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
-    ),
-    (
-        "sparse_coo_tensor.size",
-        sparse_coo_tensor_size,
-        None,
-        (SPARSE_DISPATCH_KEY,),
-    ),
-    (
-        "sparse_coo_tensor.size_out",
-        sparse_coo_tensor_size_out,
-        None,
-        (SPARSE_DISPATCH_KEY,),
     ),
     (
         "sparse_dim",

@@ -837,6 +837,7 @@ from flag_gems.ops.sparse_coo_tensor import (
     sparse_coo_tensor_indices_size,
     sparse_coo_tensor_size,
     sparse_coo_tensor_size_out,
+)
 from flag_gems.ops.sparse_csc_tensor import (
     sparse_csc_tensor_ccol_row_value,
     sparse_csc_tensor_ccol_row_value_size,
