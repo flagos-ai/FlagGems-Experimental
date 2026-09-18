@@ -24,24 +24,25 @@ import flag_gems
 from . import base, consts, utils
 
 # cartesian_prod's input is a list of 1-D tensors and its output has
-# prod(lengths) rows and K columns, so the cost grows with the product of the
-# input lengths. Each case below is one list of 1-D lengths, chosen so the
-# output element count (rows * K) stays well under the pointwise ceiling while
-# still hitting every kernel branch (A7: keep shapes modest).
+# prod(lengths) rows and K columns, so the cost grows combinatorially with the
+# input lengths (A7). The lengths below are sized so every kernel branch still
+# fits the output budget, while the product stays under MAX_OUTPUT_ELEMENTS:
+#   [8, 8]              -> 64 rows, launch-overhead dominated
+#   [4096, 4096]        -> 16.7M rows, K == 2 general chunk kernel (KP == 2)
+#   [384, 384, 384]     -> 56.6M rows (170M elements), K == 3 with one padded
+#                          column tile slot
+#   [64, 64, 64, 64]    -> 16.7M rows, K == 4 even s_last -> row-paired kernel
+#   [63, 63, 63, 63]    -> 15.8M rows, K == 4 odd s_last -> general kernel
+#                          (the pair path needs an even s_last)
+#   [16] * 6            -> 16.7M rows, K == 6, more mixed-radix digits
+#   [65536, 4]          -> 262k rows, s_last > 1024 -> multi-program row grid
 CARTESIAN_PROD_CASES = [
-    # small: launch-overhead dominated
     [8, 8],
-    # K == 2: general chunk kernel, KP == 2
     [4096, 4096],
-    # K == 3: general kernel with one padded column tile slot
-    [512, 512, 512],
-    # K == 4 with even s_last: the row-paired 8-wide store specialisation
-    [128, 128, 128, 128],
-    # K == 4 with odd s_last: general kernel (the pair path needs even s_last)
-    [127, 127, 127, 127],
-    # K == 6: more mixed-radix digits per program
+    [384, 384, 384],
+    [64, 64, 64, 64],
+    [63, 63, 63, 63],
     [16, 16, 16, 16, 16, 16],
-    # large s_last: more than one program along the row grid axis
     [65536, 4],
 ]
 
