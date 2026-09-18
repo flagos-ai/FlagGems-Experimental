@@ -280,7 +280,9 @@ def test_sparse_bsc_tensor_ccol_row_value_size(
     # The constructed tensor lives on the components' device (the reference runs
     # on the reference device, so compare against the input instead of `ref`).
     assert res.device.type == ccol.device.type == values.device.type
-    assert tuple(res.values().shape[-2:]) == (block_rows, block_cols)
+    # ATen block layout: values is (nnz, block_rows, block_cols, dense...), so
+    # the block shape sits at [1:3] even when a dense dimension is present.
+    assert tuple(res.values().shape[1:3]) == (block_rows, block_cols)
     assert res._nnz() == nnz
     _assert_same_dense(res, ref)
 
@@ -325,11 +327,11 @@ def test_sparse_bsc_tensor_infer_matches_explicit_size(
     ccol, row, values = _bsc_components(size, (block_rows, block_cols), nnz, seed, dev)
     if nnz == 0:
         pytest.skip("zero-nnz inference has no row extent to infer from")
-    inferred = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    inferred = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values, device=dev)
     assert tuple(inferred.shape)[0] <= size[0]
     assert tuple(inferred.shape)[1] <= size[1]
     explicit = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-        ccol, row, values, list(inferred.shape)
+        ccol, row, values, list(inferred.shape), device=dev
     )
     assert tuple(inferred.shape) == tuple(explicit.shape)
     assert _fingerprint(inferred)[5:] == _fingerprint(explicit)[5:]
@@ -806,38 +808,37 @@ def test_sparse_bsc_tensor_layout_argument():
 
 @pytest.mark.sparse_bsc_tensor
 def test_sparse_bsc_tensor_inference_estimator_errors():
-    # The estimator's own rejections. ccol is one-dimensional for a
-    # non-batched BSC tensor, so an unsqueezed row_indices has the wrong
-    # dimensionality, and a block layout needs at least three dimensions in
-    # values.
+    # The estimator's own rejections, taken from the shape-estimation path that
+    # the size-inferring overload shares with the native constructor. The
+    # arguments are passed through a closed-over argument so each case drives
+    # one rejection class after the other.
     dev = flag_gems.device
     ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 22, dev)
 
+    # (label, gems kwargs, ref kwargs, expected fragments)
     cases = [
         (
             "row dim mismatch",
-            lambda i, v: flag_gems.sparse_bsc_tensor_ccol_row_value(
-                ccol, i, values, device=dev
+            lambda: flag_gems.sparse_bsc_tensor_ccol_row_value(
+                ccol, row.unsqueeze(0), values, device=dev
             ),
-            lambda i, v: _ref_call(_ROW_VALUE, ccol, i, values),
-            row.unsqueeze(0),
+            lambda: _ref_call(_ROW_VALUE, ccol, row.unsqueeze(0), values),
             ["dimensionalities must be equal", "1", "2"],
         ),
         (
             "values too few dims",
-            lambda i, v: flag_gems.sparse_bsc_tensor_ccol_row_value(
-                ccol, row, v, device=dev
+            lambda: flag_gems.sparse_bsc_tensor_ccol_row_value(
+                ccol, row, values[0, 0], device=dev
             ),
-            lambda i, v: _ref_call(_ROW_VALUE, ccol, row, v),
-            values[0, 0],
+            lambda: _ref_call(_ROW_VALUE, ccol, row, values[0, 0]),
             ["values must have dimensionality"],
         ),
     ]
-    for label, gems_fn, ref_fn, arg, fragments in cases:
+    for label, gems_fn, ref_fn, fragments in cases:
         with pytest.raises(RuntimeError) as res_exc:
-            gems_fn(arg, values)
+            gems_fn()
         with pytest.raises(RuntimeError) as ref_exc:
-            ref_fn(arg, values)
+            ref_fn()
         assert str(res_exc.value) == str(
             ref_exc.value
         ), f"{label}: gems={res_exc.value!r} ref={ref_exc.value!r}"
@@ -882,8 +883,10 @@ def test_sparse_bsc_tensor_inference_zero_nnz_and_sparse_grid():
     ref2 = _ref_call(_ROW_VALUE, ccol2, row2, values2)
     res2 = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol2, row2, values2, device=dev)
     _assert_same(res2, ref2)
-    assert tuple(res2.shape) == (2, 3)
-    assert tuple(res2.values().shape[-2:]) == (2, 3)
+    # (max(row)+1) * block_rows = (0 + 1) * 2 rows, and
+    # (len(ccol) - 1) * block_cols = (3 - 1) * 3 columns.
+    assert tuple(res2.shape) == (2, 6)
+    assert tuple(res2.values().shape[1:3]) == (2, 3)
 
 
 @pytest.mark.sparse_bsc_tensor
@@ -947,9 +950,10 @@ def test_sparse_bsc_tensor_batched():
     _assert_same(res, ref)
     assert res.sparse_dim() == 2
     assert tuple(res.ccol_indices().shape) == tuple(ref.ccol_indices().shape)
-    # Every batch slot carries its own row block, so the inferred row extent is
-    # the full grid rather than the extent of the first batch entry.
-    assert tuple(res.shape) == (3, 4, 4)
+    # Measured: the inferred row extent is a single scalar for the whole batched
+    # tensor, taken from the LAST batch slot's row index (which is 0 here), so
+    # the plain dimension is (0 + 1) * 2 = 2 rather than the full grid.
+    assert tuple(res.shape) == (3, 2, 2)
     assert torch.equal(res.to_dense().cpu(), ref.to_dense().cpu())
 
     # The size-form overload takes the batched shape verbatim; the two agree
@@ -996,7 +1000,7 @@ def test_sparse_bsc_tensor_matches_reference_table():
     values = torch.arange(8, dtype=torch.float32, device=dev).reshape(2, 2, 2)
 
     explicit = flag_gems.sparse_bsc_tensor_ccol_row_value_size(
-        ccol, row, values, [4, 4]
+        ccol, row, values, [4, 4], device=dev
     )
     assert tuple(explicit.shape) == (4, 4)
     assert explicit.dtype == torch.float32
@@ -1008,11 +1012,47 @@ def test_sparse_bsc_tensor_matches_reference_table():
     assert tuple(explicit.ccol_indices().tolist()) == (0, 1, 2)
     assert tuple(explicit.row_indices().tolist()) == (0, 1)
 
-    inferred = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values)
+    inferred = flag_gems.sparse_bsc_tensor_ccol_row_value(ccol, row, values, device=dev)
     assert tuple(inferred.shape) == (4, 4)
     assert inferred._nnz() == 2
     assert torch.equal(inferred.to_dense().cpu(), explicit.to_dense().cpu())
     assert torch.equal(explicit.to_dense().cpu(), values.reshape(4, 4).cpu())
+
+
+@pytest.mark.sparse_bsc_tensor
+def test_sparse_bsc_tensor_builtin_cast_branch():
+    # The dtype-cast branch the supplied source carried a Triton kernel for is
+    # real, but it does NOT live in the constructor: it belongs to the
+    # ``torch.sparse_bsc_tensor`` Python builtin, which materialises the
+    # components in the requested dtype before construction (measured: with
+    # ``dtype=torch.float64`` the builtin returns float64 values that no longer
+    # alias the float32 input, while a matching dtype aliases). Pinning the
+    # builtin's contract here records where the cast actually happens, so a cast
+    # added to the constructor would still be caught by the rejection test above.
+    dev = flag_gems.device
+    ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 26, dev)
+
+    # Matching dtype: the components are stored as-is.
+    same = torch.sparse_bsc_tensor(ccol, row, values, [4, 4], dtype=values.dtype)
+    assert same.dtype == values.dtype
+    assert same.values().data_ptr() == values.data_ptr()
+    assert tuple(same.shape) == (4, 4)
+    assert same._nnz() == 2
+
+    # Differing dtype: the builtin converts, so the result does not alias.
+    for target in (torch.float64, torch.int32):
+        converted = torch.sparse_bsc_tensor(ccol, row, values, [4, 4], dtype=target)
+        assert converted.dtype == target
+        assert converted.values().dtype == target
+        assert converted.values().data_ptr() != values.data_ptr()
+        assert torch.equal(converted.values().cpu(), values.to(target).cpu())
+        assert tuple(converted.shape) == (4, 4)
+
+    # The inference form of the builtin applies the same conversion.
+    inferred = torch.sparse_bsc_tensor(ccol, row, values, dtype=torch.float64)
+    assert inferred.dtype == torch.float64
+    assert inferred.values().dtype == torch.float64
+    assert tuple(inferred.shape) == (4, 4)
 
 
 @pytest.mark.sparse_bsc_tensor
@@ -1045,12 +1085,20 @@ def test_sparse_bsc_tensor_repeated_dispatch():
 @pytest.mark.sparse_bsc_tensor
 def test_sparse_bsc_tensor_dispatch_sentinel():
     # Registration-path check: a sentinel wrapper on the key this operator is
-    # registered on must intercept both the packet and the builtin call forms,
-    # proving the shipped implementation is what executes rather than the
-    # native kernel. Per-key reachability was measured first (probe B on CPU,
-    # probe D on CUDA): both overloads compute the plain device key, and the
-    # sparse keys never see either call, which is why no sparse key is
+    # registered on must intercept the call forms that reach these two ATen
+    # overloads, proving the shipped implementation is what executes rather
+    # than the native kernel. Per-key reachability was measured first (probe B
+    # on CPU, probe D on CUDA): both overloads compute the plain device key,
+    # and the sparse keys never see either call, which is why no sparse key is
     # registered in _FULL_CONFIG.
+    #
+    # Scope note (measured, probe L): the Python builtin
+    # ``torch.sparse_bsc_tensor`` does NOT route through these two operators --
+    # it is a hand-written C++ binding that calls the shared
+    # ``sparse_compressed_tensor`` constructor directly, so no registration on
+    # these op names can intercept it. The builtin is therefore exercised only
+    # for its own (dtype-casting) contract in a separate test, and the sentinel
+    # below covers the two packet entry points this operator implements.
     lib = torch.library.Library("aten", "IMPL")
     hits = []
 
@@ -1117,12 +1165,13 @@ def test_sparse_bsc_tensor_dispatch_sentinel():
             )._nnz()
             == 2
         )
-        # The Python builtin entry points.
+        # The builtin does not reach these operators (probe L), so it is
+        # asserted to keep working but is deliberately NOT counted as a hit.
         assert torch.sparse_bsc_tensor(ccol, row, values, [4, 4])._nnz() == 2
         assert torch.sparse_bsc_tensor(ccol, row, values)._nnz() == 2
 
-        assert hits.count("size") >= 2, hits
-        assert hits.count("value") >= 2, hits
+        assert hits.count("size") >= 1, hits
+        assert hits.count("value") >= 1, hits
     finally:
         lib._destroy()
 
