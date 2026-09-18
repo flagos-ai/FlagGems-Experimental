@@ -1075,6 +1075,23 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    # sparse_bsc_tensor: two ATen overloads, per-key reachability measured with
+    # sentinel probes on this build (runs/sparse_bsc_tensor/native_probe_b.log
+    # CPU, native_probe_d_cuda.log CUDA). Both overloads are multi-dispatch
+    # factories whose inputs are plain strided tensors, so the call computes the
+    # plain device key and that is the only key that intercepts them:
+    #     .ccol_row_value_size  plain key HIT (CUDA/CPU), sparse keys dead
+    #     .ccol_row_value       plain key HIT (CUDA/CPU), sparse keys dead
+    # The packet-level layout= argument selects the constructor branch, so no
+    # sparse backend key is involved and none is registered here (contrast
+    # sparse_sampled_addmm below, whose input tensor IS sparse). The two
+    # overloads are registered separately because they are distinct ATen
+    # schemas with distinct kernels.
+    ("sparse_bsc_tensor.ccol_row_value", sparse_bsc_tensor_ccol_row_value),
+    (
+        "sparse_bsc_tensor.ccol_row_value_size",
+        sparse_bsc_tensor_ccol_row_value_size,
+    ),
     ("sparse_sampled_addmm", sparse_sampled_addmm, None, (SPARSE_CSR_DISPATCH_KEY,)),
     (
         "sparse_sampled_addmm.out",
