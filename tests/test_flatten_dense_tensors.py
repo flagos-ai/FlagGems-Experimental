@@ -381,8 +381,11 @@ def test_accuracy_flatten_dense_tensors_metadata_path(count, size):
 # skipped in the quick phase because it needs ~16 GiB of inputs plus the
 # equally large output and reference.
 BOUNDARY_TOTAL = (1 << 32) - 4
-WAVE = [BOUNDARY_TOTAL // 4] + [BOUNDARY_TOTAL // 4 + 1] * 3
-assert sum(WAVE) == BOUNDARY_TOTAL
+# Unequal wave sizes, none a multiple of the chunk size, summing exactly to
+# BOUNDARY_TOTAL. The module-level construction is asserted inside the test so
+# a mistake is a test failure, not a collection error.
+_QUARTER = BOUNDARY_TOTAL // 4
+WAVE = [_QUARTER + 1, _QUARTER, _QUARTER + 3, _QUARTER - 4]
 
 
 @pytest.mark.flatten_dense_tensors
@@ -392,6 +395,7 @@ assert sum(WAVE) == BOUNDARY_TOTAL
 )
 def test_accuracy_flatten_dense_tensors_over_32bit_offsets():
     dtype = torch.float32
+    assert sum(WAVE) == BOUNDARY_TOTAL, (sum(WAVE), BOUNDARY_TOTAL)
     tensors = [
         torch.zeros((size,), dtype=dtype, device=flag_gems.device) for size in WAVE
     ]
