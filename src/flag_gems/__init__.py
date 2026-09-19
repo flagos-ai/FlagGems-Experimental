@@ -1173,6 +1173,7 @@ _FULL_CONFIG = (
     ("tanh_", tanh_),
     ("tanh_backward", tanh_backward),
     ("tensor_split", tensor_split),
+    ("thnn_conv2d", thnn_conv2d),
     ("threshold", threshold),
     ("threshold_", threshold_),
     ("threshold_backward", threshold_backward),
