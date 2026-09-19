@@ -36,11 +36,12 @@ from . import conftest as cfg
 # BR=128 or 1 depending on K).
 if cfg.QUICK_MODE:
     SHAPES = [
+        [(7,)],  # flat copy: single 1-D input
         [(5,), (5,)],  # tile4: two 1-D inputs
         [(4, 7), (4, 7)],  # tile4: two 2-D inputs
+        [(5,), (5,), (5,), (5,), (5,)],  # tile8: five 1-D inputs
         [(2, 3, 4), (2, 3, 4)],  # _dstack_u3: 3-D, K = 4
-        [(3, 5), (3, 5, 2)],  # fused3: mixed promoted rank
-        [(2, 3, 2, 4), (2, 3, 3, 4)],  # fused_nd: rank 4, non-uniform K
+        [(3, 5), (3, 5, 2)],  # fused3: mixed promoted rank (2-D + 3-D)
     ]
     NON_UNIFORM_SHAPES = [[(2, 3, 2), (2, 3, 4)]]
     ND_SHAPES = [[(2, 3, 2, 4), (2, 3, 3, 4)]]
@@ -64,8 +65,9 @@ else:
         [(2, 3, 2), (2, 3, 4), (2, 3, 1)],  # contiguous, non-uniform K
         [(300, 5), (300, 5, 3)],  # multi-block rows, mixed rank
     ]
+    # Rank >= 4 only: lower ranks take the _run_3d wrapper even when the K
+    # values are non-uniform.
     ND_SHAPES = [
-        [(2, 3, 8), (2, 3, 8)],
         [(2, 3, 8, 5), (2, 3, 8, 5)],  # rank 4
         [(2, 3, 20, 5), (2, 3, 8, 5)],  # rank 4, non-uniform K
         [(2, 3, 8, 5, 6, 7), (2, 3, 8, 5, 6, 7)],  # rank 6
@@ -191,10 +193,11 @@ def test_accuracy_dstack_single_input_non_contiguous(source):
 @pytest.mark.parametrize(
     "shapes",
     [
-        [(4,), (4, 1)],  # 1-D + 2-D: promoted (1, 4, 1) + (4, 1, 1)
+        [(4,), (1, 4)],  # 1-D + 2-D: promoted (1, 4, 1) + (1, 4, 1)
         [(4,), (1, 4, 2)],  # 1-D + 3-D: promoted (1, 4, 1) + (1, 4, 2)
         [(4, 1), (4, 1, 2)],  # 2-D + 3-D: promoted (4, 1, 1) + (4, 1, 2)
         [(), (), ()],  # three 0-D inputs: promoted (1, 1, 1) each
+        [(), (1,)],  # 0-D + 1-D
         [(), (1, 1)],  # 0-D + 2-D
         [(), (1, 1, 2)],  # 0-D + 3-D
     ],
@@ -202,14 +205,33 @@ def test_accuracy_dstack_single_input_non_contiguous(source):
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_accuracy_dstack_mixed_ranks(shapes, dtype):
     # Native dstack promotes every input with atleast_3d before concatenating,
-    # so 0-D/1-D/2-D inputs mix freely as long as the promoted shapes agree:
-    # a 1-D (N,) reads as (1, N, 1) and a 2-D (M, N) as (M, N, 1).
+    # so 0-D/1-D/2-D inputs mix freely as long as the PROMOTED shapes agree:
+    # a 1-D (N,) reads as (1, N, 1), a 2-D (M, N) as (M, N, 1) and a 3-D as
+    # itself. Every case here was measured to succeed on this build; the
+    # promoted-shape disagreement cases live in the exception test below.
     inp = _gen_inputs(shapes, dtype)
     ref_inp = [utils.to_reference(t) for t in inp]
 
     ref_out = torch.ops.aten.dstack(ref_inp)
     res_out = flag_gems.dstack(inp)
     _assert_stack_equal(res_out, ref_out, inp)
+
+
+@pytest.mark.dstack
+@pytest.mark.parametrize(
+    "shapes",
+    [
+        [(4,), (4, 1)],  # promoted (1, 4, 1) vs (4, 1, 1): M disagrees
+        [(3, 5), (1, 3, 5)],  # promoted (1, 3, 1) vs (1, 3, 5): N disagrees
+    ],
+)
+def test_exception_dstack_mixed_rank_disagreement(shapes):
+    # Mixing ranks is legal only while the promoted (M, N) agree; these pairs
+    # look compatible in raw shape terms but not after atleast_3d, and native
+    # rejects them (measured) -- the implementation raises before launching.
+    inp = [torch.ones(s, device=flag_gems.device) for s in shapes]
+    with pytest.raises(RuntimeError):
+        flag_gems.dstack(inp)
 
 
 @pytest.mark.dstack
@@ -471,14 +493,15 @@ def test_exception_dstack_size_mismatch_fragment():
 @pytest.mark.parametrize(
     "dtypes",
     [
-        (torch.uint64, torch.int64),
-        (torch.uint64, torch.float32),
+        (torch.uint64, torch.int64),  # both unsigned-64 promotion paths
+        (torch.uint32, torch.int32),
+        (torch.uint16, torch.int16),
     ],
 )
 def test_exception_dstack_promotion_error(dtypes):
-    # Promotions the NumPy-style table cannot express raise on BOTH sides:
-    # native from cat()'s promotion, the implementation from promote_types
-    # (measured: uint16/uint32/uint64 promotion is unsupported on this build).
+    # float32 + int32 promotes (measured); these pairs do NOT, on either side:
+    # native raises from cat()'s promotion and the implementation from
+    # torch.promote_types with the same table.
     a = torch.ones(3, dtype=dtypes[0], device=flag_gems.device)
     b = torch.ones(3, dtype=dtypes[1], device=flag_gems.device)
     with pytest.raises(RuntimeError):
@@ -499,6 +522,8 @@ def test_exception_dstack_promotion_error(dtypes):
         (torch.int32, torch.float32),
         (torch.int64, torch.float16),
         (torch.bool, torch.uint8),
+        (torch.uint64, torch.float32),  # unsigned-64 to float IS supported
+        (torch.uint8, torch.int8),
     ],
 )
 def test_accuracy_dstack_promotion_supported(dtypes):
