@@ -285,7 +285,12 @@ def test_dim_requires_grad_and_meta():
     with torch.no_grad():
         assert flag_gems.dim(grad) == 2
     meta = torch.randn(2, 3, 4, device="meta")
-    assert flag_gems.dim(meta) == utils.to_reference(meta).dim()
+    # A meta tensor holds only sizes/strides metadata and cannot be copied to
+    # CPU, so the reference is the native ATen call on the meta tensor itself
+    # (dim never touches storage), cross-checked against a same-shape CPU
+    # tensor for the rank.
+    assert flag_gems.dim(meta) == torch.ops.aten.dim(meta)
+    assert flag_gems.dim(meta) == torch.randn(2, 3, 4).dim()
     assert flag_gems.dim(meta) == 3
 
 
