@@ -85,17 +85,6 @@ _FP16_ATOL = {
 # abs tolerance has to grow with it (measured 4.7e-2 at K_total=256).
 _TF32_EPS = 2**-11
 
-_DTYPE_EPS = {
-    torch.float16: 2**-10,
-    torch.bfloat16: 2**-7,
-    torch.float32: 2**-23,
-    torch.float64: 2**-52,
-}
-
-
-def _dtype_eps(dtype):
-    return _DTYPE_EPS[dtype]
-
 
 # The 1x1 path builds BLOCK_N from C_out
 # (min(32, max(16, 1 << (C_out - 1).bit_length()))), so exercise a few widths.
@@ -268,15 +257,14 @@ def test_accuracy_thnn_conv2d_tf32_precision(dtype):
         [1, 1],
         [0, 0],
     )
-    if dtype == torch.float32:
-        # tf32: 11-bit mantissa, so ~2^-11 * |out| * sqrt(K) is the expected
-        # scale; the measured residual is 4.7e-2 on |out| ~ 66.
-        tol = 8.0 * _TF32_EPS * float(ref64.abs().max().item())
-        assert float((res.to(torch.float64) - ref64).abs().max().item()) <= tol
-    else:
-        eps = _dtype_eps(dtype)
-        tol = 8.0 * eps * float(ref64.abs().max().item())
-        assert float((res.to(torch.float64) - ref64).abs().max().item()) <= tol
+    # The bound is the same _atol model used everywhere else in this file
+    # (precision x output scale), evaluated through the shared helper so the
+    # two assertions cannot drift apart. Measured residuals: 4.7e-2 at
+    # |out| ~ 66 for the tf32 entry, <= 0.5 * eps * |out| for the others.
+    scale = float(ref64.abs().max().item())
+    k_total = 4 * 8 * 8
+    tol = _atol(dtype, k_total, scale)
+    assert float((res.to(torch.float64) - ref64).abs().max().item()) <= tol
 
 
 @pytest.mark.thnn_conv2d
