@@ -119,6 +119,7 @@ from flag_gems.ops._nested_compute_contiguous_strides_offsets import (
     _nested_compute_contiguous_strides_offsets,
 )
 from flag_gems.ops._nested_sum_backward import _nested_sum_backward
+from flag_gems.ops._nested_tensor_storage_offsets import _nested_tensor_storage_offsets
 from flag_gems.ops._nested_tensor_strides import _nested_tensor_strides
 from flag_gems.ops._nested_view_from_buffer_copy import _nested_view_from_buffer_copy
 from flag_gems.ops._nnz import _nnz
@@ -1095,6 +1096,7 @@ __all__ = [
     "_native_batch_norm_legit_out",
     "_nested_compute_contiguous_strides_offsets",
     "_nested_sum_backward",
+    "_nested_tensor_storage_offsets",
     "_nested_tensor_strides",
     "_nested_view_from_buffer_copy",
     "_nnz",
