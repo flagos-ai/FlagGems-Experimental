@@ -168,7 +168,7 @@ def _exact_reference(case, go, x, weight):
     ref_x = utils.to_reference(x, True).detach().requires_grad_(True)
     ref_w = utils.to_reference(weight, True).detach().requires_grad_(True)
     y = torch.nn.functional.conv2d(ref_x, ref_w, None, (sh, sw), (ph, pw))
-    (g_x, g_w) = torch.autograd.grad(y, (ref_x, ref_w), grad_outputs=ref_go)
+    g_x, g_w = torch.autograd.grad(y, (ref_x, ref_w), grad_outputs=ref_go)
     g_b = ref_go.sum(dim=(0, 2, 3))
     return g_x, g_w, g_b
 
