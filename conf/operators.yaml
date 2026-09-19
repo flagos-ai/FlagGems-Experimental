@@ -70,6 +70,39 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _slow_conv2d_backward
+  description: 'Triple-output backward of the slow 2-D convolution: given the output
+
+    gradient `grad_output` (N, C_out, H_out, W_out), the forward input `self`
+
+    (N, C_in, H, W) and the forward `weight` (C_out, C_in, kH, kW), returns the
+
+    gradients with respect to each, as selected by the `bool[3] output_mask`
+
+    (a deselected output is returned as `None`). The result tuple is
+
+    `(grad_input, grad_weight, grad_bias)`. Six Triton kernels implement it: a
+
+    direct grad-input sweep, a small-spatial per-tap FMA grad-weight kernel and
+
+    an implicit-GEMM tensor-core grad-weight kernel (with a single-`co` FMA
+
+    branch for float64, where `tl.dot` has no fp64 lowering), a split-N atomic
+
+    grad-bias reduction and a single-program grad-bias variant, plus a tiny
+
+    fp32-to-float16/bfloat16 cast kernel for the low-precision grad-bias path.
+
+    '
+  for:
+  - _slow_conv2d_backward.output_mask
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Convolution
+  stages:
+  - alpha: '5.4'
 - id: _weight_norm
   description: 'Reparameterizes a module''s weight tensor by decoupling its magnitude
     (g)
