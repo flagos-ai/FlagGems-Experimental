@@ -2268,6 +2268,18 @@ ops:
   - Distribution
   stages:
   - beta: '5.3'
+- id: ccol_indices
+  description: Returns the compressed column indices of a sparse CSC/BSC tensor as
+    a zero-copy view.
+  for:
+  - ccol_indices
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: cdist
   description: 'Computes the p-norm distance between each pair of the two collections
     of row vectors.

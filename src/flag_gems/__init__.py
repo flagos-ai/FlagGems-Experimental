@@ -420,6 +420,7 @@ _FULL_CONFIG = (
     ("cat.out", cat_out),
     ("cauchy", cauchy),
     ("cauchy_", cauchy_),
+    ("ccol_indices", ccol_indices, None, (AUTOGRAD_DISPATCH_KEY,)),
     ("cdist", cdist),
     ("ceil", ceil),
     ("ceil.out", ceil_out),
