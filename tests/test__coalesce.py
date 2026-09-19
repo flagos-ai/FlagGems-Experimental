@@ -484,8 +484,8 @@ def test_accuracy__coalesce_sparse_dim_boundaries(nnd, size):
     ref_out = torch.ops.aten._coalesce.default(ref_inp)
     assert ref_out.is_coalesced() is True
 
-    res = flag_gems._coalesce(inp)
     if nnd <= 3:
+        res = flag_gems._coalesce(inp)
         _assert_same_structure(res, ref_out, torch.float32)
     else:
         with pytest.raises(NotImplementedError):
