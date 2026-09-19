@@ -57,6 +57,49 @@ NATIVE_TABLE_SNIPPET = {
     (torch.float16, torch.complex128): True,
 }
 
+# Exotic dtype attributes, guarded by hasattr: the pinned H20 build exposes
+# int1-int7/uint1-uint7/qint/quint/bits*/uint16-64 and every float8 flavour,
+# but the tests stay importable on builds that lack them.
+EXOTIC_DTYPES = [
+    name
+    for name in (
+        "int1",
+        "int2",
+        "int3",
+        "int4",
+        "int5",
+        "int6",
+        "int7",
+        "uint1",
+        "uint2",
+        "uint3",
+        "uint4",
+        "uint5",
+        "uint6",
+        "uint7",
+        "uint16",
+        "uint32",
+        "uint64",
+        "qint8",
+        "qint32",
+        "quint8",
+        "quint4x2",
+        "quint2x4",
+        "bits1x8",
+        "bits2x4",
+        "bits4x2",
+        "bits8",
+        "bits16",
+        "float8_e4m3fn",
+        "float8_e5m2",
+        "float8_e4m3fnuz",
+        "float8_e5m2fnuz",
+        "float8_e8m0fnu",
+        "float4_e2m1fn_x2",
+    )
+    if hasattr(torch, name)
+]
+
 
 @pytest.mark.can_cast
 @pytest.mark.parametrize("from_", DTYPES13)
@@ -98,6 +141,118 @@ def test_accuracy_can_cast_matches_native_table():
     for (from_, to), expected in NATIVE_TABLE_SNIPPET.items():
         res = flag_gems.can_cast(from_, to)
         assert res is expected, f"({from_}, {to}): got {res!r}, pinned {expected!r}"
+
+
+def _exotic(name):
+    return getattr(torch, name, None)
+
+
+# Pinned exotic-dtype expectations, measured against native torch.can_cast in
+# a flag_gems-free environment (runs/can_cast/probe/probe16_exotic_matrices.py
+# on the pinned H20 image, torch 2.8.0a0+nv25.05; identical on 2.11.0+cu129).
+# They follow ATen's c10::canCast predicate rather than the promotion-rank
+# model of the core grid: int1-int7/uint1-uint7/qint/quint/bits belong to NO
+# ATen category, so float32 -> int1 casts (True) while float32 -> int32 does
+# not (False); uint16/32/64 ARE in ATen's integral set (float32 -> uint16 is
+# False); float8/float4 are floating (float8 -> int32 is False, float8 ->
+# uint2 is True because uint2 is outside the integral set). Entries are
+# guarded so the module stays importable on builds lacking a dtype.
+_EXOTIC_PAIRS = {
+    ("int1", "int32"): True,
+    ("int32", "int1"): True,
+    ("int7", "int1"): True,
+    ("float32", "int1"): True,
+    ("int1", "float32"): True,
+    ("int1", "bool"): False,
+    ("bool", "uint7"): True,
+    ("uint3", "float32"): True,
+    ("uint16", "int32"): True,
+    ("int32", "uint16"): True,
+    ("float32", "uint16"): False,
+    ("uint16", "float32"): True,
+    ("float32", "bits8"): True,
+    ("bits8", "float32"): True,
+    ("qint8", "float32"): True,
+    ("float32", "qint8"): True,
+    ("complex64", "int1"): False,
+    ("complex128", "bits16"): False,
+    ("float8_e4m3fn", "int32"): False,
+    ("int32", "float8_e4m3fn"): True,
+    ("float8_e5m2", "uint2"): True,
+    ("float8_e5m2", "uint16"): False,
+    ("uint16", "float8_e5m2"): True,
+    ("float4_e2m1fn_x2", "int64"): False,
+    ("float8_e8m0fnu", "complex128"): True,
+}
+EXOTIC_NATIVE_PINNED = {
+    (_exotic(a), _exotic(b)): expected
+    for (a, b), expected in _EXOTIC_PAIRS.items()
+    if _exotic(a) is not None and _exotic(b) is not None
+}
+
+
+@pytest.mark.can_cast
+@pytest.mark.parametrize(
+    "from_,to,expected",
+    [
+        (from_, to, expected)
+        for (from_, to), expected in sorted(
+            EXOTIC_NATIVE_PINNED.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))
+        )
+    ],
+)
+def test_accuracy_can_cast_exotic_pinned(from_, to, expected):
+    # Direct-entry behaviour for dtype pairs outside the 13-dtype table: the
+    # native c10::canCast predicate, not a KeyError and not a blanket False.
+    res = flag_gems.can_cast(from_, to)
+    assert res is expected, f"({from_}, {to}): got {res!r}, pinned native {expected!r}"
+
+
+@pytest.mark.can_cast
+@pytest.mark.parametrize("name", EXOTIC_DTYPES)
+def test_accuracy_can_cast_exotic_family_rules(name):
+    # Family-level invariants of ATen's three-prohibition rule for every
+    # exotic dtype the build exposes (all values pinned from probe16).
+    dtype = getattr(torch, name)
+    # bool is its own category: nothing but bool casts into it.
+    assert flag_gems.can_cast(dtype, torch.bool) is False
+    assert flag_gems.can_cast(torch.bool, dtype) is True
+    # No exotic dtype is complex, so complex -> exotic is always rejected.
+    assert flag_gems.can_cast(torch.complex64, dtype) is False
+    if name.startswith(("float8", "float4")):
+        # ATen floating: rejected toward ATen-integral, allowed elsewhere.
+        assert flag_gems.can_cast(dtype, torch.int32) is False
+        assert flag_gems.can_cast(dtype, torch.float32) is True
+        assert flag_gems.can_cast(dtype, torch.float64) is True
+    elif name in ("uint16", "uint32", "uint64"):
+        # ATen integral: reachable from anything non-bool/non-complex, but
+        # floating sources are rejected toward it.
+        assert flag_gems.can_cast(dtype, torch.float32) is True
+        assert flag_gems.can_cast(torch.float32, dtype) is False
+        assert flag_gems.can_cast(torch.int32, dtype) is True
+    else:
+        # int1-7/uint1-7/qint/quint/bits are in no ATen set: only the bool and
+        # complex prohibitions apply, everything else casts both ways.
+        assert flag_gems.can_cast(dtype, torch.int32) is True
+        assert flag_gems.can_cast(torch.int32, dtype) is True
+        assert flag_gems.can_cast(dtype, torch.float32) is True
+        assert flag_gems.can_cast(torch.float32, dtype) is True
+
+
+@pytest.mark.can_cast
+def test_accuracy_can_cast_exotic_dispatched_path():
+    # The reported failure mode: exotic dtypes through the dispatched entry
+    # points must return the pinned native booleans, not raise KeyError.
+    # (After `import flag_gems` the dispatched calls route into the submitted
+    # implementation, so the pinned literals are the meaningful reference.)
+    for (from_, to), expected in sorted(
+        EXOTIC_NATIVE_PINNED.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))
+    ):
+        assert (
+            torch.can_cast(from_, to) is expected
+        ), f"torch.can_cast({from_}, {to}) diverged from pinned native"
+        assert torch.ops.aten.can_cast(from_, to) is expected
+        assert flag_gems.can_cast(from_, to) is expected
 
 
 @pytest.mark.can_cast

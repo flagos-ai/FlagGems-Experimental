@@ -70,18 +70,73 @@ for _a, _ra in _CATEGORY.items():
 _CAST = dict(_CAST)
 
 
+def _torch_dtypes(*names):
+    """The ``torch.dtype`` attributes that exist under ``names`` in this build."""
+    return {
+        d
+        for d in (getattr(torch, name, None) for name in names)
+        if isinstance(d, torch.dtype)
+    }
+
+
+# ATen's cast-safety predicate (c10::canCast, c10/core/ScalarType.h) needs the
+# three dtype sets exactly as c10 spells them. The integral set is narrower than
+# "any integer-looking dtype": it lists only uint8/int8/int16/int32/int64 and
+# uint16/uint32/uint64, so int1-int7, uint1-uint7, qint/quint and bits dtypes
+# are in no set at all and fall through to True in both directions.
+_COMPLEX = _torch_dtypes("complex32", "complex64", "complex128")
+_FLOATING = _torch_dtypes(
+    "float16",
+    "bfloat16",
+    "float32",
+    "float64",
+    "float8_e4m3fn",
+    "float8_e5m2",
+    "float8_e4m3fnuz",
+    "float8_e5m2fnuz",
+    "float8_e8m0fnu",
+    "float4_e2m1fn_x2",
+)
+_INTEGRAL = _torch_dtypes(
+    "uint8", "int8", "int16", "int32", "int64", "uint16", "uint32", "uint64"
+)
+
+
+def _native_can_cast(from_, to) -> bool:
+    """ATen's exact rule: three prohibitions, everything else allowed.
+
+    Not a rank order: ``float32 -> int1`` is True natively (int1 is outside
+    ATen's integral set) even though ``float32 -> int32`` is False.
+    """
+    if from_ in _COMPLEX and to not in _COMPLEX:
+        return False
+    if from_ in _FLOATING and to in _INTEGRAL:
+        return False
+    if from_ != torch.bool and to == torch.bool:
+        return False
+    return True
+
+
 def can_cast(from_, to) -> bool:
     """Return whether a tensor of dtype ``from_`` can be cast to ``to``.
 
-    Mirrors ``aten::can_cast(ScalarType from_, ScalarType to) -> bool``. ATen's
-    cast-safety rule is exactly a type-promotion category test:
-    ``can_cast(from_, to)`` is True iff ``rank(from_) <= rank(to)`` with
-    categories ``bool(0) < integral(1) < floating(2) < complex(3)``; all dtypes
-    inside one category cast freely to each other. Here that rule is a
-    precomputed lookup, since the inputs are dtype metadata: no tensor data and
-    no device is involved, so there is no per-element computation and no Triton
-    kernel (``triton.jit``/``pointwise_dynamic`` are intentionally omitted, as
-    for ``dense_dim``).
+    Mirrors ``aten::can_cast(ScalarType from_, ScalarType to) -> bool``. The
+    core 13-dtype grid is a precomputed lookup: for the dtypes in the pinned
+    suite, ATen's rule is a type-promotion category test, ``rank(from_) <=
+    rank(to)`` with categories ``bool(0) < integral(1) < floating(2) <
+    complex(3)``. Since the inputs are dtype metadata, there is no tensor data
+    and no device involved, so there is no per-element computation and no
+    Triton kernel (``triton.jit``/``pointwise_dynamic`` are intentionally
+    omitted, as for ``dense_dim``).
+
+    Every other ``torch.dtype`` pair (int1-int7, uint1-uint7, qint/quint,
+    bits*, float4_e2m1fn_x2, uint16/32/64, ...) is answered by
+    ``_native_can_cast``, ATen's ``c10::canCast`` evaluated rather than looked
+    up. Those dtypes are not a rank extension of the grid above, so the table
+    cannot cover them; evaluating the rule keeps the result identical to native
+    instead of raising ``KeyError``. Native returns a real bool for them (e.g.
+    ``float32 -> int1`` is True, because int1 is outside ATen's integral set),
+    so returning False for "unknown" dtypes would diverge from native.
 
     ``aten::can_cast`` is registered as a CompositeImplicitAutograd operator
     with no tensor argument, so ATen's dispatch table for it contains no
@@ -91,8 +146,19 @@ def can_cast(from_, to) -> bool:
     that the dispatched call paths ``torch.can_cast`` and
     ``torch.ops.aten.can_cast`` actually reach this function.
 
-    Dtype arguments are validated by the dispatcher before reaching the
-    implementation, so only ``torch.dtype`` inputs arrive through those paths.
+    Input validation is left to the caller. Native rejects non-``torch.dtype``
+    arguments (including dtype-name strings such as ``"int9"``) with a
+    ``TypeError`` at the dispatcher, before any implementation runs; the
+    string spellings accepted here are a direct-entry convenience and are not
+    reachable through ``torch.can_cast``. Because the C++ binding raises that
+    ``TypeError`` before dispatching, a Python-level re-registration cannot and
+    need not reproduce it.
     """
     logger.debug("GEMS CAN_CAST")
-    return _CAST[(from_, to)]
+    result = _CAST.get((from_, to))
+    if result is not None:
+        return result
+    if isinstance(from_, torch.dtype) and isinstance(to, torch.dtype):
+        return _native_can_cast(from_, to)
+    # Direct-entry strings and mixed pairs keep the documented table contract.
+    raise KeyError((from_, to))
