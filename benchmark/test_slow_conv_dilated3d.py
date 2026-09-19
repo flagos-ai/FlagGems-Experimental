@@ -88,6 +88,12 @@ class SlowConvDilated3DBenchmark(base.Benchmark):
             yield from _input_fn(shape, cur_dtype, self.device)
 
 
+class SlowConvDilated3DOutBenchmark(SlowConvDilated3DBenchmark):
+    def get_input_iter(self, cur_dtype):
+        for shape in self.shapes:
+            yield from _input_fn_out(shape, cur_dtype, self.device)
+
+
 @pytest.mark.slow_conv_dilated3d
 def test_slow_conv_dilated3d():
     # Dtype sweep: the repository's float sweep (fp16/fp32/bf16). The int and
@@ -101,6 +107,29 @@ def test_slow_conv_dilated3d():
         op_name="slow_conv_dilated3d",
         torch_op=torch.ops.aten.slow_conv_dilated3d,
         gems_op=flag_gems.slow_conv_dilated3d,
+        dtypes=consts.FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+def _input_fn_out(shape, dtype, device):
+    for args in _input_fn(shape, dtype, device):
+        x, w, ks, bias, s, p, d = args
+        cout = w.shape[0]
+        n = x.shape[0]
+        od = (x.shape[2] + 2 * p[0] - d[0] * (ks[0] - 1) - 1) // s[0] + 1
+        oh = (x.shape[3] + 2 * p[1] - d[1] * (ks[1] - 1) - 1) // s[1] + 1
+        ow = (x.shape[4] + 2 * p[2] - d[2] * (ks[2] - 1) - 1) // s[2] + 1
+        out = torch.empty((n, cout, od, oh, ow), device=device, dtype=dtype)
+        yield x, w, ks, bias, s, p, d, {"out": out}
+
+
+@pytest.mark.slow_conv_dilated3d_out
+def test_slow_conv_dilated3d_out():
+    bench = SlowConvDilated3DOutBenchmark(
+        op_name="slow_conv_dilated3d_out",
+        torch_op=torch.ops.aten.slow_conv_dilated3d.out,
+        gems_op=flag_gems.slow_conv_dilated3d_out,
         dtypes=consts.FLOAT_DTYPES,
     )
     bench.run()

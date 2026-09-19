@@ -27,6 +27,7 @@ arcsinh_out: test_asinh
 arctanh_out: test_atanh
 atan2_out: test_atan2
 alias_copy_out: test_alias_copy
+slow_conv_dilated3d_out: test_slow_conv_dilated3d
 as_strided_copy_out: test_as_strided_copy
 baddbmm_out: test_baddbmm
 nanmedian_out: test_nanmedian
