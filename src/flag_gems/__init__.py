@@ -68,6 +68,9 @@ registrar = GeneralOpRegistrar
 current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
+COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
+    torch._C.DispatchKey.CompositeImplicitAutograd.name
+)
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
 SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 
@@ -281,6 +284,12 @@ _FULL_CONFIG = (
         _values,
         None,
         (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "_version",
+        _version,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
     ),
     (
         "_weight_int4pack_mm_with_scales_and_zeros",
