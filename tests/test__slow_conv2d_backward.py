@@ -124,6 +124,19 @@ def _gen(shape, dtype):
     return torch.randn(shape, dtype=dtype, device=flag_gems.device)
 
 
+def _pick(predicate, fallback=0):
+    """First case in CONV2D_CASES satisfying ``predicate``.
+
+    QUICK_MODE truncates the list, so a positional ``CONV2D_CASES[3]`` would
+    not exist there; selecting by shape property keeps every test valid in both
+    modes and self-documenting about which branch it targets.
+    """
+    for case in CONV2D_CASES:
+        if predicate(case):
+            return case
+    return CONV2D_CASES[fallback]
+
+
 def _out_size(case, index):
     n, c_in, h, w, c_out, kh, kw, sh, sw, ph, pw = case
     if index == 0:
@@ -322,7 +335,7 @@ def test_accuracy__slow_conv2d_backward_mask_is_independent(dtype):
 def test_accuracy__slow_conv2d_backward_grad_input_only(dtype):
     """``output_mask=(True, False, False)`` is the grad_input kernel in
     isolation (the grad_weight and grad_bias kernels are not launched)."""
-    case = CONV2D_CASES[3]
+    case = _pick(lambda c: c[4] > 16)
     go, x, weight = _case_tensors(case, dtype)
     ref = _exact_reference(case, go, x, weight)
     res = GEMS_OP(
@@ -346,7 +359,7 @@ def test_accuracy__slow_conv2d_backward_grad_weight_only(dtype):
     """``output_mask=(False, True, False)`` is the grad_weight kernel in
     isolation -- for fp16/bf16 this is the branch that has to zero-fill the
     atomic-add accumulator, so a stale-buffer bug shows up here."""
-    case = CONV2D_CASES[4]
+    case = _pick(lambda c: c[1] >= 32)
     go, x, weight = _case_tensors(case, dtype)
     ref = _exact_reference(case, go, x, weight)
     res = GEMS_OP(
@@ -371,7 +384,7 @@ def test_accuracy__slow_conv2d_backward_grad_bias_only(dtype):
     isolation. grad_bias is exactly ``grad_output.sum(dim=(0, 2, 3))`` and is
     compared against that closed form rather than autograd, so the assertion is
     independent of the reference's convolution path."""
-    case = CONV2D_CASES[4]
+    case = _pick(lambda c: c[1] >= 32)
     go, x, weight = _case_tensors(case, dtype)
     res = GEMS_OP(
         go,
@@ -518,6 +531,11 @@ def test_accuracy__slow_conv2d_backward_repeat_dispatch():
     dtype = torch.float32
     go, x, weight = _case_tensors(case, dtype)
     ref = _exact_reference(case, go, x, weight)
+    rel = [
+        case[1] * case[5] * case[6],
+        case[1] * case[5] * case[6],
+        case[0] * _out_size(case, 0) * _out_size(case, 1),
+    ]
     for _ in range(3):
         res = GEMS_OP(
             go,
@@ -533,7 +551,8 @@ def test_accuracy__slow_conv2d_backward_repeat_dispatch():
                 res[index],
                 ref[index].to(dtype),
                 dtype,
-                reduce_dim=[case[1] * 9, case[1] * 9, 50][index],
+                reduce_dim=rel[index],
+                atol=_atol(case, dtype, index, ref[index], rel[index]) / rel[index],
             )
         assert torch.ops.aten.dim(x) == 4
 
@@ -573,11 +592,17 @@ def test_accuracy__slow_conv2d_backward_fresh_outputs():
         res2[0].data_ptr() != res[0].data_ptr()
     ), "repeated calls must reuse no buffer"
     for index in range(3):
+        rel_index = [
+            case[1] * case[5] * case[6],
+            case[1] * case[5] * case[6],
+            case[0] * _out_size(case, 0) * _out_size(case, 1),
+        ][index]
         utils.gems_assert_close(
             res2[index],
             ref[index].to(torch.float32),
             torch.float32,
-            reduce_dim=[case[1] * 9, case[1] * 9, 50][index],
+            reduce_dim=rel_index,
+            atol=_atol(case, torch.float32, index, ref[index], rel_index) / rel_index,
         )
 
 
@@ -594,29 +619,56 @@ def test_accuracy__slow_conv2d_backward_out_overload_grad_input():
     case = CONV2D_CASES[2]
     dtype = torch.float64
     go, x, weight = _case_tensors(case, dtype)
-    gi = torch.full_like(x, 7.0)
-    gw = torch.full_like(weight, 7.0)
-    gb = torch.full((case[4],), 7.0, dtype=dtype, device=flag_gems.device)
     ref = _exact_reference(case, go, x, weight)
+
+    # The out buffers must be derived from the ALREADY-converted base tensors:
+    # ``utils.to_reference`` converts each input independently, so building a
+    # buffer from the original and then passing a fresh conversion of it to the
+    # op would compare two unrelated storages under --ref=cpu.
+    ref_x = utils.to_reference(x)
+    ref_w = utils.to_reference(weight)
+    gi = ref_x.clone().fill_(7.0)
+    gw = ref_w.clone().fill_(7.0)
+    gb = torch.full((case[4],), 7.0, dtype=dtype, device=ref_x.device)
 
     r = ATEN_OP_GRAD_INPUT(
         utils.to_reference(go),
-        utils.to_reference(x),
-        utils.to_reference(weight),
+        ref_x,
+        ref_w,
         [case[5], case[6]],
         [case[7], case[8]],
         [case[9], case[10]],
-        grad_input=utils.to_reference(gi),
-        grad_weight=utils.to_reference(gw),
-        grad_bias=utils.to_reference(gb),
+        grad_input=gi,
+        grad_weight=gw,
+        grad_bias=gb,
     )
     assert r[0].data_ptr() == gi.data_ptr()
     assert r[1].data_ptr() == gw.data_ptr()
     assert r[2].data_ptr() == gb.data_ptr()
-    assert not torch.equal(gi, torch.full_like(x, 7.0))
-    utils.gems_assert_close(gi, ref[0].to(dtype), dtype, reduce_dim=case[1] * 9)
-    utils.gems_assert_close(gw, ref[1].to(dtype), dtype, reduce_dim=case[1] * 9)
-    utils.gems_assert_close(gb, ref[2].to(dtype), dtype, reduce_dim=50)
+    assert not torch.equal(
+        gi, torch.full_like(gi, 7.0)
+    ), "the out buffer must have been overwritten"
+    utils.gems_assert_close(
+        gi,
+        ref[0].to(dtype),
+        dtype,
+        reduce_dim=case[1] * 9,
+        atol=_atol(case, dtype, 0, ref[0], case[1] * 9) / (case[1] * 9),
+    )
+    utils.gems_assert_close(
+        gw,
+        ref[1].to(dtype),
+        dtype,
+        reduce_dim=case[1] * 9,
+        atol=_atol(case, dtype, 1, ref[1], case[1] * 9) / (case[1] * 9),
+    )
+    utils.gems_assert_close(
+        gb,
+        ref[2].to(dtype),
+        dtype,
+        reduce_dim=50,
+        atol=_atol(case, dtype, 2, ref[2], 50) / 50,
+    )
 
 
 @pytest.mark._slow_conv2d_backward
@@ -635,27 +687,49 @@ def test_accuracy__slow_conv2d_backward_out_overload_output_mask_out():
     dtype = torch.float64
     go, x, weight = _case_tensors(case, dtype)
     ref = _exact_reference(case, go, x, weight)
-    o0 = torch.empty_like(x)
-    o1 = torch.empty_like(weight)
-    o2 = torch.empty((case[4],), dtype=dtype, device=flag_gems.device)
+    # Derived from the converted bases, not converted independently -- see the
+    # comment in the .grad_input test above.
+    ref_x = utils.to_reference(x)
+    ref_w = utils.to_reference(weight)
+    o0 = torch.empty_like(ref_x)
+    o1 = torch.empty_like(ref_w)
+    o2 = torch.empty((case[4],), dtype=dtype, device=ref_x.device)
     r = ATEN_OP_OUT(
         utils.to_reference(go),
-        utils.to_reference(x),
-        utils.to_reference(weight),
+        ref_x,
+        ref_w,
         [case[5], case[6]],
         [case[7], case[8]],
         [case[9], case[10]],
         (True, True, True),
-        out0=utils.to_reference(o0),
-        out1=utils.to_reference(o1),
-        out2=utils.to_reference(o2),
+        out0=o0,
+        out1=o1,
+        out2=o2,
     )
     assert r[0].data_ptr() == o0.data_ptr()
     assert r[1].data_ptr() == o1.data_ptr()
     assert r[2].data_ptr() == o2.data_ptr()
-    utils.gems_assert_close(o0, ref[0].to(dtype), dtype, reduce_dim=case[1] * 9)
-    utils.gems_assert_close(o1, ref[1].to(dtype), dtype, reduce_dim=case[1] * 9)
-    utils.gems_assert_close(o2, ref[2].to(dtype), dtype, reduce_dim=50)
+    utils.gems_assert_close(
+        o0,
+        ref[0].to(dtype),
+        dtype,
+        reduce_dim=case[1] * 9,
+        atol=_atol(case, dtype, 0, ref[0], case[1] * 9) / (case[1] * 9),
+    )
+    utils.gems_assert_close(
+        o1,
+        ref[1].to(dtype),
+        dtype,
+        reduce_dim=case[1] * 9,
+        atol=_atol(case, dtype, 1, ref[1], case[1] * 9) / (case[1] * 9),
+    )
+    utils.gems_assert_close(
+        o2,
+        ref[2].to(dtype),
+        dtype,
+        reduce_dim=50,
+        atol=_atol(case, dtype, 2, ref[2], 50) / 50,
+    )
 
 
 # ---------------------------------------------------------------------------
