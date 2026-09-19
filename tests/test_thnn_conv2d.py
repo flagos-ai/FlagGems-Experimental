@@ -496,10 +496,8 @@ def test_thnn_conv2d_registration_contract():
     weight = torch.randn(4, 3, 3, 3, device=flag_gems.device)
     bias = torch.randn(4, device=flag_gems.device)
     direct = flag_gems.thnn_conv2d(inp, weight, (3, 3), bias, (1, 1), (1, 1))
-    # The record-reached self-registration of the op must exist under the
-    # CUDA-family backend key (the key the harness sets CUDA_VISIBLE_DEVICES
-    # for); confirm the schema resolves and the directly-called result is a
-    # real convolution, not a passthrough.
+    # The direct call must compute a real convolution (not a passthrough), and
+    # both aten overloads the registration contract relies on must resolve.
     ref = _reference(inp, weight, bias, (3, 3), (1, 1), (1, 1))
     assert direct.shape == (2, 4, 7, 8)
     utils.gems_assert_close(
