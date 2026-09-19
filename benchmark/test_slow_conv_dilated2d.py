@@ -21,20 +21,35 @@ import flag_gems
 
 from . import base, consts
 
+# (N, C_in, H, W, C_out, KH, KW, stride, padding, dilation)
+#
+# The shape list is PINNED rather than taken from the harness default: those
+# defaults are 1-D/2-D pointwise shapes, and this op consumes a 10-element
+# convolution descriptor. The shapes span all four tuning regimes of the
+# implementation (fp16/bf16 tensor-core dot, fp32 1-tap ieee, fp32 5x5 ieee,
+# fp32 3x3 tf32x3) and the conv-family spatial sizes used by
+# benchmark/test_conv2d.py, so the timings are comparable across the family.
+BENCH_SHAPES = [
+    (2, 32, 128, 128, 32, 3, 3, 1, 1, 1),
+    (2, 32, 128, 128, 32, 3, 3, 2, 1, 1),
+    (2, 32, 128, 128, 32, 3, 3, 1, 1, 2),
+    (4, 32, 64, 64, 32, 3, 3, 1, 0, 2),
+    (4, 32, 64, 64, 32, 3, 3, 2, 1, 2),
+    (4, 32, 64, 64, 32, 5, 5, 1, 2, 1),
+    (8, 16, 64, 64, 16, 5, 5, 2, 2, 1),
+    (8, 16, 64, 64, 16, 1, 1, 1, 0, 1),
+]
+
 
 class SlowConvDilated2DBenchmark(base.GenericBenchmark):
-    def set_more_shapes(self):
-        # (N, C_in, H, W, C_out, KH, KW, stride, padding, dilation)
-        return [
-            (1, 64, 128, 128, 64, 3, 3, 1, 1, 1),
-            (1, 64, 128, 128, 64, 3, 3, 2, 1, 1),
-            (1, 64, 128, 128, 64, 3, 3, 1, 1, 2),
-            (1, 128, 112, 112, 32, 5, 5, 2, 1, 1),
-            (1, 128, 112, 112, 32, 5, 5, 1, 2, 1),
-            (4, 32, 32, 32, 32, 3, 3, 1, 0, 2),
-            (4, 32, 64, 64, 32, 3, 3, 2, 1, 2),
-            (8, 16, 64, 64, 16, 5, 5, 2, 2, 1),
-        ]
+    def set_shapes(self, shape_file_path=None):
+        # Bypass core_shapes.yaml: the harness defaults there are pointwise
+        # shapes and this op needs a full convolution descriptor.
+        self.shapes = BENCH_SHAPES
+
+    def get_input_iter(self, dtype):
+        for shape in self.shapes:
+            yield from _input_fn(shape, dtype, self.device)
 
 
 def _input_fn(shape, dtype, device):
