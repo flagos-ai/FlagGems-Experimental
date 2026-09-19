@@ -12328,6 +12328,24 @@ ops:
   - Tensor
   stages:
   - stable: '2.2'
+- id: slow_conv_transpose2d
+  description: >-
+    Applies a 2-D transposed convolution over an NCHW input: self is
+    (N, C_in, H, W) (or (C_in, H, W) unbatched), weight is
+    (C_in, C_out, KH, KW), and the optional bias is (C_out,). kernel_size,
+    stride, padding, output_padding and dilation are (KH, KW) / (SH, SW) /
+    (PH, PW) / (OPH, OPW) / (DH, DW) pairs. Returns a fresh
+    (N, C_out, H_out, W_out) tensor with
+    H_out = (H - 1) * SH - 2 * PH + DH * (KH - 1) + OPH + 1.
+  for:
+  - slow_conv_transpose2d
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Convolution
+  stages:
+  - alpha: '5.4'
 - id: smooth_l1_loss
   description: Compute the smooth L1 loss between input and target tensors.
   for:
