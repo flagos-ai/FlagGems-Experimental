@@ -285,7 +285,8 @@ def test_dim_requires_grad_and_meta():
     with torch.no_grad():
         assert flag_gems.dim(grad) == 2
     meta = torch.randn(2, 3, 4, device="meta")
-    assert flag_gems.dim(meta) == 4
+    assert flag_gems.dim(meta) == utils.to_reference(meta).dim()
+    assert flag_gems.dim(meta) == 3
 
 
 @pytest.mark.dim
