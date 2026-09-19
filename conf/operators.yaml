@@ -4777,6 +4777,19 @@ ops:
   - Math
   stages:
   - alpha: '5.4'
+- id: flatten_dense_tensors
+  description: 'Flattens a list of dense tensors into a single 1-D contiguous buffer,
+    concatenating them in list order (the dtype is the promotion of the input dtypes).
+    '
+  for:
+  - flatten_dense_tensors
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: flip
   description: Reverse the order of an n-D tensor along given axis in dims.
   for:
