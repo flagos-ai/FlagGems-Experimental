@@ -46,14 +46,20 @@ if not QUICK_MODE:
 # to the CUDA native fp32 output at 1e-4 would be testing the reference's error.
 # The upcast reference is the higher-precision one; the tolerance stays the
 # repository default and no per-case loosening is applied.
+#
+# The upcast reference runs on the SAME device as the caller (CUDA in the
+# full phase, CPU when --ref=cpu is in effect) so that accuracy_utils.to_cpu,
+# which asserts a CPU reference under --ref=cpu, sees the device it expects.
+# utils.to_reference(x, True) does exactly that routing: it moves to CPU when
+# TO_CPU and upcasts to float64 when the device (or the CPU fallback) can.
 def _ref_op(
     inp, weight, kernel, bias=None, stride=(1, 1), padding=(0, 0), dilation=(1, 1)
 ):
     return torch.ops.aten.slow_conv_dilated2d(
-        inp.to(torch.float64),
-        weight.to(torch.float64),
+        utils.to_reference(inp, True),
+        utils.to_reference(weight, True),
         kernel,
-        None if bias is None else bias.to(torch.float64),
+        None if bias is None else utils.to_reference(bias, True),
         stride,
         padding,
         dilation,
@@ -403,23 +409,24 @@ def test_accuracy_slow_conv_dilated2d_output_too_small_raises(in_shape, w_shape)
 @pytest.mark.parametrize("shape", SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_accuracy_slow_conv_dilated2d_out_variant(shape, dtype):
-    # The .out overload exists natively on this build. Its CUDA-side kernel is
-    # the CompositeExplicitAutograd decomposition (dispatch dump), i.e. it
-    # resizes the buffer to the base overload's shape and then calls the BASE
-    # op - which is the registered FlagGems kernel. So the .out call path
-    # really does execute the submitted implementation, and this test pins
-    # native's measured .out contract: same object returned, buffer written,
-    # values equal to the base overload.
+    # The .out overload exists natively on this build (dispatch dump: its CUDA
+    # kernel is the CompositeExplicitAutograd decomposition, which resizes the
+    # buffer and then calls the BASE op). FlagGems does NOT register the .out
+    # overload - this batch registers base overloads only - so the pinned
+    # contract here is native's own .out behaviour, measured: the SAME buffer
+    # object comes back and it holds the base overload's answer.
+    #
+    # The .out call is exercised on the device (the path a user gets) and its
+    # written values are checked against the fp64-upcast reference on the
+    # reference's own device, so the assertion holds in both CI phases.
     in_shape, w_shape = shape
     inp = _gen_input(in_shape, dtype)
     weight = _gen_input(w_shape, dtype)
     bias = _gen_input((w_shape[0],), dtype)
 
-    res = flag_gems.slow_conv_dilated2d(
-        inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1)
-    )
+    ref_up = _ref_op(inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1)).to(dtype)
     out = torch.empty(
-        (in_shape[0], w_shape[0], res.shape[2], res.shape[3]),
+        (in_shape[0], w_shape[0], ref_up.shape[2], ref_up.shape[3]),
         dtype=dtype,
         device=flag_gems.device,
     )
@@ -427,9 +434,15 @@ def test_accuracy_slow_conv_dilated2d_out_variant(shape, dtype):
         inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1), out=out
     )
     assert r is out
-    assert r.shape == res.shape
-    # The two base-overload runs must agree with each other exactly.
-    torch.testing.assert_close(r, res, atol=0, rtol=0)
+    assert r.shape == ref_up.shape
+    utils.gems_assert_close(r, ref_up, dtype, reduce_dim=_reduce_dim(w_shape))
+
+    # And the submitted implementation, on the same operands, against the same
+    # upcast reference (the value check that must hold for the kernel).
+    res = flag_gems.slow_conv_dilated2d(
+        inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1)
+    )
+    utils.gems_assert_close(res, ref_up, dtype, reduce_dim=_reduce_dim(w_shape))
 
 
 @pytest.mark.slow_conv_dilated2d
