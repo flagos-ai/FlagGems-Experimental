@@ -532,10 +532,14 @@ def test_accuracy_slow_conv_dilated3d_out_variant(dtype):
 
     # The native lane goes through TF32 by default, so it is pinned against the
     # upcast fp64 reference with TF32 off (the tests/test_conv3d.py pattern).
+    # The reference buffer lives on the REFERENCE's device: under --ref=cpu
+    # (CI's quick phase) the reference inputs are CPU copies while the
+    # implementation's buffer is CUDA, and native .out rejects a device
+    # mismatch.
     ref_x = utils.to_reference(x, upcast=True)
     ref_w = utils.to_reference(w, upcast=True)
     ref_b = utils.to_reference(bias, upcast=True)
-    ref_out = torch.full((1, 3, 3, 3, 3), -7.0, dtype=dtype, device=flag_gems.device)
+    ref_out = torch.full((1, 3, 3, 3, 3), -7.0, dtype=dtype, device=ref_x.device)
     ref_ret = _native(
         ref_x.to(dtype),
         ref_w.to(dtype),
