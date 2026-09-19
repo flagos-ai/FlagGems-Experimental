@@ -318,6 +318,7 @@ _FULL_CONFIG = (
         None,
         (SPARSE_DISPATCH_KEY, SPARSE_CSR_DISPATCH_KEY),
     ),
+    ("_slow_conv2d_backward.output_mask", _slow_conv2d_backward),
     ("_slow_conv2d_forward", _slow_conv2d_forward),
     ("_softmax", softmax),
     ("_softmax.out", softmax_out),
@@ -1244,14 +1245,6 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
-    # sparse_bsc_tensor: like the CSC sibling, a layout-less call resolves on
-    # the plain device key (registered unconditionally by register_impl) while
-    # an explicit layout=torch.sparse_bsc argument selects
-    # CompositeImplicitAutograd (measured with poison sentinels: the layout-
-    # qualified form hit a composite-only sentinel; the layout-less forms did
-    # not). Both keys therefore carry the implementation; without the extra
-    # key every layout-qualified call form would run the native composite
-    # instead of the shipped wrapper.
     (
         "sparse_bsc_tensor.ccol_row_value",
         sparse_bsc_tensor_ccol_row_value,
