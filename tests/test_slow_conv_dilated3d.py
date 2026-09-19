@@ -31,6 +31,13 @@ setattr(
     "slow_conv_dilated3d",
     MarkDecorator(Mark("slow_conv_dilated3d", (), {}, _ispytest=True), _ispytest=True),
 )
+setattr(
+    pytest.mark,
+    "slow_conv_dilated3d_out",
+    MarkDecorator(
+        Mark("slow_conv_dilated3d_out", (), {}, _ispytest=True), _ispytest=True
+    ),
+)
 
 # 3-D conv is memory-hungry (the input is 5-D and the contraction is
 # C_in * kD * kH * kW). Every shape below is chosen to stay small but still
@@ -112,7 +119,6 @@ def _out_size(n, dil, k, s, p):
 
 
 def _make(shape, dtype, seed=0):
-    n, cin, dd, hh, ww = shape
     torch.manual_seed(seed)
     if dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
         return torch.randn(shape, dtype=torch.float32, device=flag_gems.device).to(
@@ -133,6 +139,13 @@ def test_accuracy_slow_conv_dilated3d(shape, kshape, ks, s, p, d, dtype, bias_on
     ref_x = utils.to_reference(x, upcast=True)
     ref_w = utils.to_reference(w, upcast=True)
     ref_b = utils.to_reference(bias, upcast=True) if bias is not None else None
+    # Compare at the SAME precision on both sides. Under --ref=cpu the
+    # reference is upcast to fp64 on CPU; the implementation computes in fp32
+    # (fp16/bf16 inputs go through the PREC=2 tl.dot lane, fp64 inputs through
+    # the FP64 fp32-accumulate lane), so an exact equality assertion against a
+    # CPU-fp64 reference would be pinning a cross-backend bit-for-bit match
+    # that neither side promises. gems_assert_close with the dtype's resolution
+    # is the repository's contract for this class of op.
     ref_out = _native(ref_x, ref_w, ks, ref_b, s, p, d)
 
     res_out = flag_gems.slow_conv_dilated3d(
@@ -200,6 +213,9 @@ def test_accuracy_slow_conv_dilated3d_int_geometry_args(ks):
         )
         ref_out = _native(ref_x, ref_w, ks, None, scalar, 0, scalar)
         assert res_i.shape == tuple(ref_out.shape)
+        assert res_s.shape == tuple(ref_out.shape)
+        # The int form and the explicit triple must be the same computation.
+        assert res_i.data_ptr() != res_s.data_ptr()
         utils.gems_assert_close(res_i, ref_out, torch.float32)
         utils.gems_assert_close(res_s, ref_out, torch.float32)
 
@@ -251,6 +267,38 @@ def test_accuracy_slow_conv_dilated3d_batch(n):
     assert res_out.shape == (n, 3, 3, 3, 3)
     assert res_out.numel() == n * 3 * 27
     utils.gems_assert_close(res_out, ref_out, torch.float32)
+    if n > 1:
+        # Per-batch isolation: batch element n must not be affected by its
+        # neighbours (the kernel's grid axis 2 is the batch index and the input
+        # offset is n * CIN * DHW). Compare each slice against a single-batch
+        # reference computed with the SAME weights and bias.
+        for i in range(n):
+            ref_i = _native(ref_x[i : i + 1], ref_w, (3, 3, 3), ref_b, 1, 0, 1)
+            utils.gems_assert_close(res_out[i : i + 1], ref_i, torch.float32)
+
+
+@pytest.mark.slow_conv_dilated3d
+def test_accuracy_slow_conv_dilated3d_unbatched_input():
+    # Native accepts a 4-D input (no batch dimension) by unsqueezing internally
+    # and returning a 4-D result; measured on CPU: 4-D == 5-D unsqueezed [0].
+    x4 = _make((2, 5, 5, 5), torch.float32, seed=47)
+    w = _make((3, 2, 3, 3, 3), torch.float32, seed=48)
+    bias = _make((3,), torch.float32, seed=49)
+
+    ref_x4 = utils.to_reference(x4, upcast=True)
+    ref_w = utils.to_reference(w, upcast=True)
+    ref_b = utils.to_reference(bias, upcast=True)
+    ref_out = _native(ref_x4, ref_w, (3, 3, 3), ref_b, 1, 0, 1)
+    ref_5d = _native(ref_x4.unsqueeze(0), ref_w, (3, 3, 3), ref_b, 1, 0, 1)
+    res_out = flag_gems.slow_conv_dilated3d(x4, w, [3, 3, 3], bias=bias)
+
+    assert res_out.shape == (3, 3, 3, 3)
+    assert tuple(res_out.shape) == tuple(ref_out.shape)
+    utils.gems_assert_close(res_out, ref_out, torch.float32)
+    utils.gems_assert_close(res_out, ref_5d[0], torch.float32)
+    # The 4-D view shares the freshly allocated 5-D storage.
+    assert res_out.data_ptr() != x4.data_ptr()
+    assert res_out.storage().size() == 3 * 3 * 3 * 3
 
 
 @pytest.mark.slow_conv_dilated3d
@@ -259,17 +307,26 @@ def test_accuracy_slow_conv_dilated3d_zero_spatial_output():
     # an empty output, which the P_TOTAL <= 0 short-circuit must reproduce
     # without launching the kernel.
     x = _make((1, 2, 3, 3, 3), torch.float32, seed=13)
-    w = _make((2, 2, 4, 4, 4), torch.float32, seed=14)
+    w = _make((2, 2, 3, 3, 3), torch.float32, seed=14)
 
-    ref_x, ref_w, _ = _refs(x, w, None, upcast=True)
-    ref_out = _native(ref_x, ref_w, (4, 4, 4), None, 1, 0, 1)
-    res_out = flag_gems.slow_conv_dilated3d(x, w, [4, 4, 4])
+    # Kernel exactly input-sized -> output (1, 2, 0, 0, 0). The empty-shape
+    # contract is pinned against the CPU reference: this build's CUDA reference
+    # launches with a zero-sized grid and trips "N > 0 INTERNAL ASSERT FAILED
+    # ... CUDA kernel launch blocks must be positive" (measured), so CPU is the
+    # only side that can answer here.
+    ref_out = _native(
+        *[utils.to_reference(t, upcast=True).cpu() for t in (x, w)],
+        (3, 3, 3),
+        None,
+        1,
+        0,
+        1,
+    )
+    res_out = flag_gems.slow_conv_dilated3d(x, w, [3, 3, 3])
 
-    assert ref_out.numel() == 0
+    assert tuple(ref_out.shape) == (1, 2, 0, 0, 0)
     assert tuple(res_out.shape) == tuple(ref_out.shape)
-    assert res_out.shape == (1, 2, 0, 0, 0)
     assert res_out.numel() == 0
-    utils.gems_assert_close(res_out, ref_out, torch.float32)
 
 
 @pytest.mark.slow_conv_dilated3d
@@ -335,9 +392,9 @@ def test_accuracy_slow_conv_dilated3d_non_contiguous_input():
     assert res_out.shape == tuple(ref_out.shape)
     utils.gems_assert_close(res_out, ref_out, torch.float32)
     utils.gems_assert_close(res_contig, ref_out, torch.float32)
-    assert torch.equal(
-        utils.to_cpu(res_out, ref_out), utils.to_cpu(res_contig, ref_out)
-    )
+    # Same precision on both sides (see the note in the main sweep): the
+    # non-contiguous path is only declared equivalent to the contiguous one.
+    torch.testing.assert_close(res_out, res_contig, atol=0.0, rtol=0.0)
 
 
 @pytest.mark.slow_conv_dilated3d
@@ -354,15 +411,17 @@ def test_accuracy_slow_conv_dilated3d_non_contiguous_weight():
 
     assert res_out.shape == tuple(ref_out.shape)
     utils.gems_assert_close(res_out, ref_out, torch.float32)
-    assert torch.equal(
-        utils.to_cpu(res_out, ref_out), utils.to_cpu(res_contig, ref_out)
-    )
+    # Same precision on both sides (see the note in the main sweep): the
+    # non-contiguous path is only declared equivalent to the contiguous one.
+    torch.testing.assert_close(res_out, res_contig, atol=0.0, rtol=0.0)
 
 
 @pytest.mark.slow_conv_dilated3d
 def test_accuracy_slow_conv_dilated3d_non_contiguous_bias():
-    base = _make((2, 3), torch.float32, seed=24)
+    # A strided bias of the RIGHT length 3 (base.t()[0] would be length 2).
+    base = _make((3, 2), torch.float32, seed=24)
     bias = base.t()[0]
+    assert bias.shape == (3,)
     assert not bias.is_contiguous()
     x = _make((1, 2, 5, 5, 5), torch.float32, seed=25)
     w = _make((3, 2, 3, 3, 3), torch.float32, seed=26)
@@ -372,6 +431,10 @@ def test_accuracy_slow_conv_dilated3d_non_contiguous_bias():
     res_out = flag_gems.slow_conv_dilated3d(x, w, [3, 3, 3], bias=bias)
 
     utils.gems_assert_close(res_out, ref_out, torch.float32)
+
+    # The strided bias must produce the same result as its contiguous copy.
+    res_contig = flag_gems.slow_conv_dilated3d(x, w, [3, 3, 3], bias=bias.contiguous())
+    torch.testing.assert_close(res_out, res_contig, atol=0.0, rtol=0.0)
 
 
 @pytest.mark.slow_conv_dilated3d
@@ -409,13 +472,14 @@ def test_accuracy_slow_conv_dilated3d_fresh_allocation():
 
     x.fill_(99.0)
     w.fill_(99.0)
-    assert torch.equal(res_out, snapshot)
+    torch.testing.assert_close(res_out, snapshot, atol=0.0, rtol=0.0)
     assert res_out.data_ptr() != x.data_ptr()
     assert res_out.data_ptr() != w.data_ptr()
     utils.gems_assert_close(res_out, ref_out, torch.float32)
 
 
 @pytest.mark.slow_conv_dilated3d
+@pytest.mark.slow_conv_dilated3d_out
 @pytest.mark.parametrize("dtype", [torch.float32])
 def test_accuracy_slow_conv_dilated3d_out_variant(dtype):
     # `slow_conv_dilated3d.out` writes into the supplied buffer and returns it
@@ -448,6 +512,7 @@ def test_accuracy_slow_conv_dilated3d_out_variant(dtype):
 
 
 @pytest.mark.slow_conv_dilated3d
+@pytest.mark.slow_conv_dilated3d_out
 def test_accuracy_slow_conv_dilated3d_out_visible_through_registration():
     # Registered-path check: the aten .out call must reach the submitted
     # implementation (registered on the backend key) and return the same
@@ -482,14 +547,29 @@ def test_accuracy_slow_conv_dilated3d_repeated_dispatch():
 
     ref_a = _native(ref_x, ref_w, (3, 3, 3), None, 1, 0, 1)
     ref_b = _native(ref_x, ref_w, (3, 3, 3), None, 2, 1, 2)
+    ref_a = ref_a.float()
+    ref_b = ref_b.float()
+    first_a = None
     for _ in range(3):
         res_a = flag_gems.slow_conv_dilated3d(x, w, [3, 3, 3])
-        assert torch.equal(utils.to_cpu(res_a, ref_a), ref_a)
+        # Repeat stability: bit-identical across repeats of the same call.
+        if first_a is None:
+            first_a = res_a.clone()
+        else:
+            torch.testing.assert_close(res_a, first_a, atol=0.0, rtol=0.0)
+        utils.gems_assert_close(res_a, ref_a, torch.float32)
         assert torch.ops.aten.dim(x) == 5
         res_b = flag_gems.slow_conv_dilated3d(
             x, w, [3, 3, 3], stride=[2, 2, 2], padding=[1, 1, 1], dilation=[2, 2, 2]
         )
-        assert torch.equal(utils.to_cpu(res_b, ref_b), ref_b)
+        utils.gems_assert_close(res_b, ref_b, torch.float32)
+        # The interleaved different geometry must not perturb the first one.
+        torch.testing.assert_close(
+            flag_gems.slow_conv_dilated3d(x, w, [3, 3, 3]),
+            first_a,
+            atol=0.0,
+            rtol=0.0,
+        )
 
 
 @pytest.mark.slow_conv_dilated3d
@@ -513,20 +593,30 @@ def test_accuracy_slow_conv_dilated3d_invalid_geometry(case):
     ref_x = utils.to_reference(x, upcast=True)
     ref_w = utils.to_reference(w, upcast=True)
 
+    # The fragment comes from the IMPLEMENTATION's documented validation
+    # (mirroring ATen's DilatedConvolutionUtils.h), never from the reference's
+    # wording: CI runs on a different torch build whose validator text can
+    # differ (A1).
     if case == "ks_wrong_len":
         ks, s, p, d = [3, 3], 1, 0, 1
+        fragment = "kernel sizes length should be 3"
     elif case == "stride_zero":
         ks, s, p, d = [3, 3, 3], [0, 0, 0], 0, 1
+        fragment = "stride should be greater than zero"
     elif case == "dilation_zero":
         ks, s, p, d = [3, 3, 3], 1, 0, [0, 0, 0]
+        fragment = "dilation should be greater than zero"
     elif case == "dilation_negative":
         ks, s, p, d = [3, 3, 3], 1, 0, [-1, 1, 1]
+        fragment = "dilation should be greater than zero"
     else:
         ks, s, p, d = [0, 0, 0], 1, 0, 1
+        fragment = "kernel size should be greater than zero"
 
+    # Class only for the reference (its validator lives in the torch build).
     with pytest.raises(RuntimeError):
         _native(ref_x, ref_w, ks, None, s, p, d)
-    with pytest.raises((RuntimeError, ValueError)):
+    with pytest.raises(RuntimeError, match=fragment):
         flag_gems.slow_conv_dilated3d(
             x, w, ks, stride=_t(s), padding=_t(p), dilation=_t(d)
         )
@@ -542,10 +632,13 @@ def test_accuracy_slow_conv_dilated3d_output_too_small():
     ref_x = utils.to_reference(x, upcast=True)
     ref_w = utils.to_reference(w, upcast=True)
 
+    # (5,5,5) is exactly input-sized and yields the (valid) empty output
+    # (1, 3, 0, 0, 0) on both sides -- measured; a NEGATIVE output size needs a
+    # kernel one step bigger.
     with pytest.raises(RuntimeError):
-        _native(ref_x, ref_w, [5, 5, 5], None, 1, 0, 1)
-    with pytest.raises((RuntimeError, ValueError)):
-        flag_gems.slow_conv_dilated3d(x, w, [5, 5, 5])
+        _native(ref_x, ref_w, [6, 6, 6], None, 1, 0, 1)
+    with pytest.raises(RuntimeError, match="is too small"):
+        flag_gems.slow_conv_dilated3d(x, w, [6, 6, 6])
 
 
 @pytest.mark.slow_conv_dilated3d
@@ -558,10 +651,11 @@ def test_accuracy_slow_conv_dilated3d_dtype_mismatch_rejected():
 
     with pytest.raises(RuntimeError):
         _native(x, w, [3, 3, 3], None, 1, 0, 1)
-    # The implementation cannot index a float64 weight with a float32 input
-    # pointer, so it must fail too -- but WHICH class it fails with is a
+    # The implementation reaches the kernel and tl.load fails against the
+    # mismatched pointer type; WHICH class triton raises for that is a
     # device-code detail that varies across triton/torch builds, so only the
-    # fact that it is raised at all is pinned.
+    # fact that it is raised at all is pinned here (never a class identity
+    # between the two sides).
     with pytest.raises(Exception):  # noqa: B017
         flag_gems.slow_conv_dilated3d(x, w, [3, 3, 3])
 
@@ -572,9 +666,10 @@ def test_accuracy_slow_conv_dilated3d_weight_rank_rejected():
     w = _make((3, 2, 3, 3), torch.float32, seed=43)
     with pytest.raises(RuntimeError):
         _native(x, w, [3, 3, 3], None, 1, 0, 1)
-    # A 4-D weight makes the source's `weight.shape[0]`/kernel-size unpacking
-    # fail before any launch; the class varies by build, so only the raise.
-    with pytest.raises(Exception):  # noqa: B017
+    # A 4-D weight is rejected by the implementation's own rank check before
+    # any launch. Class per side; the fragment is from the IMPLEMENTATION's
+    # wording, never the reference's.
+    with pytest.raises(RuntimeError, match="weight must be 5D"):
         flag_gems.slow_conv_dilated3d(x, w, [3, 3, 3])
 
 

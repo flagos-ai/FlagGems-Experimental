@@ -201,6 +201,42 @@ def slow_conv_dilated3d(
     padding = _triple(padding)
     dilation = _triple(dilation)
 
+    # Host-side bounds checks, in the order the native checker performs them
+    # (ATen/native/DilatedConvolutionUtils.h: slow_conv_dilated_shape_check<3>,
+    # order measured on this build): size-argument lengths -> positivity of
+    # kernel/stride/dilation -> input rank -> output-size non-negativity ->
+    # weight rank -> CIN -> bias. Native raises RuntimeError for each; the
+    # divisions below would otherwise raise ZeroDivisionError for a zero
+    # stride/dilation on this runtime, which is a different class for the same
+    # rejection.
+    if len(kernel_size) != 3:
+        raise RuntimeError(
+            f"kernel sizes length should be 3, but got {len(kernel_size)}"
+        )
+    if len(stride) != 3:
+        raise RuntimeError(f"strides length should be 3, but got {len(stride)}")
+    if len(dilation) != 3:
+        raise RuntimeError(f"dilations length should be 3, but got {len(dilation)}")
+    if len(padding) != 3:
+        raise RuntimeError(f"pads length should be 3, but got {len(padding)}")
+    if not all(k > 0 for k in kernel_size):
+        raise RuntimeError(
+            f"kernel size should be greater than zero, but got {list(kernel_size)}"
+        )
+    if not all(s > 0 for s in stride):
+        raise RuntimeError(
+            f"stride should be greater than zero, but got {list(stride)}"
+        )
+    if not all(d > 0 for d in dilation):
+        raise RuntimeError(
+            f"dilation should be greater than zero, but got {list(dilation)}"
+        )
+
+    if self.dim() not in (4, 5):
+        raise RuntimeError(
+            f"input must be 4D or 5D tensor but got {self.dim()}D tensor"
+        )
+
     # Host-side normalisation of the operands, mirroring what the native ATen
     # kernels do before they run (see NaiveDilatedConvolution.cpp:
     # `input.contiguous()`, `weight.contiguous()`, `bias.contiguous()`), and
@@ -208,11 +244,16 @@ def slow_conv_dilated3d(
     # contiguous offset formula `(n*CIN + ci)*DHW + id*HW + ih*W + iw`, so a
     # strided (e.g. transposed) operand must be materialised first.
     input = self if self.is_contiguous() else self.contiguous()
-    weight = weight if weight.is_contiguous() else weight.contiguous()
-    bias = bias if (bias is None or bias.is_contiguous()) else bias.contiguous()
+    # Native accepts a batch-less 4-D input by internally unsqueezing to 5-D
+    # and returning the 4-D result (NaiveDilatedConvolution.cpp: `input` is
+    # `is_batch ? input.contiguous() : input.contiguous().unsqueeze(0)` and the
+    # output is left unsqueezed for the unbatched case). The same is done here,
+    # and the squeeze is a view of the same fresh storage.
+    unbatched = self.dim() == 4
+    if unbatched:
+        input = input.unsqueeze(0)
 
     N, CIN, D, H, W = input.shape
-    COUT = weight.shape[0]
     KD, KH, KW = kernel_size
     SD, SH, SW = stride
     PD, PH, PW = padding
@@ -223,7 +264,31 @@ def slow_conv_dilated3d(
     WO = (W + 2 * PW - DW * (KW - 1) - 1) // SW + 1
     P_TOTAL = DO * HO * WO
 
+    if DO < 0 or HO < 0 or WO < 0:
+        raise RuntimeError(
+            f"calculated output size {DO} {HO} {WO} is too small "
+            "(all sizes must be non-negative)"
+        )
+    if weight.dim() != 5:
+        raise RuntimeError(
+            f"weight must be 5D tensor but got {weight.dim()}D tensor dim={weight.dim()}"
+        )
+    weight = weight if weight.is_contiguous() else weight.contiguous()
+    COUT = weight.shape[0]
+    if CIN != weight.shape[1]:
+        raise RuntimeError(
+            f"Need input of dimension 5 and input.size[1] == {weight.shape[1]} "
+            f"but got input to be of shape {list(input.shape)}"
+        )
+    bias = bias if (bias is None or bias.is_contiguous()) else bias.contiguous()
+    if bias is not None and bias.shape != (COUT,):
+        raise RuntimeError(
+            f"bias must be 1D tensor of length {COUT} but got shape {list(bias.shape)}"
+        )
+
     out = torch.empty((N, COUT, DO, HO, WO), dtype=input.dtype, device=input.device)
+    if unbatched:
+        out = out[0]
     if P_TOTAL <= 0 or COUT == 0 or N == 0:
         return out
     if CIN == 0:
@@ -293,6 +358,28 @@ def slow_conv_dilated3d(
             num_warps=num_warps,
         )
     return out
+
+
+def slow_conv_dilated3d_out(
+    self, weight, kernel_size, bias=None, stride=1, padding=0, dilation=1, *, out
+) -> torch.Tensor:
+    """``aten::slow_conv_dilated3d.out``: writes the result into ``out`` and
+    returns it (identity). Native accepts any writable ``out`` of the right
+    dtype (a wrongly-shaped buffer is resized with a deprecation warning; a
+    wrongly-typed one is rejected by the dispatcher), so the same tolerance is
+    applied here by simply writing through the kernel's output view.
+    """
+    logger.debug("GEMS SLOW_CONV_DILATED3D_OUT")
+    res = slow_conv_dilated3d(
+        self,
+        weight,
+        kernel_size,
+        bias=bias,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+    )
+    return out.copy_(res)
 
 
 def _fill_bias_or_zero(out, bias):
