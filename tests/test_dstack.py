@@ -109,9 +109,12 @@ def _assert_stack_equal(res, ref, inputs):
     utils.gems_assert_equal(res, ref)
     assert res.shape == ref.shape
     assert res.dtype == ref.dtype
-    # Fresh allocation: the result never aliases any input.
-    for t in inputs:
-        assert res.data_ptr() != t.data_ptr()
+    # Fresh allocation: the result never aliases any input. A zero-element
+    # CUDA tensor has no backing page, so data_ptr is not an observable
+    # freshness signal there (native shares pointers between empty tensors).
+    if res.numel() > 0:
+        for t in inputs:
+            assert res.data_ptr() != t.data_ptr()
 
 
 @pytest.mark.dstack
@@ -124,12 +127,13 @@ def test_accuracy_dstack(shape, dtype):
     ref_out = torch.ops.aten.dstack(ref_inp)
     res_out = flag_gems.dstack(inp)
 
-    expected_k = (
-        sum(t.shape[-1] for t in ref_inp) if ref_inp[0].dim() >= 1 else len(ref_inp)
-    )
+    # K counts dim-2 slices after atleast_3d promotion: (1, N, 1) for 1-D
+    # inputs, (M, N, 1) for 2-D, t.shape[2] for rank >= 3, len(list) for 0-D.
+    expected_k = sum(1 if t.dim() <= 2 else int(t.shape[2]) for t in ref_inp)
     if ref_inp[0].dim() >= 3:
         assert tuple(res_out.shape) == tuple(ref_out.shape)
     else:
+        assert tuple(res_out.shape) == tuple(ref_out.shape)
         assert tuple(res_out.shape)[-1] == expected_k
     _assert_stack_equal(res_out, ref_out, inp)
 
@@ -187,18 +191,19 @@ def test_accuracy_dstack_single_input_non_contiguous(source):
 @pytest.mark.parametrize(
     "shapes",
     [
-        [(4,), (4, 1)],  # 1-D + 2-D
-        [(4,), (4, 1, 2)],  # 1-D + 3-D
-        [(4, 1), (4, 1, 2)],  # 2-D + 3-D
-        [(), (), ()],  # three 0-D inputs
-        [(), (1,)],  # 0-D + 1-D
+        [(4,), (4, 1)],  # 1-D + 2-D: promoted (1, 4, 1) + (4, 1, 1)
+        [(4,), (1, 4, 2)],  # 1-D + 3-D: promoted (1, 4, 1) + (1, 4, 2)
+        [(4, 1), (4, 1, 2)],  # 2-D + 3-D: promoted (4, 1, 1) + (4, 1, 2)
+        [(), (), ()],  # three 0-D inputs: promoted (1, 1, 1) each
+        [(), (1, 1)],  # 0-D + 2-D
         [(), (1, 1, 2)],  # 0-D + 3-D
     ],
 )
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_accuracy_dstack_mixed_ranks(shapes, dtype):
     # Native dstack promotes every input with atleast_3d before concatenating,
-    # so 0-D/1-D/2-D inputs mix freely as long as the promoted shapes agree.
+    # so 0-D/1-D/2-D inputs mix freely as long as the promoted shapes agree:
+    # a 1-D (N,) reads as (1, N, 1) and a 2-D (M, N) as (M, N, 1).
     inp = _gen_inputs(shapes, dtype)
     ref_inp = [utils.to_reference(t) for t in inp]
 
@@ -226,11 +231,11 @@ def test_accuracy_dstack_non_uniform_k(shapes):
 def test_accuracy_dstack_nd(shapes, noncontig):
     # Rank >= 4 inputs run the fused_nd kernel, which walks every dimension
     # except dim 2 through a stride/size metadata table. A transposed input
-    # exercises the non-contiguous metadata path; dim 2 stays the concat axis
-    # because transpose(-1, -2) only touches the last two dims.
+    # exercises the non-contiguous metadata path; the swap is between dim 0
+    # and the last dim so the dim-2 (concat) sizes stay as parametrised.
     inp = _gen_inputs(shapes, torch.float32)
     if noncontig:
-        inp = [t.transpose(-1, -2) for t in inp]
+        inp = [t.transpose(0, -1) for t in inp]
     ref_inp = [utils.to_reference(t) for t in inp]
 
     ref_out = torch.ops.aten.dstack(ref_inp)
@@ -379,8 +384,10 @@ def test_accuracy_dstack_mutation_isolation():
 def test_accuracy_dstack_repeated_dispatch():
     # Repeated dispatches plus an unrelated aten op in between must not
     # corrupt results (the fused paths build per-call device metadata tables).
-    base = torch.randn(3, 5, device=flag_gems.device)
-    inp = [base, base.t()]
+    # Both inputs share the promoted shape (3, 5, 1): one is a transposed
+    # (non-contiguous) view, the other a fresh contiguous tensor.
+    base = torch.randn(5, 3, device=flag_gems.device)
+    inp = [base.t(), base.t().clone()]
     ref_inp = [utils.to_reference(t) for t in inp]
     ref_out = torch.ops.aten.dstack(ref_inp)
     for _ in range(3):
@@ -464,17 +471,47 @@ def test_exception_dstack_size_mismatch_fragment():
 @pytest.mark.parametrize(
     "dtypes",
     [
-        (torch.float32, torch.int32),
         (torch.uint64, torch.int64),
+        (torch.uint64, torch.float32),
     ],
 )
 def test_exception_dstack_promotion_error(dtypes):
-    # Both sides report RuntimeError: native through its promotion rules, the
-    # implementation through torch.promote_types with the same rules.
+    # Promotions the NumPy-style table cannot express raise on BOTH sides:
+    # native from cat()'s promotion, the implementation from promote_types
+    # (measured: uint16/uint32/uint64 promotion is unsupported on this build).
     a = torch.ones(3, dtype=dtypes[0], device=flag_gems.device)
     b = torch.ones(3, dtype=dtypes[1], device=flag_gems.device)
     with pytest.raises(RuntimeError):
         flag_gems.dstack([a, b])
+    with pytest.raises(RuntimeError):
+        torch.ops.aten.dstack(
+            [utils.to_reference(a).cpu(), utils.to_reference(b).cpu()]
+            if cfg.TO_CPU
+            else [utils.to_reference(a), utils.to_reference(b)]
+        )
+
+
+@pytest.mark.dstack
+@pytest.mark.parametrize(
+    "dtypes",
+    [
+        (torch.float32, torch.int32),
+        (torch.int32, torch.float32),
+        (torch.int64, torch.float16),
+        (torch.bool, torch.uint8),
+    ],
+)
+def test_accuracy_dstack_promotion_supported(dtypes):
+    # The complementary half of the promotion contract: these pairs DO
+    # promote, and the result carries the promoted dtype with cast values.
+    a = torch.ones(3, dtype=dtypes[0], device=flag_gems.device)
+    b = torch.ones(3, dtype=dtypes[1], device=flag_gems.device)
+    ref_inp = [utils.to_reference(a), utils.to_reference(b)]
+
+    ref_out = torch.ops.aten.dstack(ref_inp)
+    res_out = flag_gems.dstack([a, b])
+    assert res_out.dtype == ref_out.dtype
+    _assert_stack_equal(res_out, ref_out, [a, b])
 
 
 # ---- dstack.out -----------------------------------------------------------
@@ -497,8 +534,9 @@ def test_accuracy_dstack_out(shape, dtype):
     utils.gems_assert_equal(res_buffer, ref_out)
     assert res_buffer.shape == ref_out.shape
     assert res_buffer.dtype == ref_out.dtype
-    for t in inp:
-        assert res_buffer.data_ptr() != t.data_ptr()
+    if res_buffer.numel() > 0:
+        for t in inp:
+            assert res_buffer.data_ptr() != t.data_ptr()
 
 
 @pytest.mark.dstack_out
