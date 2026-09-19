@@ -428,9 +428,14 @@ def test_accuracy_slow_conv_transpose2d_unbatched_3d(dtype):
     )
     assert res.dim() == 4
     assert res.shape[0] == 1
-    # The batched comparison derives its reference from the SAME already-created
-    # tensor (never a separately converted view -- the --ref=cpu trap).
-    batched = _gen_input((1, 3, 8, 9), dtype)
+    # The unbatched result must equal the batched call on the SAME data, so the
+    # batched input is derived from the SAME already-created tensor by
+    # re-viewing it (never a separately generated tensor and never a separately
+    # converted view -- the --ref=cpu trap). Note this must happen AFTER the
+    # reference was built, because building it (from the clone) does not touch
+    # `inp`, while a native call would have resized `inp` to (1, 3, 8, 9) and
+    # made the reshape below a no-op.
+    batched = inp.reshape(1, 3, 8, 9)
     res_batched = flag_gems.slow_conv_transpose2d(
         batched, weight, (3, 3), None, (1, 1), (0, 0), (0, 0), (1, 1)
     )
