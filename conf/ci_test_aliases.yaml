@@ -69,3 +69,4 @@ _new_zeros_with_same_feature_meta_out: test__new_zeros_with_same_feature_meta
 sparse_mask_out: test_sparse_mask
 _indices_copy_out: test__indices_copy
 _make_per_tensor_quantized_tensor_out: test__make_per_tensor_quantized_tensor
+dstack_out: test_dstack
