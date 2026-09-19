@@ -193,6 +193,10 @@ _FULL_CONFIG = (
         "_native_batch_norm_legit_no_training",
         _native_batch_norm_legit_no_training,
     ),
+    (
+        "_nested_compute_contiguous_strides_offsets",
+        _nested_compute_contiguous_strides_offsets,
+    ),
     ("_nested_sum_backward", _nested_sum_backward),
     ("_nested_view_from_buffer_copy", _nested_view_from_buffer_copy),
     ("_pdist_backward", _pdist_backward),
