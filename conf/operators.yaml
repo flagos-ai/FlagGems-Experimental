@@ -53,6 +53,18 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.4'
+- id: _nested_tensor_strides
+  description: Returns a zero-copy view of the per-tensor strides metadata of a nested
+    tensor.
+  for:
+  - _nested_tensor_strides
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _reshape_alias
   description: 'Creates a view of the input tensor with the given size and stride,
 
