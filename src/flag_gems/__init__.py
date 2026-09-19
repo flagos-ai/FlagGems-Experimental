@@ -555,6 +555,8 @@ _FULL_CONFIG = (
     ("dot", dot),
     ("dsplit.array", dsplit),
     ("dsplit.int", dsplit),
+    ("dstack", dstack),
+    ("dstack.out", dstack_out),
     ("elu", elu),
     ("elu_", elu_),
     ("elu_backward", elu_backward),
