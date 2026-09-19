@@ -112,11 +112,9 @@ ops:
   stages:
   - alpha: '5.4'
 - id: _values_copy
-  description: 'Returns a freshly allocated copy of the values of a sparse COO tensor
+  description: Returns a freshly allocated copy of the values of a sparse COO tensor
     (shape `nnz` plus the dense dimensions, hybrid COO included) as a dense strided
     tensor, or a plain copy of the input when the input is strided.
-
-    '
   for:
   - _values_copy
   labels:
