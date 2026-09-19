@@ -127,6 +127,7 @@ _FULL_CONFIG = (
     ("_cudnn_rnn_backward", cudnn_rnn_backward),
     ("_cummin_helper", _cummin_helper),
     ("_dim_arange", _dim_arange),
+    ("_dimI", _dimI, None, (SPARSE_DISPATCH_KEY,)),
     ("_dyn_quant_pack_4bit_weight", _dyn_quant_pack_4bit_weight),
     ("_efficient_attention_backward", efficient_attention_backward),
     ("_embedding_bag_dense_backward", _embedding_bag_dense_backward),
