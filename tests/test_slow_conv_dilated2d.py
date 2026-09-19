@@ -164,6 +164,32 @@ def test_accuracy_slow_conv_dilated2d_asymmetric_params(shape, dtype):
 
 @pytest.mark.slow_conv_dilated2d
 @pytest.mark.parametrize("shape", SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_accuracy_slow_conv_dilated2d_unbatched_3d(shape, dtype):
+    # A 3-D (unbatched CHW) input is legal on this build: native treats it as a
+    # batch of one and returns an UNBATCHED output (measured on CPU and CUDA:
+    # op(x_3d) == op(x_4d).squeeze(0)). The wrapper unsqueezes/squeezes the
+    # same way (conv_transpose2d precedent).
+    in_shape, w_shape = shape
+    inp = _gen_input(in_shape[1:], dtype)
+    weight = _gen_input(w_shape, dtype)
+    bias = _gen_input((w_shape[0],), dtype)
+
+    ref_out = _ref_op(inp, weight, w_shape[2:], bias).to(dtype)
+    res_out = flag_gems.slow_conv_dilated2d(inp, weight, w_shape[2:], bias)
+
+    assert (
+        res_out.shape
+        == tuple(ref_out.shape)
+        == (w_shape[0], in_shape[2] - 2, in_shape[3] - 2)
+    )
+    assert res_out.dtype == dtype
+    assert res_out.dim() == 3
+    utils.gems_assert_close(res_out, ref_out, dtype, reduce_dim=_reduce_dim(w_shape))
+
+
+@pytest.mark.slow_conv_dilated2d
+@pytest.mark.parametrize("shape", SHAPES)
 def test_accuracy_slow_conv_dilated2d_int64(shape):
     # int64: the CUDA native kernel REJECTS int64 (measured on this build:
     # RuntimeError "slow_conv_dilated<> not implemented for 'Long'") while the
@@ -414,19 +440,28 @@ def test_accuracy_slow_conv_dilated2d_out_variant(shape, dtype):
     # buffer and then calls the BASE op). FlagGems does NOT register the .out
     # overload - this batch registers base overloads only - so the pinned
     # contract here is native's own .out behaviour, measured: the SAME buffer
-    # object comes back and it holds the base overload's answer.
+    # object comes back and it holds EXACTLY the base overload's answer (same
+    # kernel, same operands, bit-identical on every dtype).
     #
-    # The .out call is exercised on the device (the path a user gets) and its
-    # written values are checked against the fp64-upcast reference on the
-    # reference's own device, so the assertion holds in both CI phases.
+    # The reference side is the same base overload on the reference device, so
+    # the comparison route is identical in both CI phases; the buffer written
+    # through .out is checked to hold the same values the base overload wrote.
     in_shape, w_shape = shape
     inp = _gen_input(in_shape, dtype)
     weight = _gen_input(w_shape, dtype)
     bias = _gen_input((w_shape[0],), dtype)
 
-    ref_up = _ref_op(inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1)).to(dtype)
+    ref_base = torch.ops.aten.slow_conv_dilated2d(
+        utils.to_reference(inp),
+        utils.to_reference(weight),
+        w_shape[2:],
+        utils.to_reference(bias),
+        (1, 1),
+        (0, 0),
+        (1, 1),
+    )
     out = torch.empty(
-        (in_shape[0], w_shape[0], ref_up.shape[2], ref_up.shape[3]),
+        (in_shape[0], w_shape[0], ref_base.shape[2], ref_base.shape[3]),
         dtype=dtype,
         device=flag_gems.device,
     )
@@ -434,14 +469,18 @@ def test_accuracy_slow_conv_dilated2d_out_variant(shape, dtype):
         inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1), out=out
     )
     assert r is out
-    assert r.shape == ref_up.shape
-    utils.gems_assert_close(r, ref_up, dtype, reduce_dim=_reduce_dim(w_shape))
+    assert r.shape == ref_base.shape
+    # Same kernel on both sides: the answers must agree exactly (measured on
+    # fp16/bf16/fp32/fp64 - the native .out decomposition invokes the native
+    # base overload, so the only difference is the buffer, not the math).
+    utils.gems_assert_close(r, ref_base, dtype, reduce_dim=_reduce_dim(w_shape))
 
-    # And the submitted implementation, on the same operands, against the same
-    # upcast reference (the value check that must hold for the kernel).
+    # The submitted implementation, on the same operands, against the fp64
+    # upcast reference (the value check that must hold for the kernel itself).
     res = flag_gems.slow_conv_dilated2d(
         inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1)
     )
+    ref_up = _ref_op(inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1)).to(dtype)
     utils.gems_assert_close(res, ref_up, dtype, reduce_dim=_reduce_dim(w_shape))
 
 
@@ -457,9 +496,13 @@ def test_accuracy_slow_conv_dilated2d_rank_validation_raises():
 
     with pytest.raises(RuntimeError) as excinfo:
         flag_gems.slow_conv_dilated2d(
-            torch.randn(2, 7, 7, device=flag_gems.device), weight, (3, 3)
+            torch.randn(2, 3, 7, 7, 7, device=flag_gems.device), weight, (3, 3)
         )
-    assert "4D" in str(excinfo.value) or "dimension" in str(excinfo.value)
+    assert (
+        "4D" in str(excinfo.value)
+        or "5D" in str(excinfo.value)
+        or "dimension" in str(excinfo.value)
+    )
 
     with pytest.raises(RuntimeError) as excinfo:
         flag_gems.slow_conv_dilated2d(

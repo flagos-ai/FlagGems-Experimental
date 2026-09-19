@@ -236,7 +236,8 @@ def slow_conv_dilated2d(
       2. ``weight`` must be 4-D;
       3. kernel size / stride / dilation must be positive;
       4. ``weight.shape[2:]`` must equal ``kernel_size``;
-      5. ``self`` must be 4-D;
+      5. ``self`` must be 4-D (or 3-D: native accepts an unbatched input and
+         returns an unbatched output, measured on this build);
       6. ``self.shape[1]`` must equal ``weight.shape[1]``;
       7. ``bias`` must be 1-D with ``weight.shape[0]`` elements;
       8. the spatial output size must be non-negative.
@@ -271,8 +272,16 @@ def slow_conv_dilated2d(
             f"weight.shape[2:] {tuple(weight.shape[2:])} must be equal to "
             f"kernel_size {(kh, kw)}"
         )
-    if self.dim() != 4:
-        raise RuntimeError(f"input must be 4D tensor but got {self.dim()}D tensor")
+    if self.dim() not in (3, 4):
+        raise RuntimeError(
+            f"input must be 4D or 5D tensor but got {self.dim()}D tensor"
+        )
+    # A 3-D (unbatched) input is legal on this build: native treats it as a
+    # batch of one and returns a 3-D output (measured on CPU and CUDA; the
+    # conv_transpose2d wrapper unsqueezes the same way).
+    input_was_unbatched = self.dim() == 3
+    if input_was_unbatched:
+        self = self.unsqueeze(0)
     if self.shape[1] != weight.shape[1]:
         raise RuntimeError(
             "Need input.shape[1] == weight.shape[1] but got "
@@ -538,4 +547,6 @@ def slow_conv_dilated2d(
                     BLOCK_SP=block_sp,
                     num_warps=num_warps,
                 )
+    if input_was_unbatched:
+        out = out.squeeze(0)
     return out
