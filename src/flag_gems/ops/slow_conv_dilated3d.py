@@ -191,9 +191,11 @@ def slow_conv_dilated3d(
     """Direct 3-D dilated convolution (no im2col), matching the measured native
     ``aten::slow_conv_dilated3d`` semantics.
 
-    ``self`` is a batched 5-D input ``(N, C_in, D, H, W)``; ``weight`` is
-    ``(C_out, C_in, kD, kH, kW)``; ``kernel_size``, ``stride``, ``padding`` and
-    ``dilation`` are either a single int or a 3-element sequence.
+    ``self`` is a batched 5-D input ``(N, C_in, D, H, W)`` or an unbatched 4-D
+    ``(C_in, D, H, W)`` one (native accepts both and returns the matching rank);
+    ``weight`` is ``(C_out, C_in, kD, kH, kW)``; ``kernel_size``, ``stride``,
+    ``padding`` and ``dilation`` are either a single int or a 3-element
+    sequence.
     """
     logger.debug("GEMS SLOW_CONV_DILATED3D")
     kernel_size = _triple(kernel_size)
@@ -287,19 +289,19 @@ def slow_conv_dilated3d(
         )
 
     out = torch.empty((N, COUT, DO, HO, WO), dtype=input.dtype, device=input.device)
-    if unbatched:
-        out = out[0]
     if P_TOTAL <= 0 or COUT == 0 or N == 0:
-        return out
+        return out[0] if unbatched else out
     if CIN == 0:
         # Zero input channels: the accumulation loop is empty, so the result is
         # exactly what native pre-fills its output buffer with - the bias
         # broadcast over the spatial dims, or zeros when there is no bias
         # (NaiveDilatedConvolution.cpp: `if (output.defined() && !bias.defined())
         # output.zero_()` / `output_n.select(0, n).fill_(bias[n])`). Returning
-        # uninitialised storage here would diverge from native.
+        # uninitialised storage here would diverge from native. The fill is
+        # applied to the 5-D buffer so the batch dim keeps its layout, then the
+        # unbatched view is returned.
         _fill_bias_or_zero(out, bias)
-        return out
+        return out[0] if unbatched else out
 
     dtype = input.dtype
     BLOCK_CO, BLOCK_P, BK = _pick(N, COUT, CIN, P_TOTAL, KD * KH * KW, dtype)
@@ -357,7 +359,7 @@ def slow_conv_dilated3d(
             BK=BK,
             num_warps=num_warps,
         )
-    return out
+    return out[0] if unbatched else out
 
 
 def slow_conv_dilated3d_out(

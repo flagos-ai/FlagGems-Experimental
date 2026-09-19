@@ -336,6 +336,35 @@ def test_accuracy_slow_conv_dilated3d_unbatched_input():
 
 
 @pytest.mark.slow_conv_dilated3d
+def test_accuracy_slow_conv_dilated3d_unbatched_degenerate():
+    # A 4-D input must keep its 4-D rank through the short-circuits too: an
+    # empty output, a zero channel count and the CIN=0 fill.
+    w3 = _make((3, 2, 3, 3, 3), torch.float32, seed=50)
+    x3 = _make((2, 5, 5, 5), torch.float32, seed=51)
+
+    assert tuple(flag_gems.slow_conv_dilated3d(x3, w3, [3, 3, 3]).shape) == (3, 3, 3, 3)
+
+    w_empty = _make((2, 2, 4, 4, 4), torch.float32, seed=52)
+    assert tuple(flag_gems.slow_conv_dilated3d(x3, w_empty, [4, 4, 4]).shape) == (
+        2,
+        0,
+        0,
+        0,
+    )
+
+    xc0 = _make((0, 5, 5, 5), torch.float32, seed=53)
+    wc0 = _make((3, 0, 3, 3, 3), torch.float32, seed=54)
+    bias = _make((3,), torch.float32, seed=55)
+    got = flag_gems.slow_conv_dilated3d(xc0, wc0, [3, 3, 3], bias=bias)
+    assert tuple(got.shape) == (3, 3, 3, 3)
+    expected = bias.reshape(3, 1, 1, 1).expand(3, 3, 3, 3)
+    torch.testing.assert_close(got, expected, atol=0.0, rtol=0.0)
+
+    w0 = _make((0, 2, 3, 3, 3), torch.float32, seed=56)
+    assert tuple(flag_gems.slow_conv_dilated3d(x3, w0, [3, 3, 3]).shape) == (0, 3, 3, 3)
+
+
+@pytest.mark.slow_conv_dilated3d
 def test_accuracy_slow_conv_dilated3d_zero_spatial_output():
     # A kernel larger than the (unpadded) input yields DO == 0: native returns
     # an empty output, which the P_TOTAL <= 0 short-circuit must reproduce
