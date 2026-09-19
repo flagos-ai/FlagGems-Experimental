@@ -43,6 +43,7 @@ from flag_gems.ops._batch_norm_with_update_functional import (
 from flag_gems.ops._cholesky_solve_helper import _cholesky_solve_helper
 from flag_gems.ops._choose_qparams_per_tensor import _choose_qparams_per_tensor
 from flag_gems.ops._chunk_cat import chunk_cat as _chunk_cat
+from flag_gems.ops._coalesce import _coalesce
 from flag_gems.ops._coalesced_ import _coalesced_
 from flag_gems.ops._compute_linear_combination import (
     _compute_linear_combination,
@@ -1061,6 +1062,7 @@ __all__ = [
     "_cholesky_solve_helper",
     "_choose_qparams_per_tensor",
     "_chunk_cat",
+    "_coalesce",
     "_coalesced_",
     "_compute_linear_combination",
     "_compute_linear_combination_out",
