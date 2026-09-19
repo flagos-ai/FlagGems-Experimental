@@ -68,6 +68,13 @@ registrar = GeneralOpRegistrar
 current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
+# Native kernels for a handful of ops live ONLY on this key (pure composites
+# with no backend key at all); a device-key registration would never be
+# selected for their real inputs. Measured per op (can_cast,
+# sparse_coo_tensor.indices/.indices_size, coalesce).
+COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
+    torch._C.DispatchKey.CompositeImplicitAutograd.name
+)
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
 SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 
@@ -443,6 +450,12 @@ _FULL_CONFIG = (
     ("clamp_min_", clamp_min_),
     ("clip", clip),
     ("clip_", clip_),
+    (
+        "coalesce",
+        coalesce,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
     ("col2im", col2im),
     ("column_stack", column_stack),
     ("column_stack.out", column_stack_out),
