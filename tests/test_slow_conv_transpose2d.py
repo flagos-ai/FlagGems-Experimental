@@ -428,22 +428,24 @@ def test_accuracy_slow_conv_transpose2d_unbatched_3d(dtype):
     )
     assert res.dim() == 4
     assert res.shape[0] == 1
-    # The unbatched result must equal the batched call on the SAME data, so the
-    # batched input is derived from the SAME already-created tensor by
-    # re-viewing it (never a separately generated tensor and never a separately
-    # converted view -- the --ref=cpu trap). Note this must happen AFTER the
-    # reference was built, because building it (from the clone) does not touch
-    # `inp`, while a native call would have resized `inp` to (1, 3, 8, 9) and
-    # made the reshape below a no-op.
+    # The unbatched result must be the batched result on the SAME data, verified
+    # against the REFERENCE built for the 4-D view of the very same tensor
+    # (`_reference` is the only comparison partner that is safe under
+    # `--ref=cpu`: `utils.gems_assert_close` moves the *reference* to CPU and
+    # asserts it is there, so a comparison between two implementation outputs
+    # would fail in the quick-cpu phase). The view is derived from the original
+    # tensor, never from a freshly generated one and never from a separately
+    # converted copy -- the --ref=cpu trap.
     batched = inp.reshape(1, 3, 8, 9)
-    res_batched = flag_gems.slow_conv_transpose2d(
-        batched, weight, (3, 3), None, (1, 1), (0, 0), (0, 0), (1, 1)
+    ref_batched = _reference(
+        batched, weight, None, (3, 3), (1, 1), (0, 0), (0, 0), (1, 1)
     )
+    assert ref_batched.shape == res.shape
     utils.gems_assert_close(
         res,
-        res_batched,
+        ref_batched,
         dtype,
-        atol=_tol(res, weight, (3, 3), float(res_batched.abs().max().item())),
+        atol=_tol(res, weight, (3, 3), float(ref_batched.abs().max().item())),
     )
 
 
