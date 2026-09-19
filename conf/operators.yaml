@@ -70,6 +70,21 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _version
+  description: 'Returns the version counter of a tensor: an integer bumped by one
+    on every dispatched in-place call. Inference tensors do not track a version
+    counter and raise RuntimeError, mirroring aten::_version.
+
+    '
+  for:
+  - _version
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _weight_norm
   description: 'Reparameterizes a module''s weight tensor by decoupling its magnitude
     (g)

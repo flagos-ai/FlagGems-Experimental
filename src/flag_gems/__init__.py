@@ -68,6 +68,9 @@ registrar = GeneralOpRegistrar
 current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
+COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
+    torch._C.DispatchKey.CompositeImplicitAutograd.name
+)
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
 SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 
@@ -274,6 +277,20 @@ _FULL_CONFIG = (
     ("_upsample_nearest_exact2d", _upsample_nearest_exact2d),
     ("_upsample_nearest_exact2d_backward", _upsample_nearest_exact2d_backward),
     ("_upsample_nearest_exact3d", _upsample_nearest_exact3d),
+    # aten::_version is a CompositeImplicitAutograd operator on this build:
+    # its native kernel is registered from RegisterCompositeImplicitAutograd on
+    # every backend key, and the dispatch falls through to the composite entry
+    # for dense, sparse COO, sparse compressed AND meta inputs alike. Backend
+    # keys (CUDA/SparseCUDA/SparseCsrCUDA) are registered natively but a python
+    # kernel placed there is never selected (measured with fresh-process
+    # sentinels), so they would be dead registrations. The composite key is the
+    # only key that intercepts every layout.
+    (
+        "_version",
+        _version,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
     (
         "_weight_int4pack_mm_with_scales_and_zeros",
         _weight_int4pack_mm_with_scales_and_zeros,
