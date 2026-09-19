@@ -86,6 +86,7 @@ from flag_gems.ops._fused_rms_norm import (
 from flag_gems.ops._has_compatible_shallow_copy_type import (
     _has_compatible_shallow_copy_type,
 )
+from flag_gems.ops._indices import _indices
 from flag_gems.ops._is_all_true import _is_all_true
 from flag_gems.ops._jagged_to_padded_dense_forward import (
     _jagged_to_padded_dense_forward,
@@ -1034,6 +1035,7 @@ __all__ = [
     "_fused_rms_norm_forward",
     "_has_compatible_shallow_copy_type",
     "_index_put_impl_",
+    "_indices",
     "_is_all_true",
     "_jagged_to_padded_dense_forward",
     "_linalg_eigvals",
