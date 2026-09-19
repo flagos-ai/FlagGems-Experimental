@@ -149,6 +149,7 @@ _FP16_EPS = {
 # an effective relative precision of about 2**-22; the accumulation depth is
 # C_in * KH * KW.
 _FP32_SPLIT_EPS = 2**-22
+# tf32-class precision, only used as the fallback branch of _atol.
 _TF32_EPS = 2**-11
 
 
@@ -195,10 +196,18 @@ def _atol(dtype, k_total, scale=1.0, depth=1.0):
       * fp64: pure FMA accumulation, machine epsilon only.
     """
     if dtype == torch.float64:
-        return 1e-9 * max(scale, 1.0)
+        # measured <= 7.1e-15 relative against the fp64 CPU reference
+        return 32.0 * 2.0**-52 * max(scale, 1.0) * depth
     if dtype == torch.float32:
-        return 2.0 * _FP32_SPLIT_EPS * max(scale, 1.0) * depth
+        # Measured residual / (eps22 * |out| * sqrt(K)) is 0.6 .. 0.81 for the
+        # shipped shapes (probe job slow_conv_transpose2d-other-a1-282be10f,
+        # tolerance-calibration section), so 3.0 is a guard band, not a fitted
+        # constant; a kernel with a wrong tap produces O(1) absolute error at
+        # these magnitudes and still fails by orders of magnitude.
+        return 3.0 * _FP32_SPLIT_EPS * max(scale, 1.0) * depth
     if dtype in _FP16_EPS:
+        # Measured <= 0.072 x eps * |out| * sqrt(K) (same probe), so the same
+        # shape of bound with a generous guard.
         return 2.0 * _FP16_EPS[dtype] * max(scale, 1.0) * depth
     # tf32-class precision guard for any other float dtype reaching this helper.
     return 2.0 * _TF32_EPS * max(scale, 1.0) * depth
@@ -206,6 +215,21 @@ def _atol(dtype, k_total, scale=1.0, depth=1.0):
 
 def _depth(weight_shape, kernel_size):
     return max(weight_shape[0] * kernel_size[0] * kernel_size[1], 1)
+
+
+def _tol(inp, weight, kernel_size, scale):
+    """Tolerance for one comparison: precision x output scale x sqrt(depth).
+
+    The depth factor is a square-root (random-walk) scaling rather than a linear
+    one: the kernel's accumulation is a sum of products whose rounding errors are
+    independent, so the residual grows like sqrt(K) while a linear depth factor
+    would be orders of magnitude looser than any measured value (probe job
+    slow_conv_transpose2d-other-a1-305d4013 section D). Every branch is
+    `precision * max(scale, 1) * guard`, never a fixed absolute constant, so CI
+    hardware with larger |out| cannot fail it for a magnitude reason.
+    """
+    depth = _depth(weight.shape, kernel_size)
+    return _atol(inp.dtype, depth, scale, depth=max(1.0, depth**0.5))
 
 
 def _check(
@@ -232,20 +256,14 @@ def _check(
     assert res_out.is_contiguous()
     assert res_out.device == inp.device
     if ref_out.numel() == 0:
+        assert res_out.numel() == 0
         return res_out
     scale = float(ref_out.abs().max().item())
     utils.gems_assert_close(
         res_out,
         ref_out,
         inp.dtype,
-        atol=_atol(
-            inp.dtype,
-            _depth(weight.shape, kernel_size),
-            scale,
-            depth=max(
-                1.0, (weight.shape[0] * kernel_size[0] * kernel_size[1] / 32.0) ** 0.5
-            ),
-        ),
+        atol=_tol(inp, weight, kernel_size, scale),
     )
     return res_out
 
@@ -371,17 +389,20 @@ def test_accuracy_slow_conv_transpose2d_unbatched_3d(dtype):
     # implementation squeezes the unsqueezed batch dimension back out.
     inp = _gen_input((3, 8, 9), dtype)
     weight = _gen_input((3, 4, 3, 3), dtype)
-    res = flag_gems.slow_conv_transpose2d(inp, weight, (3, 3))
-    ref = _reference(inp, weight, None, (3, 3), (1, 1), (0, 0), (0, 0), (1, 1))
-    assert res.shape == ref.shape
+    res = _check(inp, weight, None, (3, 3), (1, 1), (0, 0), (0, 0), (1, 1))
     assert res.dim() == 3
-    assert res.dtype == dtype
-    assert res.is_contiguous()
+    # The unbatched form must equal the batched form on the same data: build the
+    # reference view from the SAME already-created tensor (never convert the
+    # base and the view independently -- the --ref=cpu trap).
+    ref_batched = _reference(
+        inp.unsqueeze(0), weight, None, (3, 3), (1, 1), (0, 0), (0, 0), (1, 1)
+    )
+    assert ref_batched.dim() == 4
     utils.gems_assert_close(
         res,
-        ref,
+        ref_batched.squeeze(0),
         dtype,
-        atol=_atol(dtype, _depth(weight.shape, (3, 3)), float(ref.abs().max().item())),
+        atol=_tol(inp, weight, (3, 3), float(ref_batched.abs().max().item())),
     )
 
 
@@ -464,36 +485,68 @@ def test_accuracy_slow_conv_transpose2d_input_channels_edge(c_in, dtype):
 
 
 # ---------------------------------------------------------------------------
-# Accuracy: the kernel_size argument is not used for the computation
+# Accuracy: kernel_size must agree with the weight's spatial extents
 # ---------------------------------------------------------------------------
 @pytest.mark.slow_conv_transpose2d
 @pytest.mark.parametrize("kernel_size", [(5, 5), (1, 1), (3, 2)])
-def test_accuracy_slow_conv_transpose2d_kernel_size_is_advisory(kernel_size):
-    # Measured native behaviour: the output shape (and the computation) come
-    # from the WEIGHT's spatial extents; a kernel_size that disagrees with the
-    # weight is accepted and only feeds the shape formula. The implementation
-    # mirrors that (it derives the shape from `kh, kw` = kernel_size but indexes
-    # the weight by its real (KH, KW)), so both sides must agree even when the
-    # two disagree. NOTE the shape assertion is only meaningful when they agree,
-    # which is why this test asserts values against the reference with the SAME
-    # (advisory) kernel_size passed to both.
-    inp = _gen_input((2, 3, 8, 9), torch.float32)
-    weight = _gen_input((3, 4, 3, 3), torch.float32)
-    res = flag_gems.slow_conv_transpose2d(
-        inp, weight, kernel_size, None, (1, 1), (0, 0), (0, 0), (1, 1)
-    )
-    ref = _reference(inp, weight, None, kernel_size, (1, 1), (0, 0), (0, 0), (1, 1))
-    # Only the overlapping region can agree when kernel_size != weight's extent
-    # (the reference's shape formula uses kernel_size too, but the reference's
-    # taps come from the weight), so compare the common region.
-    oh = min(res.shape[2], ref.shape[2])
-    ow = min(res.shape[3], ref.shape[3])
-    a = res[:, :, :oh, :ow].double().cpu()
-    b = ref[:, :, :oh, :ow].double().cpu()
-    scale = float(b.abs().max().item()) if b.numel() else 1.0
-    assert float((a - b).abs().max().item()) <= _atol(
-        torch.float32, _depth(weight.shape, (3, 3)), scale
-    )
+def test_accuracy_slow_conv_transpose2d_kernel_size_must_match_weight(kernel_size):
+    # Native's own CUDA implementation is only well defined when kernel_size
+    # agrees with the weight: its GEMM fills a column buffer sized from
+    # kernel_size (n_output_plane * kernel_width * kernel_height rows) from a
+    # weight of shape (C_in, C_out, KH, KW) and then indexes it as
+    # [co * KH * KW + kh * KW + kw] (aten/src/ATen/native/cuda/
+    # NaiveConvolutionTranspose2d.cu, slow_conv_transpose2d_out_cuda_template),
+    # so a kernel_size larger than the weight is an out-of-bounds read of the
+    # weight slice inside aten, and a smaller one drops taps. Measured (probe job
+    # slow_conv_transpose2d-other-a1-305d4013 section A): with a 3x3 weight and
+    # kernel_size (5, 5) the native result matches neither "taps from the weight"
+    # nor any well-defined fill.
+    #
+    # The implementation rejects the mismatch explicitly instead of reproducing
+    # an out-of-bounds read. Native does not reject, so the reference side is
+    # therefore NOT asserted to raise; only the implementation's own contract is
+    # pinned. The agreeing form is verified to be accepted and correct.
+    inp = torch.randn(2, 3, 8, 9, device=flag_gems.device)
+    weight = torch.randn(3, 4, 3, 3, device=flag_gems.device)
+    with pytest.raises(RuntimeError, match="kernel_size to match the weight"):
+        flag_gems.slow_conv_transpose2d(
+            inp, weight, kernel_size, None, (1, 1), (0, 0), (0, 0), (1, 1)
+        )
+
+
+@pytest.mark.slow_conv_transpose2d
+@pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
+def test_accuracy_slow_conv_transpose2d_kernel_size_matches_weight(dtype):
+    # The agreeing form must be accepted and correct (this is the branch the
+    # rejection above must not break).
+    inp = _gen_input((2, 3, 8, 9), dtype)
+    weight = _gen_input((3, 4, 3, 3), dtype)
+    res = _check(inp, weight, None, (3, 3), (1, 1), (0, 0), (0, 0), (1, 1))
+    assert res.shape == (2, 4, 10, 11)
+
+
+# ---------------------------------------------------------------------------
+# Accuracy: negative padding / negative output_padding are accepted
+# ---------------------------------------------------------------------------
+@pytest.mark.slow_conv_transpose2d
+@pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
+@pytest.mark.parametrize(
+    "padding,output_padding",
+    [((-1, -1), (0, 0)), ((-2, -2), (0, 0)), ((0, 0), (-1, -1))],
+)
+def test_accuracy_slow_conv_transpose2d_negative_padding(
+    dtype, padding, output_padding
+):
+    # Measured native behaviour on this build: negative padding and negative
+    # output_padding are ACCEPTED (CPU and CUDA) -- the CUDA forward template
+    # does not even run the shape check that would reject them, and the output
+    # shape formula is exact for both. The implementation therefore does not
+    # reject them either; this pins that the resulting values are still correct
+    # against the exact reference.
+    inp = _gen_input((2, 3, 6, 7), dtype)
+    weight = _gen_input((3, 4, 3, 3), dtype)
+    bias = _gen_input((4,), dtype)
+    _check(inp, weight, bias, (3, 3), (1, 1), padding, output_padding, (1, 1))
 
 
 # ---------------------------------------------------------------------------
@@ -525,9 +578,11 @@ def test_accuracy_slow_conv_transpose2d_zero_output_channels():
     inp = torch.randn(2, 3, 6, 7, device=flag_gems.device)
     weight = torch.randn(3, 0, 3, 3, device=flag_gems.device)
     res = flag_gems.slow_conv_transpose2d(inp, weight, (3, 3))
-    assert res.shape == (2, 0, 4, 5)
+    # H_out = (6 - 1) * 1 - 0 + 1 * (3 - 1) + 0 + 1 = 8, W_out = 9, C_out = 0.
+    assert res.shape == (2, 0, 8, 9)
     assert res.numel() == 0
     assert res.dtype == torch.float32
+    assert res.is_contiguous()
 
 
 @pytest.mark.slow_conv_transpose2d
@@ -555,17 +610,18 @@ def test_accuracy_slow_conv_transpose2d_output_size_too_small():
     [
         "stride_zero",
         "dilation_zero",
-        "negative_padding",
-        "negative_output_padding",
         "output_padding_too_large",
         "bad_bias_shape",
     ],
 )
 def test_accuracy_slow_conv_transpose2d_bad_arguments(name):
-    # Each rejection below is also produced by native (measured, probe job
-    # slow_conv_transpose2d-other-a1-4141afab) -- but the reference's wording is
-    # never asserted: for the reference side only the class is pinned, and the
-    # implementation-side fragment is this file's own literal.
+    # Each rejection below is also produced by native (measured on this build:
+    # a 1 x 2 x 4 x 4 input and a (2, 3, 3, 3) weight) -- but the reference's
+    # wording is never asserted: for the reference side only the class is pinned,
+    # and the implementation-side fragment is this file's own literal. Note that
+    # native's own guard is stricter in wording than the implementation is
+    # inclusive: negative padding and negative output_padding are ACCEPTED by
+    # native (measured) and by the implementation (pinned separately below).
     inp = torch.randn(1, 2, 4, 4, device=flag_gems.device)
     weight = torch.randn(2, 3, 3, 3, device=flag_gems.device)
     bias = torch.randn(3, device=flag_gems.device)
@@ -582,12 +638,6 @@ def test_accuracy_slow_conv_transpose2d_bad_arguments(name):
     elif name == "dilation_zero":
         kwargs["dilation"] = (0, 0)
         fragment = "dilation should be greater than zero"
-    elif name == "negative_padding":
-        kwargs["padding"] = (-1, -1)
-        fragment = "negative padding"
-    elif name == "negative_output_padding":
-        kwargs["output_padding"] = (-1, -1)
-        fragment = "negative output_padding"
     elif name == "output_padding_too_large":
         kwargs["stride"] = (2, 2)
         kwargs["dilation"] = (2, 2)
@@ -755,5 +805,5 @@ def test_slow_conv_transpose2d_registration_contract():
         direct,
         ref,
         torch.float32,
-        atol=_atol(torch.float32, _depth(weight.shape, (3, 3)), float(ref.abs().max())),
+        atol=_tol(inp, weight, (3, 3), float(ref.abs().max())),
     )

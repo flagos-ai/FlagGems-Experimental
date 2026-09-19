@@ -518,25 +518,39 @@ def slow_conv_transpose2d(
             "flag_gems.slow_conv_transpose2d expects a 4-D weight tensor of shape "
             f"(C_in, C_out, KH, KW); got weight of shape {tuple(weight.shape)}"
         )
-    if self.shape[1] != weight.shape[0]:
+    # `self` is (N, C_in, H, W) or (C_in, H, W): the channel axis is the third
+    # from the end in both forms.
+    in_channels = self.shape[-3]
+    if in_channels != weight.shape[0]:
         raise RuntimeError(
             "flag_gems.slow_conv_transpose2d expects the input channel dimension to "
             f"match the weight input channels; got input shape {tuple(self.shape)} and "
             f"weight shape {tuple(weight.shape)}"
         )
-    if self.shape[1] == 0:
+    if in_channels == 0:
         raise RuntimeError(
             "flag_gems.slow_conv_transpose2d expects a non-empty input channel "
             f"dimension; got input shape {tuple(self.shape)}"
+        )
+    # The kernels weight every tap by the WEIGHT's own spatial extents, while the
+    # output shape formula uses kernel_size. Native's own CUDA implementation is
+    # only well defined when the two agree (its GEMM fills a column buffer sized
+    # from kernel_size with weight-extent rows, i.e. a mismatched kernel_size is
+    # an out-of-bounds write inside aten). Requiring consistency here turns an
+    # out-of-bounds weight read into an explicit error.
+    if (kh, kw) != (weight.shape[2], weight.shape[3]):
+        raise RuntimeError(
+            "flag_gems.slow_conv_transpose2d expects kernel_size to match the "
+            f"weight spatial extents; got kernel_size=({kh}, {kw}) and weight of "
+            f"shape {tuple(weight.shape)}"
         )
     if sh <= 0 or sw <= 0:
         raise RuntimeError("non-positive stride is not supported")
     if dh <= 0 or dw <= 0:
         raise RuntimeError("dilation should be greater than zero")
-    if ph < 0 or pw < 0:
-        raise RuntimeError("negative padding is not supported")
-    if oph < 0 or opw < 0:
-        raise RuntimeError("negative output_padding is not supported")
+    # Negative padding and negative output_padding are deliberately NOT rejected:
+    # native accepts both (measured on this build, CPU and CUDA) and the output
+    # shape formula below is exact for them, so the kernels' masks handle them.
     if oph >= sh and oph >= dh:
         raise RuntimeError(
             "output padding must be smaller than either stride or dilation"
