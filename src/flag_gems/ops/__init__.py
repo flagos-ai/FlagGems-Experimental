@@ -797,6 +797,10 @@ from flag_gems.ops.sinh import sinh, sinh_
 from flag_gems.ops.slice import slice
 from flag_gems.ops.slice_backward import slice_backward
 from flag_gems.ops.slice_scatter import slice_scatter
+from flag_gems.ops.slow_conv_dilated3d import (
+    slow_conv_dilated3d,
+    slow_conv_dilated3d_out,
+)
 from flag_gems.ops.smooth_l1_loss import (
     smooth_l1_loss,
     smooth_l1_loss_backward,
@@ -1847,6 +1851,8 @@ __all__ = [
     "slice",
     "slice_backward",
     "slice_scatter",
+    "slow_conv_dilated3d",
+    "slow_conv_dilated3d_out",
     "smooth_l1_loss",
     "smooth_l1_loss_backward",
     "smooth_l1_loss_out",
