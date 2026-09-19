@@ -228,6 +228,12 @@ _FULL_CONFIG = (
         (AUTOGRAD_DISPATCH_KEY,),
     ),
     (
+        "_nested_tensor_storage_offsets",
+        _nested_tensor_storage_offsets,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
         "_nested_tensor_strides",
         _nested_tensor_strides,
         None,
