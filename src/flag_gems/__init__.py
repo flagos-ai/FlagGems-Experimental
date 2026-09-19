@@ -199,6 +199,7 @@ _FULL_CONFIG = (
     ("_pdist_forward", _pdist_forward),
     ("_prelu_kernel", _prelu_kernel),
     ("_prelu_kernel_backward", _prelu_kernel_backward),
+    ("_remove_batch_dim", _remove_batch_dim),
     ("_reshape_alias", _reshape_alias),
     ("_resize_output", _resize_output),
     ("_resize_output_", _resize_output_),
