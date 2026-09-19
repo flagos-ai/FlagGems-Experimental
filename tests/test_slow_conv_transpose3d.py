@@ -127,26 +127,36 @@ def _gen(shape, dtype):
 # negative control, which also proves the guard stays below the error a
 # genuinely mis-computing kernel produces).
 #
-# The guards below are derived from the arithmetic each code path actually
-# performs and are cross-checked against the residuals measured on this build
-# (runs/slow_conv_transpose3d/probe_impl_gpu.py):
-#   * fp16/bf16  -- tl.dot accumulates exactly and rounds once on conversion of
-#     the operands: the residual is ~eps(dtype) * |out|, not eps * sqrt(K).
-#   * fp32, pair (the gemm and sub-grid paths) -- the 3-pass fp16 hi/lo
-#     emulation carries ~2^-22 of the magnitude, again with a single final
-#     rounding; the dominant term is the plain fp32 rounding of the sum,
-#     eps(fp32) * |out|.
-#   * fp64       -- the FFMA kernel converts the accumulator with one rounding
-#     per element, eps(fp64) * |out|.
-# A guard of 8x over the single-rounding term leaves room for a few extra ulps
-# of accumulated rounding while staying two orders of magnitude below a
-# dropped-tap error (O(1) at |out| ~ 66).
+# The guards below are derived from the residuals MEASURED on this build
+# (runs/slow_conv_transpose3d/probe_impl_gpu.py, job
+# slow_conv_transpose3d-other-a1-711961fe), expressed as
+# `residual / eps(dtype) / max(|out|, 1)` across every dispatch branch:
+#   * fp16     -- worst 0.43   -> guard 8   (18x the measurement)
+#   * bf16     -- worst 0.46   -> guard 8   (17x)
+#   * fp32     -- worst 60.4   -> guard 256 (4x; the fp16 hi/lo pair emulation
+#                 carries ~2^-18 of |out|, not one fp32 ulp, because the dropped
+#                 lo*lo term and the fp32 accumulation of the partial dots
+#                 compound over the taps)
+#   * fp64     -- worst 0 (bit-identical to the fp64 reference on every branch)
+#                 -> guard 32, i.e. the assertion is effectively exactness
+# The fp32 guard was raised from 128 to 256 after the first GPU accuracy run
+# failed four fp32 cases at 29-32 eps (a hardware magnitude, not a defect):
+# the measurement, not the first guess, sets the band.
+#
+# Each bound still sits far below the error a mis-computing kernel produces: a
+# dropped tap is O(1) absolute, thousands of times the bound at these output
+# magnitudes, and a lost low-order pair term is 2^-11 of |out| i.e. 8192 eps --
+# see runs/slow_conv_transpose3d/neg_control.py for the detection proof.
+#
+# The bound is `precision * max(|out|, 1) * guard` and NOT a fixed absolute
+# constant: on a different runner |out| is larger and a constant band would fail
+# for a hardware magnitude rather than a defect.
 # ---------------------------------------------------------------------------
 _FP16_EPS = {torch.float16: 2**-10, torch.bfloat16: 2**-7}
-_FP16_GUARD = 8.0  # over the measured ~eps * |out|
-_FP32_EPS = 2**-24  # one final fp32 rounding of the sum; the pair emulation
-# keeps its own error under 2^-22 * |out|, i.e. 4x this bound's base term
-_FP32_GUARD = 16.0
+_FP16_GUARD = 8.0  # over the measured ~0.5 * eps * |out|
+_FP32_EPS = 2**-24  # one fp32 rounding of the sum; the pair emulation's own
+# error is ~60x this base term (measured), hence the 256 guard
+_FP32_GUARD = 256.0
 _FP64_EPS = 2**-52
 _FP64_GUARD = 32.0
 
@@ -155,10 +165,11 @@ def _atol(dtype, k_total, scale=1.0):
     """Absolute tolerance against the exact fp64 reference built by `_reference`.
 
     `k_total` (the accumulation depth, C_in * kD * kH * kW) is accepted so
-    callers share one signature with the repo's conv siblings; the residual of
-    these kernels was measured to be independent of it (the dot products
-    accumulate in fp32/fp64 and round once), so it does not widen the bound --
-    a depth-scaled bound is what made an earlier revision accept a dropped tap.
+    callers share one signature with the repo's conv siblings; the measured
+    residual of these kernels is independent of it (the dots accumulate in
+    fp32/fp64 and round once), so it does not widen the bound -- a
+    depth-scaled bound is what made an earlier revision of this file accept a
+    dropped tap.
     """
     del k_total
     if dtype == torch.float64:
@@ -409,17 +420,23 @@ def test_accuracy_slow_conv_transpose3d_negative_padding(dtype):
     ),
 )
 def test_accuracy_slow_conv_transpose3d_no_spatial_overlap(dtype):
-    # stride > kernel: some output positions receive no input tap at all. With
-    # no bias those positions must be zero on BOTH paths. The fp32 sub-grid
-    # path (only fp32 AND dilation % stride == 0) is the one that pre-fills the
-    # output instead of relying on every tap being covered, so fp32 is forced
-    # through it here while the other dtypes take the flattened dot kernel.
+    # A 1x1x1 kernel with stride 2 and dilation 2 puts a tap at output position
+    # o only when o = 2 * i (tap weight position k=1), so the odd output
+    # positions receive no input tap at all. With no bias they must be zero on
+    # BOTH paths; the fp32 sub-grid path (fp32 AND dilation % stride == 0) is
+    # the one that pre-fills the output instead of relying on every tap being
+    # covered, so fp32 is forced through it while the other dtypes take the
+    # flattened dot kernel. Measured native: exactly this residue pattern.
     inp = _gen((1, 2, 4, 4, 4), dtype)
-    weight = _gen((2, 3, 2, 2, 2), dtype)
-    res, ref = _check(inp, weight, None, _args(4, 0, 0, 1))
-    assert res.shape == ref.shape == (1, 3, 13, 13, 13)
-    zeros = (ref == 0).sum().item()
-    assert zeros > 0, "the test needs a case with genuinely uncovered outputs"
+    weight = _gen((2, 3, 1, 1, 1), dtype)
+    res, ref = _check(inp, weight, None, _args(2, 0, 0, 2))
+    assert res.shape == ref.shape == (1, 3, 7, 7, 7)
+    odd = torch.arange(7) % 2 == 1
+    uncovered = ref[:, :, odd, :, :]
+    assert uncovered.numel() > 0
+    assert bool(
+        (uncovered == 0).all().item()
+    ), "the test needs a case with genuinely uncovered outputs"
     assert (res[ref == 0] == 0).all()
 
 
@@ -438,14 +455,30 @@ def test_accuracy_slow_conv_transpose3d_kernel_larger_than_input(dtype):
 @pytest.mark.slow_conv_transpose3d
 @pytest.mark.parametrize("dtype", utils.FLOAT_DTYPES)
 def test_accuracy_slow_conv_transpose3d_output_padding(dtype):
-    # output_padding only grows the output; the extra slice keeps the same
-    # values as the unpadded result.
+    # output_padding only grows the output; the leading slice keeps the same
+    # values as the unpadded result. It must stay below stride or dilation
+    # (s=1/d=1 makes every positive value illegal -- measured), so the pair is
+    # chosen legal on both sides of the switch: dilation-driven (s=1, d=2) and
+    # stride-driven (s=2, d=1).
     inp = _gen((2, 3, 5, 5, 5), dtype)
     weight = _gen((3, 4, 3, 3, 3), dtype)
-    padded, _ = _check(inp, weight, None, _args(1, 0, 1, 1))
-    unpadded, _ = _check(inp, weight, None, _args())
-    assert padded.shape[2:] == (unpadded.shape[2] + 1,) * 3
-    assert torch.equal(padded[:, :, : unpadded.shape[2]], unpadded)
+    for stride, padding, dilation in [
+        (1, 0, 2),  # legal because op=1 < dilation=2
+        (2, 1, 1),  # legal because op=1 < stride=2
+    ]:
+        padded, _ = _check(inp, weight, None, _args(stride, padding, 1, dilation))
+        unpadded, _ = _check(inp, weight, None, _args(stride, padding, 0, dilation))
+        assert padded.shape[2:] == (unpadded.shape[2] + 1,) * 3
+        assert torch.equal(
+            padded[
+                :,
+                :,
+                : unpadded.shape[2],
+                : unpadded.shape[3],
+                : unpadded.shape[4],
+            ],
+            unpadded,
+        )
 
 
 @pytest.mark.slow_conv_transpose3d
