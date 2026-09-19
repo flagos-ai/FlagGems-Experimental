@@ -16,10 +16,21 @@
 
 import pytest
 import torch
+from _pytest.mark.structures import Mark, MarkDecorator
 
 import flag_gems
 
 from . import base, consts
+
+# The benchmark module decorates with ``pytest.mark._coalesce``, which pytest
+# refuses to resolve as an attribute (marker names must not start with an
+# underscore), so the marker is registered explicitly here, exactly as in
+# tests/test__coalesce.py.
+setattr(
+    pytest.mark,
+    "_coalesce",
+    MarkDecorator(Mark("_coalesce", (), {}, _ispytest=True), _ispytest=True),
+)
 
 # ``aten::_coalesce`` is the sparse-COO merge worker behind ``aten::coalesce``:
 # it radix-sorts the stored entries and sums the duplicate columns.  The
