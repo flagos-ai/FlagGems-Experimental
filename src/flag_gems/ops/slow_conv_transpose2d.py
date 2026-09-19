@@ -573,6 +573,12 @@ def slow_conv_transpose2d(
             )
 
     if self.dim() == 3:
+        # Native accepts the unbatched form and returns a 4-D
+        # (1, C_out, H_out, W_out) result: its CUDA template resizes the input to
+        # (1, C_in, H, W), computes, then resizes the OUTPUT to 3-D *only* when
+        # `is_batch` is true -- which it is for a 3-D input, so the returned
+        # tensor stays 4-D with a leading 1. (Native also mutates the caller's
+        # input via resize_; that side effect is deliberately not reproduced.)
         x = self.unsqueeze(0).contiguous()
     else:
         x = self.contiguous()
