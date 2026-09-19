@@ -612,11 +612,11 @@ def slow_conv_transpose3d(
     logger.debug("GEMS SLOW_CONV_TRANSPOSE3D")
     x = self
 
-    (kD, kH, kW) = _triple(kernel_size, "kernel_size")
-    (sD, sH, sW) = _triple(stride, "stride")
-    (pD, pH, pW) = _triple(padding, "padding")
-    (opD, opH, opW) = _triple(output_padding, "output_padding")
-    (dD, dH, dW) = _triple(dilation, "dilation")
+    kD, kH, kW = _triple(kernel_size, "kernel_size")
+    sD, sH, sW = _triple(stride, "stride")
+    pD, pH, pW = _triple(padding, "padding")
+    opD, opH, opW = _triple(output_padding, "output_padding")
+    dD, dH, dW = _triple(dilation, "dilation")
 
     # The kernels index the operands as flat contiguous arrays with the layout
     # fixed by this operator's contract, so every operand is normalised first
