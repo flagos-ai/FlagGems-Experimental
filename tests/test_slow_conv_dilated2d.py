@@ -438,42 +438,45 @@ def test_accuracy_slow_conv_dilated2d_out_variant(shape, dtype):
     # The .out overload exists natively on this build (dispatch dump: its CUDA
     # kernel is the CompositeExplicitAutograd decomposition, which resizes the
     # buffer and then calls the BASE op). FlagGems does NOT register the .out
-    # overload - this batch registers base overloads only - so the pinned
-    # contract here is native's own .out behaviour, measured: the SAME buffer
-    # object comes back and it holds EXACTLY the base overload's answer (same
-    # kernel, same operands, bit-identical on every dtype).
+    # overload - this batch registers base overloads only - so there is no
+    # FlagGems .out implementation to check; what this test pins is native's
+    # own .out contract, MEASURED: the buffer handed in comes back (same
+    # object), resized to the base overload's shape, holding EXACTLY what the
+    # native base overload writes on the same device (same kernel, so an
+    # exact same-device comparison - the CUDA native and the CPU native
+    # kernels are different implementations and are deliberately not compared
+    # to each other).
     #
-    # The reference side is the same base overload on the reference device, so
-    # the comparison route is identical in both CI phases; the buffer written
-    # through .out is checked to hold the same values the base overload wrote.
+    # Separately, the submitted implementation is checked (base overload, same
+    # operands) against the fp64-upcast reference, which is the value contract
+    # the kernel must meet in both phases.
     in_shape, w_shape = shape
     inp = _gen_input(in_shape, dtype)
     weight = _gen_input(w_shape, dtype)
     bias = _gen_input((w_shape[0],), dtype)
+    geometry = ((1, 1), (0, 0), (1, 1))
 
-    ref_base = torch.ops.aten.slow_conv_dilated2d(
-        utils.to_reference(inp),
-        utils.to_reference(weight),
-        w_shape[2:],
-        utils.to_reference(bias),
-        (1, 1),
-        (0, 0),
-        (1, 1),
+    # Native base overload on the SAME device as the .out call.
+    ref_dev = torch.ops.aten.slow_conv_dilated2d(
+        inp, weight, w_shape[2:], bias, *geometry
     )
     out = torch.empty(
-        (in_shape[0], w_shape[0], ref_base.shape[2], ref_base.shape[3]),
+        (in_shape[0], w_shape[0], ref_dev.shape[2], ref_dev.shape[3]),
         dtype=dtype,
         device=flag_gems.device,
     )
     r = torch.ops.aten.slow_conv_dilated2d.out(
-        inp, weight, w_shape[2:], bias, (1, 1), (0, 0), (1, 1), out=out
+        inp, weight, w_shape[2:], bias, *geometry, out=out
     )
     assert r is out
-    assert r.shape == ref_base.shape
-    # Same kernel on both sides: the answers must agree exactly (measured on
-    # fp16/bf16/fp32/fp64 - the native .out decomposition invokes the native
-    # base overload, so the only difference is the buffer, not the math).
-    utils.gems_assert_close(r, ref_base, dtype, reduce_dim=_reduce_dim(w_shape))
+    assert r.shape == ref_dev.shape
+    # Same device, same kernel, same operands -> the answers agree exactly.
+    torch.testing.assert_close(r, ref_dev, atol=0, rtol=0)
+
+    # The submitted implementation against the fp64-upcast reference.
+    ref_up = _ref_op(inp, weight, w_shape[2:], bias, *geometry).to(dtype)
+    res = flag_gems.slow_conv_dilated2d(inp, weight, w_shape[2:], bias, *geometry)
+    utils.gems_assert_close(res, ref_up, dtype, reduce_dim=_reduce_dim(w_shape))
 
     # The submitted implementation, on the same operands, against the fp64
     # upcast reference (the value check that must hold for the kernel itself).
