@@ -463,12 +463,17 @@ def test_accuracy_flatten_dense_tensors_same_tensor_twice():
 
 # ---------------------------------------------------------------------------
 # Empty input list: native routes through cat and raises for an empty list.
+# The REFERENCE's exception class is build-dependent (this build raises
+# RuntimeError from the composite; the CI build surfaces torch.cat's
+# ValueError, which is NOT a RuntimeError subclass), so only "the reference
+# raises" is asserted there. The implementation's own class is pinned: it
+# always raises RuntimeError, matching the message this build's native emits.
 # ---------------------------------------------------------------------------
 @pytest.mark.flatten_dense_tensors
 def test_accuracy_flatten_dense_tensors_empty_list():
     with pytest.raises(RuntimeError):
         flag_gems.flatten_dense_tensors([])
-    with pytest.raises(RuntimeError):
+    with pytest.raises(Exception):
         torch.ops.aten.flatten_dense_tensors([])
 
 
