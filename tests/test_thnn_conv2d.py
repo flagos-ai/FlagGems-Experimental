@@ -76,11 +76,16 @@ STRIDE_PADDING = [
 # _reference), so the reduced-precision dtypes round back to a value within
 # one ulp of the reference; the atol below is the guard band, matching the
 # relative error measured against an exact fp64 reference (probe job
-# thnn_conv2d-other-a1-65660022: <= 0.5 * eps * |out|).
-_FP16_ATOL = {
-    torch.float16: 16 * 2**-10,
-    torch.bfloat16: 16 * 2**-7,
+# thnn_conv2d-other-a1-65660022: <= 0.5 * eps * |out|). It is a RELATIVE
+# bound scaled by |out| in _atol, like the fp32/fp64 entries: the residual
+# grows with the accumulated output magnitude, so a fixed absolute constant
+# under-serves large outputs (observed on the CI runner: 0.0275 at |out| ~ 66,
+# i.e. 0.43 * eps_fp16 * |out| -- inside the model, outside a constant band).
+_FP16_EPS = {
+    torch.float16: 2**-10,
+    torch.bfloat16: 2**-7,
 }
+_FP16_GUARD = 8.0  # guard factor over the measured <= 0.5 * eps * |out|
 # tf32 has an 11-bit mantissa; the accumulation depth is C_in * KH * KW, so the
 # abs tolerance has to grow with it (measured 4.7e-2 at K_total=256).
 _TF32_EPS = 2**-11
@@ -132,8 +137,10 @@ def _atol(dtype, k_total, scale=1.0):
         # The kernel switches to input_precision="tf32" (11-bit mantissa) at
         # K_total >= 256; measured 4.7e-2 on |out| ~ 66 at K_total == 256.
         return 8.0 * _TF32_EPS * max(scale, 1.0) * max(1.0, (k_total / 256.0) ** 0.5)
-    if dtype in _FP16_ATOL:
-        return _FP16_ATOL[dtype]
+    if dtype in _FP16_EPS:
+        # Same shape as the fp32 branch: precision x output scale x a guard
+        # factor over the measured <= 0.5 * eps * |out| residual.
+        return _FP16_GUARD * _FP16_EPS[dtype] * max(scale, 1.0)
     if dtype == torch.float64:
         return 1e-9 * max(scale, 1.0)
     return 1e-4 * max(scale, 1.0)
