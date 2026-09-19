@@ -344,8 +344,11 @@ def test_accuracy_slow_conv_dilated3d_unbatched_degenerate():
 
     assert tuple(flag_gems.slow_conv_dilated3d(x3, w3, [3, 3, 3]).shape) == (3, 3, 3, 3)
 
+    # A kernel one step LARGER than the input gives the empty output (measured:
+    # kernel == input yields size 1, not 0, on both sides).
+    x_small = _make((2, 3, 3, 3), torch.float32, seed=57)
     w_empty = _make((2, 2, 4, 4, 4), torch.float32, seed=52)
-    assert tuple(flag_gems.slow_conv_dilated3d(x3, w_empty, [4, 4, 4]).shape) == (
+    assert tuple(flag_gems.slow_conv_dilated3d(x_small, w_empty, [4, 4, 4]).shape) == (
         2,
         0,
         0,
