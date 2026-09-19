@@ -36,11 +36,9 @@ logger = logging.getLogger(__name__)
 _MAX_NDIM = 8
 
 # Tuning table ported verbatim from the supplied package (one BLOCK/warp count
-# per kernel); no values were changed or added.
+# for the flat kernel); no values were changed or added.
 _BLOCK_FLAT = 4096
 _WARPS_FLAT = 8
-_BLOCK_ND = 1024
-_WARPS_ND = 4
 
 
 @triton.jit
@@ -62,16 +60,21 @@ def _values_copy_kernel_nd(
     NDIM: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
-    pid = tl.program_id(axis=0)
-    offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    pid = tl.program_id(axis=0).to(tl.int64)
+    offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE).to(tl.int64)
     mask = offs < n_elements
     rem = offs
     phys = tl.zeros((BLOCK_SIZE,), dtype=tl.int64)
+    # The shape table is padded with trailing 1s (not 0s): every padded dim
+    # yields idx = rem % 1 = 0 and rem //= 1 is a no-op, so the extra rounds
+    # contribute nothing -- and no division by zero -- regardless of the
+    # strides those rounds read (0-padded strides pair with 1-padded extents
+    # in the host launcher, mirroring the accepted _neg_view_copy kernel).
     for d in tl.static_range(NDIM):
-        dim = tl.load(shape_ptr + d)
-        stride = tl.load(stride_ptr + d)
+        dim = tl.load(shape_ptr + (NDIM - 1 - d)).to(tl.int64)
+        stride = tl.load(stride_ptr + (NDIM - 1 - d)).to(tl.int64)
         idx = rem % dim
-        phys += idx.to(tl.int64) * stride
+        phys += idx * stride
         rem = rem // dim
     x = tl.load(x_ptr + phys, mask=mask)
     tl.store(y_ptr + phys, x, mask=mask)
@@ -106,19 +109,32 @@ def _launch_nd(src: torch.Tensor, dst: torch.Tensor) -> None:
     """Strided copy of two tensors sharing one shape and one stride tuple.
 
     The kernel addresses both tensors at the physical offset implied by
-    ``src``'s device-side shape/stride table, so its offset map is a bijection
-    onto ``[0, numel)`` exactly when the two tensors carry the same dense
-    non-overlapping layout -- the layout ``torch.empty_like`` reproduces for
-    such a source, and the case this kernel was written for. ``_can_use_nd``
-    is the caller-side guarantee.
+    ``src``'s device-side shape/stride table. The tables are padded to the
+    source's exact rank with trailing 1s (extents) / 0s (strides) and the
+    kernel unrolls exactly that many rounds -- no division by zero, no wasted
+    rounds, and ``pid`` kept in 64-bit so large grids cannot overflow. The
+    offset map is a bijection onto ``[0, numel)`` exactly when the two tensors
+    carry the same dense non-overlapping layout -- the layout
+    ``torch.empty_like`` reproduces for such a source, and the case this
+    kernel was written for. ``_can_use_nd`` is the caller-side guarantee.
     """
     n = src.numel()
-    ndim = src.dim()
-    shape = torch.zeros(_MAX_NDIM, dtype=torch.int64, device=src.device)
-    stride = torch.zeros(_MAX_NDIM, dtype=torch.int64, device=src.device)
-    shape[:ndim] = torch.as_tensor(src.shape, dtype=torch.int64, device=src.device)
-    stride[:ndim] = torch.as_tensor(src.stride(), dtype=torch.int64, device=src.device)
-    grid = (triton.cdiv(n, _BLOCK_ND),)
+    ndim = max(src.dim(), 1)
+    shape = torch.tensor(
+        list(src.shape) + [1] * (ndim - src.dim()),
+        dtype=torch.int64,
+        device=src.device,
+    )
+    stride = torch.tensor(
+        list(src.stride()) + [0] * (ndim - src.dim()),
+        dtype=torch.int64,
+        device=src.device,
+    )
+    # Tuning on H20 mirrors the accepted _neg_view_copy strided kernel: the
+    # per-element div/mod address computation makes small blocks cheaper --
+    # BLOCK=256 up to ~1M elements, 512 above.
+    BLOCK = 256 if n <= (1 << 20) else 512
+    grid = (triton.cdiv(n, BLOCK),)
     with torch_device_fn.device(src.device):
         _values_copy_kernel_nd[grid](
             src,
@@ -126,9 +142,9 @@ def _launch_nd(src: torch.Tensor, dst: torch.Tensor) -> None:
             shape,
             stride,
             n,
-            NDIM=_MAX_NDIM,
-            BLOCK_SIZE=_BLOCK_ND,
-            num_warps=_WARPS_ND,
+            NDIM=ndim,
+            BLOCK_SIZE=BLOCK,
+            num_warps=4,
         )
 
 
