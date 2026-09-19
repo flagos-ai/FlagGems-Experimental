@@ -244,9 +244,19 @@ def _check(
     output_padding,
     dilation,
     assert_shape=True,
+    reference_inputs=None,
 ):
+    """Compare the implementation against the exact reference.
+
+    `reference_inputs` overrides the tensors handed to the REFERENCE builder
+    (same values, different storage). It exists for the one call form where
+    native mutates its own input in place and the wrapper's contiguous() would
+    therefore alias it: the reference must see a clone, the implementation must
+    see the caller's tensor.
+    """
+    ref_src = inp if reference_inputs is None else reference_inputs["inp"]
     ref_out = _reference(
-        inp, weight, bias, kernel_size, stride, padding, output_padding, dilation
+        ref_src, weight, bias, kernel_size, stride, padding, output_padding, dilation
     )
     res_out = flag_gems.slow_conv_transpose2d(
         inp, weight, kernel_size, bias, stride, padding, output_padding, dilation
@@ -395,7 +405,27 @@ def test_accuracy_slow_conv_transpose2d_unbatched_3d(dtype):
     # the same data.
     inp = _gen_input((3, 8, 9), dtype)
     weight = _gen_input((3, 4, 3, 3), dtype)
-    res = _check(inp, weight, None, (3, 3), (1, 1), (0, 0), (0, 0), (1, 1))
+    # ALIASING HAZARD: the native reference RESIZES its own input in place
+    # (slow_conv_transpose2d_out_cuda_template calls input_.resize_({1, ...})),
+    # and the wrapper's contiguous() returns the SAME tensor when it is already
+    # contiguous -- so building the reference from `inp` would hand the
+    # implementation a (1, 3, 8, 9) tensor instead of the (3, 8, 9) one. This is
+    # the --ref=cpu trap in its native form: `_check` compares the reference
+    # built from a CLONE, and the implementation receives the caller's tensor
+    # unchanged. The resize_ side effect itself is not reproduced (it is not
+    # part of the value contract).
+    ref_inp = inp.clone()
+    res = _check(
+        inp,
+        weight,
+        None,
+        (3, 3),
+        (1, 1),
+        (0, 0),
+        (0, 0),
+        (1, 1),
+        reference_inputs={"inp": ref_inp},
+    )
     assert res.dim() == 4
     assert res.shape[0] == 1
     # The batched comparison derives its reference from the SAME already-created
@@ -800,12 +830,15 @@ def test_slow_conv_transpose2d_registration_contract():
     # one, and the call form uses the same positional order as the schema.
     assert torch.ops.aten.slow_conv_transpose2d.default is not None
     assert torch.ops.aten.slow_conv_transpose2d.out is not None
+    # output_padding (1, 1) is only legal when a stride OR a dilation exceeds 1
+    # (native requires output_padding < max(stride, dilation)); stride 2 with
+    # dilation 1 is the non-trivial legal combination.
     inp = torch.randn(2, 3, 7, 8, device=flag_gems.device)
     weight = torch.randn(3, 4, 3, 3, device=flag_gems.device)
     direct = flag_gems.slow_conv_transpose2d(
-        inp, weight, (3, 3), None, (1, 1), (1, 1), (1, 1), (1, 1)
+        inp, weight, (3, 3), None, (2, 2), (1, 1), (1, 1), (1, 1)
     )
-    ref = _reference(inp, weight, None, (3, 3), (1, 1), (1, 1), (1, 1), (1, 1))
+    ref = _reference(inp, weight, None, (3, 3), (2, 2), (1, 1), (1, 1), (1, 1))
     assert direct.shape == ref.shape
     utils.gems_assert_close(
         direct,
