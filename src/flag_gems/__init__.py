@@ -507,6 +507,7 @@ _FULL_CONFIG = (
     ),
     ("dequantize", dequantize),
     ("dequantize.self", dequantize),
+    ("detach_copy", detach_copy),
     ("diag", diag),
     ("diag_embed", diag_embed),
     ("diagonal_backward", diagonal_backward),
