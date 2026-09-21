@@ -2801,7 +2801,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: col_indices_copy_out
   description: A variant of `col_indices_copy()` that writes the result into the `out`
     tensor.
@@ -2813,7 +2813,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: column_stack
   description: 'Creates a new tensor by horizontally stacking the tensors in tensors.
     Equivalent to
