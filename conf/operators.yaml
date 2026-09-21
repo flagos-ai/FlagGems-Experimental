@@ -13873,7 +13873,7 @@ ops:
   kind:
   - NeuralNetwork
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: thnn_differentiable_gru_cell_backward
   description: Computes differentiable gradients for a fused GRU cell.
   for:
