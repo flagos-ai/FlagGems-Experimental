@@ -250,7 +250,7 @@ ops:
   kind:
   - Quantization
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _make_per_tensor_quantized_tensor_out
   description: A variant of `_make_per_tensor_quantized_tensor()` that writes the
     result into the `out` tensor and returns it.
@@ -262,7 +262,7 @@ ops:
   kind:
   - Quantization
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _neg_view_copy
   description: Returns a freshly allocated contiguous tensor holding the negated values
     of `self`, mirroring `aten::_neg_view_copy`. Unlike `aten::_neg_view` (which returns
