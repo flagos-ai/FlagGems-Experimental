@@ -129,7 +129,7 @@ ops:
   kind:
   - Convolution
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _values
   description: 'Returns the values tensor of a sparse COO tensor as a zero-copy
     view.
