@@ -187,7 +187,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _indices_copy_out
   description: A variant of `_indices_copy()` that allows the output to be assigned
     to the `out` tensor.
@@ -199,7 +199,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _nnz
   description: 'Returns the number of stored elements (nnz) of a sparse tensor.
 
