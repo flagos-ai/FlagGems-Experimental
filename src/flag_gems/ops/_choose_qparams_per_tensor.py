@@ -238,7 +238,13 @@ def _choose_qparams_per_tensor(self, reduce_range=False):
     int64, writes them to pinned host memory and raises a release-ordered
     completion flag; the caller spins on that flag instead of synchronizing the
     device. The non-contiguous path walks the logical index space through an
-    int64 shape/stride table and reduces with ``atomic_min``/``atomic_max``.
+    int32 shape/stride table with int64 offsets: each per-axis term is
+    accumulated into an int64 ``off``, so an offset whose *sum* exceeds
+    ``2**31`` is still walked correctly. The table is int32 rather than int64
+    because the kernel's loop-carried ``rem`` (``rem = idx``) is int32 and
+    Triton rejects the loop when an int64 load re-types it; a size or stride
+    at or above ``2**31`` therefore fails when the table is built. The
+    reduction itself uses ``atomic_min``/``atomic_max``.
 
     The ``(scale, zero_point)`` arithmetic that follows the reduction is the
     reference one, in float32: ``scale = (max(max, 0) - min(min, 0)) / qmax``
@@ -259,10 +265,13 @@ def _choose_qparams_per_tensor(self, reduce_range=False):
       the floor again. The contiguous and non-contiguous paths of this
       implementation agree with *each other* across the whole window.
     - ``inf`` input: native returns ``scale = inf`` with ``zero_point``
-      ``-2**31`` (positive inf) or the clamp (negative inf); the reference
-      formula computes ``inf / inf`` -> NaN, and native's NaN input instead
-      raises ``RuntimeError: In ChooseQuantizationParams, min should be less
-      than or equal to max``. Both are pinned by the tests.
+      ``-2**31`` for a positive-infinite maximum, but the clamp (``qmax``) for
+      a negative-infinite minimum, since only the latter reaches native's
+      clamp. A finite maximum with ``min = -inf`` is answered ``(inf, qmax)``
+      here as well; the reference formula would instead compute ``inf / inf``
+      -> NaN and fail on ``round(nan)``. Native's NaN input raises
+      ``RuntimeError: In ChooseQuantizationParams, min should be less than or
+      equal to max`` and is not matched. All of this is pinned by the tests.
     - A tensor with no device storage (``meta``, whose ``data_ptr()`` is 0), a
       host tensor, a float8/complex dtype, or a sparse layout cannot be
       launched on (or must be answered by native's own rejection); those
@@ -408,6 +417,13 @@ def _choose_qparams_per_tensor(self, reduce_range=False):
         scale = 0.1
         zero_point = 0
     else:
+        # A negative-only infinite range makes ``scale_raw`` +inf, so the
+        # reference ``-round(mn_neg / scale_raw)`` below is ``-round(nan)`` and
+        # raises ``ValueError``. Native answers ``(inf, qmax)`` here, so return
+        # that instead of crashing. (``mn_neg`` is the only negative term, so
+        # ``scale_raw`` is +inf exactly when the range is infinite.)
+        if np.isinf(scale_raw) and mn_neg < 0.0:
+            return (float("inf"), qmax)
         if scale_raw < _SCALE_FLOOR:
             scale = _SCALE_FLOOR
         else:

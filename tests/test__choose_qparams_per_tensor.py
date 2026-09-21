@@ -358,14 +358,14 @@ def test_accuracy__choose_qparams_non_finite_pinned(reduce_range):
     assert _ATEN(one_inf, reduce_range) == (inf, -(2**31))
     assert flag_gems._choose_qparams_per_tensor(one_inf, reduce_range) == (inf, 0)
 
-    # A negative-only infinite range: the implementation's ``-round(inf / inf)``
-    # is a NaN, and Python refuses to make an int of it. That is a *backstop*,
-    # not a crash in the kernel, and it is pinned here as measured.
+    # A negative-only infinite range: ``-round(inf / inf)`` would be
+    # ``-round(nan)``, which Python refuses to make an int of, so the
+    # implementation returns native's answer for this case instead.
     neg_inf = torch.tensor([float("-inf"), 0.0], dtype=torch.float32, device=_DEVICE)
     ref = _ATEN(neg_inf, reduce_range)
     assert ref == (inf, qmax)
-    with pytest.raises(ValueError):
-        flag_gems._choose_qparams_per_tensor(neg_inf, reduce_range)
+    res = flag_gems._choose_qparams_per_tensor(neg_inf, reduce_range)
+    assert res == ref, res
 
     # Mixed inf/nan and nan-only inputs: native rejects both in its own
     # ``min <= max`` check; the implementation's reduction propagates NaN and
@@ -390,8 +390,8 @@ def test_accuracy__choose_qparams_non_finite_pinned(reduce_range):
     assert torch.isinf(strided).any().item()
     ref = _ATEN(strided, reduce_range)
     assert ref == (inf, qmax)
-    with pytest.raises(ValueError):
-        flag_gems._choose_qparams_per_tensor(strided, reduce_range)
+    res = flag_gems._choose_qparams_per_tensor(strided, reduce_range)
+    assert res == ref, res
 
     buf2 = torch.zeros(16, device=_DEVICE)
     buf2[4] = inf
