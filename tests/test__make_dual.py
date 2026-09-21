@@ -259,9 +259,11 @@ def test_accuracy__make_dual_double_dual_rejected():
 def test_accuracy__make_dual_dispatch_stability():
     # Repeated calls interleaved with an unrelated aten op must keep hitting
     # the registered path and return identical results. This is the regression
-    # guard for the dispatch-key TLS exclusion leaking past the call: if the
-    # CUDA key stayed excluded, ``torch.ops.aten.dim`` below would bypass the
-    # CUDA implementation and repeated ``_make_dual`` calls would misbehave.
+    # guard for a leaked thread-local re-entry flag: the override performs no
+    # dispatch-key exclusion, but if its flag were left set the next top-level
+    # ``_make_dual`` would take the re-entry branch and redispatch onto the
+    # CompositeExplicitAutograd kernel, whose InferenceMode assertion rejects
+    # the regular (non-inference) tensors used here.
     primal = _gen((1024,), torch.float32, flag_gems.device)
     tangent = _gen((1024,), torch.float32, flag_gems.device)
 
@@ -276,8 +278,8 @@ def test_accuracy__make_dual_dispatch_stability():
             utils.gems_assert_equal(res_out, ref_out)
             _, res_tangent = unpack_dual(res_out)
             utils.gems_assert_equal(res_tangent, utils.to_reference(tangent))
-        # The interleaved op still dispatches correctly on CUDA after all
-        # ``_make_dual`` calls (would fail if CUDA stayed excluded).
+        # The interleaved op still dispatches normally after all
+        # ``_make_dual`` calls (the override excludes no dispatch key).
         assert torch.ops.aten.dim(primal.clone()) == 1
 
 
