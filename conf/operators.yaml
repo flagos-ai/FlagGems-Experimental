@@ -328,9 +328,9 @@ ops:
   - aten
   - KernelGen
   kind:
-  - Tensor
+  - Convolution
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _unpack_dual
   description: 'Unpacks a dual tensor into its forward-mode AD primal and tangent
     pair, mirroring `aten::_unpack_dual`. The primal is a zero-copy aliasing view
