@@ -2400,7 +2400,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: chalf
   description: 'Returns a copy of the tensor cast to the ``complex32`` dtype. Real
     inputs are
