@@ -109,10 +109,26 @@ def sparse_mask(self: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     result is a sparse COO tensor with the mask's sparsity pattern (same
     ``indices()`` and ``is_coalesced()`` flag) but the values of ``self``
     gathered at those indices; the mask's own values are never read.
+
+    Only purely sparse COO masks are handled here: masks in a compressed layout
+    (CSR/CSC/BSR/BSC) and hybrid COO masks with ``dense_dim > 0`` raise
+    ``NotImplementedError``, whereas native serves them through separate
+    compressed-layout and hybrid-COO paths.
     """
     logger.debug("GEMS SPARSE_MASK")
     if mask.layout != torch.sparse_coo:
         raise NotImplementedError("sparse_mask: expected a sparse COO mask")
+    # A hybrid mask carries a dense block per entry, so its values would have to
+    # be shaped (nnz, *dense_shape); the gather below fills a flat (nnz,) buffer
+    # and never reads the block, and the constructor would then infer
+    # dense_dim == 0 and reject the mask's true rank. Reject it up front
+    # instead of failing with that unrelated constructor error (native handles
+    # hybrid masks through its own path).
+    if mask.dense_dim() > 0:
+        raise NotImplementedError(
+            "sparse_mask: masks with dense_dim > 0 are not supported, got "
+            f"dense_dim={mask.dense_dim()}"
+        )
     # Native ATen rejects size mismatches before doing any work; the gather
     # kernels below index the (dense) strides without bounds checks, so the
     # same input must be rejected here instead of running out of bounds.
