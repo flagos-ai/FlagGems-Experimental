@@ -1888,6 +1888,7 @@ __all__ = [
     "sort",
     "sort_stable",
     "sparse_compressed_tensor",
+    "sparse_compressed_tensor_size",
     "sparse_dim",
     "sparse_sampled_addmm",
     "sparse_sampled_addmm_out",
