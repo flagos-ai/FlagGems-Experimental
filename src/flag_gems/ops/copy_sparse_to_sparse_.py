@@ -117,6 +117,40 @@ def _grow_error(kind, before, after):
     )
 
 
+def _contiguous_buffers(t, name):
+    """Return ``(indices, values)`` of ``t`` guaranteed contiguous in storage.
+
+    The fused kernels below address the copies with a single base pointer plus
+    a linear ``tl.arange`` offset, so they walk the buffer as if it were flat:
+    ``di + offs`` for ``offs < numel``. That is only correct when the buffer's
+    layout equals its logical layout. torch happily accepts and preserves a COO
+    tensor whose buffers are not contiguous, including stride 0
+    (``torch.sparse_coo_tensor(idx, values.expand(...), shape)`` stores the
+    ``expand`` view itself — measured), so a linear walk over such a buffer
+    reads or writes past the end of the storage when the strides are 0, and
+    silently permutes the elements when they are not. Native never sees this
+    problem because it copies through a strided tensor iterator.
+
+    Materialising a contiguous copy here is the cheapest correct answer: these
+    tensors are 1-D/n-D buffers of exactly ``numel`` elements, the copy is
+    O(nnz * dense) and the copy itself is already O(nnz * dense). It is also
+    what the caller's own allocation does right below (``torch.empty_like`` on
+    a non-expanded source preserves memory format), so the kernel no longer
+    depends on a property of the input that nothing in this repository
+    enforces. ``contiguous()`` is a no-op returning ``self`` when the buffer is
+    already contiguous — the case of every ordinary COO tensor — so no
+    workload pays for the check.
+    """
+    idx, val = t._indices(), t._values()
+    if not idx.is_contiguous():
+        logger.debug("GEMS COPY_SPARSE_TO_SPARSE_ %s: materialising indices", name)
+        idx = idx.contiguous()
+    if not val.is_contiguous():
+        logger.debug("GEMS COPY_SPARSE_TO_SPARSE_ %s: materialising values", name)
+        val = val.contiguous()
+    return idx, val
+
+
 def copy_sparse_to_sparse_(
     self: torch.Tensor, src: torch.Tensor, non_blocking: bool = False
 ) -> torch.Tensor:
@@ -176,6 +210,18 @@ def copy_sparse_to_sparse_(
     The fused Triton kernels, the BLOCK/num_warps choices, the size threshold
     and the masked/nomask selection are kept from the supplied source exactly;
     the small-block/no-op/self-copy short-circuits are unchanged.
+
+    ``non_blocking`` is accepted only to match the aten signature and is
+    deliberately never read. Native forwards it to
+    ``copy_into_sparse``, which passes it on to
+    ``indices.to(options, non_blocking, copy=true)`` — the single place the
+    flag reaches, and one where it is observable only on the
+    host<->device branch of ``Tensor.to()``. This implementation is a
+    device-to-device fused copy that never moves a tensor across the
+    host/device boundary, so there is no native effect left to reproduce and
+    ignoring the flag is equivalent (the default path of that ``to()`` is
+    asynchronous for device-to-device moves either way). The parameter keeps
+    its name and position for the aten signature match.
     """
     logger.debug("GEMS COPY_SPARSE_TO_SPARSE_")
     if self.layout != torch.sparse_coo or src.layout != torch.sparse_coo:
@@ -213,14 +259,25 @@ def copy_sparse_to_sparse_(
     if self is src:
         return self
 
-    s_idx = src._indices()
-    s_val = src._values()
+    s_idx, s_val = _contiguous_buffers(src, "src")
 
     structural = (
         self._nnz() != src._nnz()
         or self.shape != src.shape
         or self.sparse_dim() != src.sparse_dim()
         or self.dense_dim() != src.dense_dim()
+        # A destination whose buffers are not contiguous in storage cannot be
+        # the target of the linear kernel walk either, and unlike the source it
+        # cannot be fixed by a local ``contiguous()``: the buffers are the ones
+        # the caller (and every alias of ``self``) addresses afterwards, so a
+        # local copy would be dead work. Measured on CPU with a stride-0 dst:
+        # native does not write into the strided buffer either — after the call
+        # ``self._values()`` is contiguous and backed by a full-size storage —
+        # which is what the structural path below produces (fresh contiguous
+        # buffers holding the copied entries). With shape / nnz / split equal
+        # its resize is a no-op, so routing here reproduces native's end state.
+        or not self._indices().is_contiguous()
+        or not self._values().is_contiguous()
     )
 
     if structural:

@@ -655,3 +655,132 @@ def test_copy_sparse_to_sparse__requires_grad_leaf():
             dst, _make_coo((3, 4), 6, seed=40).to(flag_gems.device)
         )
     assert dst._nnz() == 4
+
+
+# Buffers that are not contiguous in their storage. torch accepts and preserves
+# both of these in a COO tensor (measured on CPU); the fused kernel addresses
+# each buffer with one base pointer plus a linear offset, so both used to
+# corrupt the copy:
+#   - "stride0": an ``expand``ed values tensor. Its storage holds only the
+#     broadcast source elements (1*2*4 instead of 3*2*4), so the linear walk
+#     read and wrote past the end of the storage.
+#   - "permuted": a values tensor whose storage is exactly ``numel`` elements
+#     but in a different order, so the walk stays in bounds and silently writes
+#     the entries out of order.
+# The indices buffer is non-contiguous in both variants as well, so the two
+# streams of the fused kernel are covered together.
+NC_SPARSE_DIM = 3
+NC_DENSE = (2, 4)
+NC_SHAPE = (5, 6, 7) + NC_DENSE
+
+
+def _make_noncontig_coo(kind, device="cpu"):
+    """A COO tensor of ``NC_SHAPE`` whose buffers are non-contiguous.
+
+    ``kind`` selects the storage pattern of the values buffer (see above); the
+    indices buffer is transposed in every variant. Both the transpose and the
+    broadcast are applied on ``device`` itself: a host->device transfer is not
+    guaranteed to preserve the layout of a self-overlapping tensor (on CPU
+    ``.to(dtype)`` on the stride-0 tensor returns a *contiguous* one), so
+    building the fixture locally on the target device keeps the premise of the
+    test under the test's own control.
+    """
+    nnz = NC_SPARSE_DIM
+    gen = torch.Generator().manual_seed(41)
+    flat = torch.randperm(5 * 6 * 7, generator=gen)[:nnz]
+    idx = torch.empty((nnz, NC_SPARSE_DIM), dtype=torch.int64)
+    f = flat.clone()
+    for d in reversed(range(NC_SPARSE_DIM)):
+        idx[:, d] = f % NC_SHAPE[d]
+        f = f // NC_SHAPE[d]
+    idx_nc = idx.to(device).t()  # (NC_SPARSE_DIM, nnz), non-contiguous
+    dense_numel = 1
+    for s in NC_DENSE:
+        dense_numel *= s
+    if kind == "stride0":
+        # One dense slice broadcast over the entries. The broadcast source is
+        # built on its own so its storage holds ``dense_numel`` elements while
+        # the logical count is ``nnz * dense_numel``: a linear walk over the
+        # logical count leaves the storage, which is the unsafe case.
+        vals = (
+            torch.arange(dense_numel, dtype=torch.float32, device=device)
+            .reshape((1,) + NC_DENSE)
+            .expand((nnz,) + NC_DENSE)
+        )
+    else:
+        # Same element count, permuted storage: a linear walk stays in bounds
+        # and writes the wrong entries.
+        vals = (
+            torch.arange(nnz * dense_numel, dtype=torch.float32, device=device)
+            .reshape((nnz,) + NC_DENSE[::-1])
+            .transpose(1, 2)
+        )
+    return torch.sparse_coo_tensor(idx_nc, vals, NC_SHAPE)
+
+
+@pytest.mark.copy_sparse_to_sparse_
+@pytest.mark.parametrize("kind", ["stride0", "permuted"])
+def test_copy_sparse_to_sparse__noncontiguous_buffers(kind):
+    # Non-contiguous source buffers (indices and values both) must produce the
+    # same end state as native rather than a corrupt copy.
+    dev = flag_gems.device
+    src = _make_noncontig_coo(kind, device=dev)
+    assert not src._indices().is_contiguous(), f"{kind}: fixture indices"
+    assert not src._values().is_contiguous(), f"{kind}: fixture values"
+    if kind == "stride0":
+        # The premise of the out-of-bounds variant: the storage is smaller than
+        # the logical element count. This is what made the linear walk unsafe.
+        elem = src._values().element_size()
+        assert src._values().untyped_storage().nbytes() // elem < src._values().numel()
+
+    # Native reference: the same source layout, an independently built
+    # destination. nnz / shape / split match on both sides on purpose, so the
+    # case takes the in-place path and the non-contiguous buffers actually
+    # reach the fused kernel; a different-nnz pair would go through the
+    # structural path instead and the buffers under test would never be walked.
+    ref = _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=42, nnd=NC_SPARSE_DIM, flag=None).to(
+        dev
+    )
+    torch.ops.aten.copy_sparse_to_sparse_(ref, src)
+
+    dst = _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=42, nnd=NC_SPARSE_DIM, flag=None).to(
+        dev
+    )
+    flag_gems.copy_sparse_to_sparse_(dst, src)
+
+    assert _state(dst) == _state(ref), f"{kind}: {_state(dst)} != {_state(ref)}"
+    utils.gems_assert_equal(dst._indices(), ref._indices())
+    utils.gems_assert_close(dst._values(), ref._values(), dst._values().dtype)
+    # The stored entries themselves, not only the metadata: the stride-0
+    # variant used to walk out of the source's storage.
+    assert torch.equal(dst._values(), src._values()), kind
+
+
+@pytest.mark.copy_sparse_to_sparse_
+@pytest.mark.parametrize("kind", ["stride0", "permuted"])
+def test_copy_sparse_to_sparse__noncontiguous_dst(kind):
+    # A destination with non-contiguous buffers: the kernel cannot write into
+    # such a buffer through a linear offset either. Native's end state is a
+    # destination whose buffers are contiguous (measured on CPU), and the
+    # implementation must land on the same one.
+    dev = flag_gems.device
+    src = _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=43, nnd=NC_SPARSE_DIM, flag=None).to(
+        dev
+    )
+    ref = _make_noncontig_coo(kind, device=dev)
+    assert not ref._indices().is_contiguous(), f"{kind}: fixture indices"
+    assert not ref._values().is_contiguous(), f"{kind}: fixture values"
+    # Same nnz / shape / split: the in-place path, which is the branch that
+    # used to write through the strided buffer.
+    torch.ops.aten.copy_sparse_to_sparse_(ref, src)
+
+    dst = _make_noncontig_coo(kind, device=dev)
+    flag_gems.copy_sparse_to_sparse_(dst, src)
+
+    assert _state(dst) == _state(ref), f"{kind}: {_state(dst)} != {_state(ref)}"
+    utils.gems_assert_equal(dst._indices(), ref._indices())
+    utils.gems_assert_close(dst._values(), ref._values(), dst._values().dtype)
+    # Metadata alone would not catch the stride-0 variant, which used to walk
+    # out of the old storage: compare the stored entries too.
+    assert tuple(dst._values().shape) == tuple(src._values().shape), kind
+    assert torch.equal(dst._values(), src._values()), kind
