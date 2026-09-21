@@ -1971,6 +1971,7 @@ __all__ = [
     "sparse_coo_tensor_size",
     "sparse_coo_tensor_size_out",
     "sparse_compressed_tensor",
+    "sparse_compressed_tensor_size",
     "sparse_dim",
     "sparse_resize_",
     "sparse_sampled_addmm",
