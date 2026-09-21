@@ -432,9 +432,9 @@ ops:
   - aten
   - KernelGen
   kind:
-  - Tensor
+  - Convolution
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _slow_conv2d_forward
   description: 'Forward of the slow 2-D convolution, mirroring
 
