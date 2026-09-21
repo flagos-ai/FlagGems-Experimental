@@ -2346,7 +2346,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: ccol_indices_copy
   description: Returns a fresh contiguous copy of a sparse CSC/BSC tensor's compressed-column-index
     array as an int64 tensor shaped batch dims plus `ncols + 1`.
