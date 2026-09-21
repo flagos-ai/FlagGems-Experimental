@@ -12341,7 +12341,7 @@ ops:
   kind:
   - Convolution
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: slow_conv_dilated3d_out
   description: 'A variant of `slow_conv_dilated3d` that assigns the result to the given
     `out` parameter.
@@ -12355,7 +12355,7 @@ ops:
   kind:
   - Convolution
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: smooth_l1_loss
   description: Compute the smooth L1 loss between input and target tensors.
   for:
