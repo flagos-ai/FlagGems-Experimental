@@ -325,6 +325,11 @@ def test_accuracy_sparse_mask_fresh_storage():
     mask = _make_coo_mask((3, 4), 4, torch.float32, seed=13)
     res_out = flag_gems.sparse_mask(self_t, mask)
 
+    # Sparsity structure parity: the output must report the mask's sparse_dim
+    # and dense_dim, not just the same shape.
+    assert res_out.sparse_dim() == mask.sparse_dim()
+    assert res_out.dense_dim() == mask.dense_dim()
+    assert res_out._values().shape == (res_out._nnz(),)
     assert res_out._values().untyped_storage().data_ptr() != (
         mask._values().untyped_storage().data_ptr()
     )
@@ -360,6 +365,35 @@ def test_accuracy_sparse_mask_error_paths():
     csr_mask = csr_mask.to_sparse_csr()
     with pytest.raises(NotImplementedError, match="COO"):
         flag_gems.sparse_mask(self_t, csr_mask)
+
+
+@pytest.mark.sparse_mask
+def test_accuracy_sparse_mask_hybrid_mask_rejected():
+    # Hybrid COO mask (dense_dim > 0): native serves it through its own
+    # hybrid path (values shaped (nnz, *dense_shape)); this COO-only
+    # implementation allocates a flat (nnz,) values buffer, so it must reject
+    # the mask instead of failing with the constructor's unrelated
+    # "number of dimensions must be sparse_dim (1) + dense_dim (0), but got 2"
+    # RuntimeError.
+    self_t = torch.randn((4, 3), device=flag_gems.device)
+    mask = torch.sparse_coo_tensor(
+        torch.tensor([[0, 2]], dtype=torch.int64, device=flag_gems.device),
+        torch.randn((2, 3), device=flag_gems.device),
+        (4, 3),
+    )
+    assert mask.layout == torch.sparse_coo
+    assert mask.sparse_dim() == 1
+    assert mask.dense_dim() == 1
+    # Native accepts this input and returns a hybrid result, so the guard is a
+    # deliberate capability gap, not a malformed-input rejection. The reference
+    # call uses to_reference on BOTH operands so it also holds under --ref=cpu.
+    ref_out = torch.ops.aten.sparse_mask(
+        utils.to_reference(self_t), utils.to_reference(mask)
+    )
+    assert ref_out.dense_dim() == 1
+
+    with pytest.raises(NotImplementedError, match="dense_dim > 0"):
+        flag_gems.sparse_mask(self_t, mask)
 
 
 @pytest.mark.sparse_mask
