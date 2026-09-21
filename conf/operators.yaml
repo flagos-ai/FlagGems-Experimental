@@ -12695,7 +12695,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: sparse_sampled_addmm
   description: 'Computes alpha * (mat1 @ mat2) * spy(input) + beta * input, where
     input is a sparse CSR tensor
