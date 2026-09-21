@@ -3621,7 +3621,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: diagonal_backward
   description: 'A diagonal operation returns a partial view of `input` with the its
     diagonal elements
