@@ -176,6 +176,7 @@ from .jagged_to_padded_dense_forward import (
 )
 from .kron import kron
 from .layernorm import layer_norm, layer_norm_backward
+from .lcm_ import lcm_
 from .le import le, le_scalar
 from .leaky_relu import leaky_relu, leaky_relu_, leaky_relu_out
 from .lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
@@ -581,6 +582,7 @@ __all__ = [
     "kron",
     "layer_norm",
     "layer_norm_backward",
+    "lcm_",
     "le",
     "le_scalar",
     "leaky_relu",
