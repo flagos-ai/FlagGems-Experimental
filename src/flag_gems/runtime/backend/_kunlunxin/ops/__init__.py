@@ -271,6 +271,7 @@ from .randperm import randperm
 from .reciprocal import reciprocal, reciprocal_
 from .reflection_pad1d import reflection_pad1d, reflection_pad1d_out
 from .reflection_pad2d import reflection_pad2d, reflection_pad2d_out
+from .reflection_pad3d import reflection_pad3d
 from .reflection_pad3d_backward import reflection_pad3d_backward
 from .relu import relu, relu_
 from .repeat import repeat
@@ -705,6 +706,7 @@ __all__ = [
     "reflection_pad1d_out",
     "reflection_pad2d",
     "reflection_pad2d_out",
+    "reflection_pad3d",
     "reflection_pad3d_backward",
     "relu",
     "relu_",
