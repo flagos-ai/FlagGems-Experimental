@@ -179,6 +179,7 @@ from .layernorm import layer_norm, layer_norm_backward
 from .le import le, le_scalar
 from .leaky_relu import leaky_relu, leaky_relu_, leaky_relu_out
 from .lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
+from .less_ import less_
 from .less_equal import less_equal, less_equal_scalar
 from .lgamma import lgamma
 from .lift_fresh_copy import lift_fresh_copy
@@ -590,6 +591,7 @@ __all__ = [
     "lerp_scalar_",
     "lerp_tensor",
     "lerp_tensor_",
+    "less_",
     "less_equal",
     "less_equal_scalar",
     "lgamma",
