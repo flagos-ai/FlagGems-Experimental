@@ -312,6 +312,7 @@ from .special_erfc import special_erfc
 from .special_gammaln_out import special_gammaln_out
 from .special_log_softmax import special_log_softmax
 from .special_logsumexp import special_logsumexp
+from .special_multigammaln import special_multigammaln
 from .special_xlog1py import special_xlog1py
 from .sqrt import sqrt, sqrt_
 from .square_ import square_
@@ -772,6 +773,7 @@ __all__ = [
     "special_gammaln_out",
     "special_log_softmax",
     "special_logsumexp",
+    "special_multigammaln",
     "special_xlog1py",
     "sqrt",
     "sqrt_",
