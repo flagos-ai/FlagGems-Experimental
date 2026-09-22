@@ -58,6 +58,7 @@ from .baddbmm import baddbmm
 from .batch_norm import batch_norm, batch_norm_backward
 from .batch_norm_no_update import _batch_norm_no_update, batch_norm_no_update
 from .bernoulli_ import bernoulli_
+from .binary_cross_entropy_backward import binary_cross_entropy_backward
 from .bitwise_and import (
     bitwise_and_scalar,
     bitwise_and_scalar_,
@@ -435,6 +436,7 @@ __all__ = [
     "batch_norm",
     "batch_norm_backward",
     "batch_norm_no_update",
+    "binary_cross_entropy_backward",
     "bernoulli_",
     "bitwise_and_scalar",
     "bitwise_and_scalar_",
