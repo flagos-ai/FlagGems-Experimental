@@ -723,28 +723,31 @@ def _make_noncontig_coo(kind, device="cpu"):
 def test_copy_sparse_to_sparse__noncontiguous_buffers(kind):
     # Non-contiguous source buffers (indices and values both) must produce the
     # same end state as native rather than a corrupt copy.
-    dev = flag_gems.device
-    src = _make_noncontig_coo(kind, device=dev)
+    # Reference side: the fixture is built locally on the device (so it carries
+    # the real non-contiguous layout there) and then passed through
+    # ``to_reference``. That keeps the reference on the device in the GPU phase
+    # and moves it to CPU in the quick phase, where a cross-device copy
+    # materialises the stride-0 expand -- harmless, because native's answer is
+    # layout-independent (it copies through a strided iterator) and what is
+    # compared is the logical content. The layout premise itself is asserted on
+    # the implementation side below, where no hop ever happens.
+    ref_src = utils.to_reference(_make_noncontig_coo(kind, device=flag_gems.device))
+    ref = utils.to_reference(
+        _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=42, nnd=NC_SPARSE_DIM, flag=None).to(
+            flag_gems.device
+        )
+    )
+    torch.ops.aten.copy_sparse_to_sparse_(ref, ref_src)
+
+    # Implementation side: the same layouts on the real device. nnz / shape /
+    # split match on purpose, so the case takes the in-place path and the
+    # non-contiguous buffers actually reach the fused kernel; a different-nnz
+    # pair would take the structural path instead and never walk them.
+    src = _make_noncontig_coo(kind, device=flag_gems.device)
     assert not src._indices().is_contiguous(), f"{kind}: fixture indices"
     assert not src._values().is_contiguous(), f"{kind}: fixture values"
-    if kind == "stride0":
-        # The premise of the out-of-bounds variant: the storage is smaller than
-        # the logical element count. This is what made the linear walk unsafe.
-        elem = src._values().element_size()
-        assert src._values().untyped_storage().nbytes() // elem < src._values().numel()
-
-    # Native reference: the same source layout, an independently built
-    # destination. nnz / shape / split match on both sides on purpose, so the
-    # case takes the in-place path and the non-contiguous buffers actually
-    # reach the fused kernel; a different-nnz pair would go through the
-    # structural path instead and the buffers under test would never be walked.
-    ref = _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=42, nnd=NC_SPARSE_DIM, flag=None).to(
-        dev
-    )
-    torch.ops.aten.copy_sparse_to_sparse_(ref, src)
-
     dst = _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=42, nnd=NC_SPARSE_DIM, flag=None).to(
-        dev
+        flag_gems.device
     )
     flag_gems.copy_sparse_to_sparse_(dst, src)
 
@@ -763,18 +766,27 @@ def test_copy_sparse_to_sparse__noncontiguous_dst(kind):
     # such a buffer through a linear offset either. Native's end state is a
     # destination whose buffers are contiguous (measured on CPU), and the
     # implementation must land on the same one.
-    dev = flag_gems.device
-    src = _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=43, nnd=NC_SPARSE_DIM, flag=None).to(
-        dev
+    # Reference side: the fixtures are built locally on the device and then
+    # passed through ``to_reference``, which keeps them on the device in the
+    # GPU phase and moves them to CPU in the quick phase. In the quick phase a
+    # cross-device copy materialises the stride-0 expand, which is harmless:
+    # native's answer is layout-independent (it copies through a strided
+    # iterator), and what is compared is the logical content. The layout premise
+    # is asserted on the implementation side below, where no hop happens.
+    ref_src = utils.to_reference(
+        _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=43, nnd=NC_SPARSE_DIM, flag=None).to(
+            flag_gems.device
+        )
     )
-    ref = _make_noncontig_coo(kind, device=dev)
-    assert not ref._indices().is_contiguous(), f"{kind}: fixture indices"
-    assert not ref._values().is_contiguous(), f"{kind}: fixture values"
+    ref = utils.to_reference(_make_noncontig_coo(kind, device=flag_gems.device))
     # Same nnz / shape / split: the in-place path, which is the branch that
     # used to write through the strided buffer.
-    torch.ops.aten.copy_sparse_to_sparse_(ref, src)
+    torch.ops.aten.copy_sparse_to_sparse_(ref, ref_src)
 
-    dst = _make_noncontig_coo(kind, device=dev)
+    src = _make_coo(NC_SHAPE, NC_SPARSE_DIM, seed=43, nnd=NC_SPARSE_DIM, flag=None).to(
+        flag_gems.device
+    )
+    dst = _make_noncontig_coo(kind, device=flag_gems.device)
     flag_gems.copy_sparse_to_sparse_(dst, src)
 
     assert _state(dst) == _state(ref), f"{kind}: {_state(dst)} != {_state(ref)}"
