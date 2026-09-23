@@ -80,6 +80,21 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _nested_compute_contiguous_strides_offsets
+  description: 'Computes the contiguous strides and storage offsets of a nested tensor
+    from its per-component sizes, mirroring
+    `aten::_nested_compute_contiguous_strides_offsets`.
+
+    '
+  for:
+  - _nested_compute_contiguous_strides_offsets
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
 - id: _reshape_alias
   description: 'Creates a view of the input tensor with the given size and stride,
 
