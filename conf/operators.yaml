@@ -191,7 +191,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _new_zeros_with_same_feature_meta_out
   description: >-
     A variant of `_new_zeros_with_same_feature_meta()` that writes the zeros
@@ -205,7 +205,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _nnz
   description: 'Returns the number of stored elements (nnz) of a sparse tensor.
 
