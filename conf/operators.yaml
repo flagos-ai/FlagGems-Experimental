@@ -434,7 +434,7 @@ ops:
   kind:
   - Convolution
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _slow_conv2d_forward
   description: 'Forward of the slow 2-D convolution, mirroring
 
