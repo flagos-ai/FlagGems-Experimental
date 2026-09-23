@@ -123,7 +123,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _values_copy_out
   description: A variant of `_values_copy()` that writes the result into the `out`
     tensor and returns it.
@@ -135,7 +135,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _weight_norm
   description: 'Reparameterizes a module''s weight tensor by decoupling its magnitude
     (g)
