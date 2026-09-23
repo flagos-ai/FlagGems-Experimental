@@ -182,7 +182,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _make_dual_copy_out
   description: A variant of `_make_dual_copy()` that allows the output to be assigned
     to the `out` tensor.
@@ -194,7 +194,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _nested_compute_contiguous_strides_offsets
   description: 'Computes the contiguous strides and storage offsets of a nested tensor
     from its per-component sizes, mirroring
