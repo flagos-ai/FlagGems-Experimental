@@ -67,6 +67,20 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _efficientzerotensor
+  description: 'Returns an efficient zero tensor of the given size: an immutable
+    zero tensor whose creation cost is independent of the tensor size.
+
+    '
+  for:
+  - _efficientzerotensor
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _flash_attention_forward
   description: Run the canonical FlashAttention forward operator.
   for:
