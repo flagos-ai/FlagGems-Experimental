@@ -120,7 +120,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _fw_primal_copy_out
   description: A variant of `_fw_primal_copy()` that writes the primal copy into the
     `out` tensor and returns it.
@@ -133,7 +133,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
 - id: _has_same_storage_numel
   description: 'Returns True if the two tensors have the same number of elements in
     their underlying storages.
