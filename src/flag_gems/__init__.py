@@ -1238,6 +1238,12 @@ _FULL_CONFIG = (
     ),
     ("sparse_mask", sparse_mask, None, (SPARSE_DISPATCH_KEY,)),
     (
+        "sparse_mask.out",
+        sparse_mask_out,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
+    (
         "sparse_resize_",
         sparse_resize_,
         None,

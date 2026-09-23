@@ -869,7 +869,7 @@ from flag_gems.ops.sparse_coo_tensor import (
     sparse_coo_tensor_size_out,
 )
 from flag_gems.ops.sparse_dim import sparse_dim
-from flag_gems.ops.sparse_mask import sparse_mask
+from flag_gems.ops.sparse_mask import sparse_mask, sparse_mask_out
 from flag_gems.ops.sparse_resize_ import sparse_resize_
 from flag_gems.ops.sparse_sampled_addmm import (
     sparse_sampled_addmm,
@@ -1970,6 +1970,7 @@ __all__ = [
     "sparse_coo_tensor_size_out",
     "sparse_dim",
     "sparse_mask",
+    "sparse_mask_out",
     "sparse_resize_",
     "sparse_sampled_addmm",
     "sparse_sampled_addmm_out",
