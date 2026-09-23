@@ -158,6 +158,7 @@ from .glu import glu, glu_backward
 from .greater import greater, greater_out, greater_scalar, greater_scalar_out
 from .groupnorm import group_norm, group_norm_backward
 from .gt import gt, gt_scalar
+from .gt_scalar_ import gt_scalar_
 from .hadamard_transform import hadamard_transform
 from .hardsigmoid import hardsigmoid, hardsigmoid_out
 from .hstack import hstack
@@ -571,6 +572,7 @@ __all__ = [
     "group_norm_backward",
     "gt",
     "gt_scalar",
+    "gt_scalar_",
     "hadamard_transform",
     "hardsigmoid",
     "hardsigmoid_out",
