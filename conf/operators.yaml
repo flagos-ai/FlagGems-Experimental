@@ -80,6 +80,20 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _make_dual
+  description: 'Creates a dual tensor for forward-mode AD by attaching the tangent
+    to the primal at the given level.
+
+    '
+  for:
+  - _make_dual
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
 - id: _reshape_alias
   description: 'Creates a view of the input tensor with the given size and stride,
 
