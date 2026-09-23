@@ -12679,7 +12679,19 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.5'
+  - alpha: '5.4'
+- id: sparse_mask_out
+  description: A variant of `sparse_mask()` that writes the result into the `out`
+    tensor and returns it.
+  for:
+  - sparse_mask.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: sparse_mla_fwd_interface
   description: 'A generic interface for sparse MLA (Multi-head Latent Attention) for
     DeepSeek v3/v3.2.

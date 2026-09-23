@@ -73,3 +73,70 @@ def test_sparse_mask():
         dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
     )
     bench.run()
+
+
+# Sparse-self x sparse-mask intersection: the _sparse_gather_kernel path. The
+# cost of that kernel is O((nnz_m + nnz_s) log nnz_s) on the sorted-join fast
+# path and O(nnz_m * nnz_s) on the legacy path, so its cost profile differs
+# fundamentally from the dense gather branches; its own op_name keeps the
+# record log (and the geo_mean gate) separate from the dense numbers above.
+# Mask density is held constant (~3%) while nnz_s grows, so the scaling in
+# nnz_s is measurable. Dtypes are float-only: the intersection kernel is
+# dtype-agnostic in shape but the numbers below track the kernel change.
+SPARSE_SELF_CASES = [
+    ((1024, 1024), 16384, 32768),  # mask nnz, self nnz
+    ((2048, 2048), 65536, 131072),
+    ((4096, 4096), 262144, 524288),
+]
+
+
+class SparseMaskSparseSelfBenchmark(base.Benchmark):
+    """Benchmark of the sparse COO self x COO mask intersection branch."""
+
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = [shape for shape, _, _ in SPARSE_SELF_CASES]
+
+    def get_input_iter(self, cur_dtype):
+        for shape, nnz_mask, nnz_self in SPARSE_SELF_CASES:
+            mask = _make_mask(shape, cur_dtype, self.device, nnz_mask)
+            # Self shares most of the mask's positions so the join is the
+            # dominant cost (values are gathered, not computed).
+            self_t = _make_mask(shape, cur_dtype, self.device, nnz_self)
+            yield self_t, mask
+
+
+class SparseMaskOutBenchmark(base.Benchmark):
+    """Benchmark of the .out overload (dense self, same cases as functional)."""
+
+    def get_input_iter(self, cur_dtype):
+        for shape, nnz in SPARSE_MASK_CASES:
+            inp = utils.generate_tensor_input(shape, cur_dtype, self.device)
+            mask = _make_mask(shape, cur_dtype, self.device, nnz)
+            out = torch.sparse_coo_tensor(
+                mask._indices().clone(),
+                torch.empty(nnz, dtype=cur_dtype, device=self.device),
+                tuple(shape),
+            )
+            yield inp, mask, {"out": out}
+
+
+@pytest.mark.sparse_mask
+def test_sparse_mask_sparse_self():
+    bench = SparseMaskSparseSelfBenchmark(
+        op_name="sparse_mask_sparse_self",
+        torch_op=torch.ops.aten.sparse_mask,
+        gems_op=flag_gems.sparse_mask,
+        dtypes=consts.FLOAT_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.sparse_mask
+def test_sparse_mask_out():
+    bench = SparseMaskOutBenchmark(
+        op_name="sparse_mask_out",
+        torch_op=torch.ops.aten.sparse_mask.out,
+        gems_op=flag_gems.sparse_mask_out,
+        dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
+    )
+    bench.run()

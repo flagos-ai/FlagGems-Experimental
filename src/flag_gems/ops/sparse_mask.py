@@ -28,6 +28,14 @@ _BLOCK2D = 512
 _BLOCKND = 1024
 _BLOCKSP = 128
 _MAXD = 8
+# The sparse x sparse intersection takes the sorted-join fast path once the
+# self tensor holds at least this many stored entries; below it the launch and
+# sort overhead dominates the legacy kernel's linear scan. Both paths compute
+# identical results (last-match-wins), the threshold only selects which one
+# runs; its two sides are covered by
+# test_accuracy_sparse_mask_sparse_self_threshold_boundary.
+_FAST_JOIN_THRESHOLD = 4096
+_INT64_MAX = (1 << 63) - 1
 
 
 @triton.jit
@@ -86,6 +94,14 @@ def _sparse_gather_kernel(
     BLOCK: tl.constexpr,
     MAXD: tl.constexpr,
 ):
+    """Legacy per-dimension scan: O(nnz_m * nnz_s).
+
+    Each mask entry walks every stored ``self`` entry in storage order and
+    keeps the last match, which is the operator's documented last-match-wins
+    rule for duplicate coordinates. Kept as the fallback for inputs the linear
+    key of the fast path cannot represent injectively (out-of-range
+    coordinates) and for small ``nnz_s``.
+    """
     pid = tl.program_id(0)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     m = offs < nnz_m
@@ -100,6 +116,118 @@ def _sparse_gather_kernel(
         sv = tl.load(s_val_ptr + j)
         acc = tl.where(match, sv, acc)
     tl.store(out_ptr + offs, acc, mask=m)
+
+
+@triton.jit
+def _key_of_kernel(
+    idx_ptr,
+    mult_ptr,
+    key_ptr,
+    nnz,
+    ndim,
+    BLOCK: tl.constexpr,
+    MAXD: tl.constexpr,
+):
+    """Row-major linear key of each COO column: sum_d idx[d, j] * mult[d].
+
+    ``mult`` holds the row-major strides of the sparse rank, so for in-range
+    indices the map coordinate -> key is injective and key equality is exactly
+    coordinate equality.
+    """
+    pid = tl.program_id(0)
+    offs = pid * BLOCK + tl.arange(0, BLOCK)
+    m = offs < nnz
+    key = tl.zeros([BLOCK], dtype=tl.int64)
+    for d in tl.static_range(MAXD):
+        active = d < ndim
+        mi = tl.load(idx_ptr + d * nnz + offs, mask=m & active, other=0).to(tl.int64)
+        mu = tl.load(mult_ptr + d, mask=active, other=0).to(tl.int64)
+        key += mi * mu
+    tl.store(key_ptr + offs, key, mask=m)
+
+
+@triton.jit
+def _sparse_join_kernel(
+    m_q_ptr,
+    sk_ptr,
+    sv_ptr,
+    out_ptr,
+    nnz_m,
+    nnz_s,
+    iters,
+    BLOCK: tl.constexpr,
+):
+    """Sorted-join: O((nnz_m + nnz_s) log nnz_s) instead of O(nnz_m * nnz_s).
+
+    ``sk`` holds the self entries' *combined* keys, sorted ascending. A
+    combined key packs the linear coordinate key and the storage position j as
+    ``key * nnz_s + j``; because every j differs, the combined values are
+    pairwise distinct, so a plain (non-stable) sort produces one unambiguous
+    order and the last element of the group of a given key is exactly the
+    largest-j entry -- the one the legacy scan's last-match-wins accumulate
+    would end on. Packing j into the sort key is what makes this independent of
+    any sort-stability guarantee.
+
+    Each mask entry binary-searches for the last combined key below the next
+    key's range (``key * nnz_s + nnz_s``); a hit needs the found entry to be at
+    or above this key's own start, otherwise the key is simply absent and the
+    entry yields 0, the legacy accumulator's initial value.
+    """
+    pid = tl.program_id(0)
+    offs = pid * BLOCK + tl.arange(0, BLOCK)
+    m = offs < nnz_m
+    q = tl.load(m_q_ptr + offs, mask=m, other=0)
+    group_top = q + nnz_s - 1
+    # Lane-local binary search over the sorted combined keys: each lane owns one
+    # mask entry, so lo/hi/mid are [BLOCK] vectors and the trip count is
+    # ceil(log2(nnz_s + 1)), which suffices to settle every lane's interval
+    # (a data-dependent while-loop would make the carried type inconsistent
+    # across divergent lanes, which triton rejects).
+    lo = tl.zeros([BLOCK], dtype=tl.int64)
+    hi = tl.full([BLOCK], nnz_s, dtype=tl.int64)
+    for _ in tl.range(0, iters):
+        active = lo < hi
+        mid = (lo + hi) // 2
+        sk = tl.load(sk_ptr + mid, mask=active, other=0)
+        # A converged lane (lo == hi) must keep both endpoints: the masked load
+        # yields 0, which would otherwise read as "go right" and break lo <= hi.
+        # Both moves are therefore guarded by `active`.
+        go_right = active & (sk <= group_top)
+        go_left = active & (sk > group_top)
+        lo = tl.where(go_right, mid + 1, lo)
+        hi = tl.where(go_left, mid, hi)
+    pos = lo - 1
+    in_range = m & (pos >= 0) & (pos < nnz_s)
+    sk = tl.load(sk_ptr + pos, mask=in_range, other=-1)
+    hit = in_range & (sk >= q)
+    v = tl.load(sv_ptr + pos, mask=hit, other=0)
+    tl.store(out_ptr + offs, v, mask=m)
+
+
+def _keys_are_injective(idx: torch.Tensor, shape, ndim: int, nnz_s: int) -> bool:
+    """Can this COO indices tensor be joined through a linear key?
+
+    The row-major linear key is only injective for coordinates that are in
+    range in EVERY dimension: e.g. for shape (3, 4) the coordinate (0, 5) maps
+    to key 5, exactly like the in-range (1, 1), so a key hit could borrow a
+    value from an unrelated entry. Checking against the flat element count
+    instead is not enough -- 5 is below numel == 12 in that example. Native
+    rejects out-of-range indices on the mask side but silently zeroes them on
+    the self side, so routing such inputs to the per-dimension scan keeps both
+    sides byte-identical to the pre-existing behaviour.The ``key * nnz_s + j``
+    packing must also not overflow int64.
+    """
+    numel = 1
+    for d in shape[:ndim]:
+        numel *= int(d)
+    if numel - 1 > _INT64_MAX // nnz_s:
+        return False
+    if bool((idx < 0).any()):
+        return False
+    for d in range(ndim):
+        if bool((idx[d] >= int(shape[d])).any()):
+            return False
+    return True
 
 
 def sparse_mask(self: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
@@ -157,25 +285,82 @@ def sparse_mask(self: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         if self.layout == torch.sparse_coo:
             s_idx = self._indices()
             s_val = self._values()
-            nnz_s = s_val.numel()
-            if ndim != s_idx.shape[0]:
+            if s_idx.shape[0] != ndim:
                 raise RuntimeError(
                     "sparse_mask(): the number of sparse dimensions in `self` "
                     "should match that of the `mask`. Got `self.sparse_dim() "
                     f"== {s_idx.shape[0]}` != `mask.sparse_dim() == {ndim}`."
                 )
+            nnz_s = s_idx.shape[1]
+            use_fast_join = (
+                nnz_s >= _FAST_JOIN_THRESHOLD
+                and _keys_are_injective(s_idx, self.shape, ndim, nnz_s)
+                and _keys_are_injective(idx, self.shape, ndim, nnz_s)
+            )
             with torch_device_fn.device(self.device):
-                _sparse_gather_kernel[(triton.cdiv(nnz, _BLOCKSP),)](
-                    idx,
-                    s_idx,
-                    s_val,
-                    out_values,
-                    nnz,
-                    nnz_s,
-                    ndim,
-                    BLOCK=_BLOCKSP,
-                    MAXD=_MAXD,
-                )
+                if use_fast_join:
+                    mult = torch.ones(ndim, dtype=torch.int64, device=self.device)
+                    for d in range(ndim - 2, -1, -1):
+                        mult[d] = mult[d + 1] * int(self.shape[d + 1])
+                    s_key = torch.empty(nnz_s, dtype=torch.int64, device=self.device)
+                    _key_of_kernel[(triton.cdiv(nnz_s, _BLOCKND),)](
+                        s_idx,
+                        mult,
+                        s_key,
+                        nnz_s,
+                        ndim,
+                        BLOCK=_BLOCKND,
+                        MAXD=_MAXD,
+                    )
+                    # Pack the storage position into the sort key so the order
+                    # is total: the last element of a key group is then the
+                    # largest-j entry without relying on sort stability.
+                    comb = s_key * nnz_s + torch.arange(
+                        nnz_s, dtype=torch.int64, device=self.device
+                    )
+                    order = torch.sort(comb).indices
+                    comb_sorted = comb.index_select(0, order)
+                    sv_sorted = s_val.index_select(0, order)
+                    m_key = torch.empty(nnz, dtype=torch.int64, device=self.device)
+                    _key_of_kernel[(triton.cdiv(nnz, _BLOCKND),)](
+                        idx,
+                        mult,
+                        m_key,
+                        nnz,
+                        ndim,
+                        BLOCK=_BLOCKND,
+                        MAXD=_MAXD,
+                    )
+                    m_q = m_key * nnz_s
+                    # ceil(log2(nnz_s + 1)) binary-search steps settle every
+                    # lane's [lo, hi) interval on nnz_s + 1 slots.
+                    iters = 0
+                    span = nnz_s + 1
+                    while span > 1:
+                        span = (span + 1) // 2
+                        iters += 1
+                    _sparse_join_kernel[(triton.cdiv(nnz, _BLOCKSP),)](
+                        m_q,
+                        comb_sorted,
+                        sv_sorted,
+                        out_values,
+                        nnz,
+                        nnz_s,
+                        max(iters, 1),
+                        BLOCK=_BLOCKSP,
+                    )
+                else:
+                    _sparse_gather_kernel[(triton.cdiv(nnz, _BLOCKSP),)](
+                        idx,
+                        s_idx,
+                        s_val,
+                        out_values,
+                        nnz,
+                        nnz_s,
+                        ndim,
+                        BLOCK=_BLOCKSP,
+                        MAXD=_MAXD,
+                    )
         elif ndim == 2:
             s0, s1 = self.stride()
             with torch_device_fn.device(self.device):
@@ -205,4 +390,48 @@ def sparse_mask(self: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     out = torch.sparse_coo_tensor(
         idx.clone(), out_values, tuple(self.shape), is_coalesced=mask.is_coalesced()
     )
+    return out
+
+
+def sparse_mask_out(
+    self: torch.Tensor, mask: torch.Tensor, *, out: torch.Tensor
+) -> torch.Tensor:
+    """``aten::sparse_mask.out``: write the projection into ``out``, return it.
+
+    Mirrors the measured native contract: the functional result is computed
+    first, ``out`` is resized to the result's sizes when they differ (native
+    hits an unsupported sparse ``resize_`` there on this build, which is
+    reproduced explicitly), the result is copied into ``out`` -- replacing its
+    indices, values and coalesced flag -- and the ``out`` tensor itself is
+    returned.
+    """
+    logger.debug("GEMS SPARSE_MASK_OUT")
+    if not isinstance(out, torch.Tensor) or out.layout != torch.sparse_coo:
+        raise NotImplementedError("sparse_mask.out: expected a sparse COO `out` tensor")
+    if out.device != self.device:
+        raise RuntimeError(
+            f"Expected out tensor to have device {self.device}, but got "
+            f"{out.device} instead"
+        )
+    if out.dtype != self.dtype:
+        raise RuntimeError(
+            f"Expected out tensor to have dtype {self.dtype}, but got "
+            f"{out.dtype} instead"
+        )
+    res = sparse_mask(self, mask)
+    if tuple(out.shape) != tuple(res.shape):
+        # Native attempts to resize a shape-mismatched out buffer; on this
+        # build a sparse resize_ is not implemented, and the resulting
+        # NotImplementedError is the observable native failure. Reproduce the
+        # same outcome explicitly rather than leaving a half-written buffer.
+        raise NotImplementedError(
+            f"sparse_mask.out(): could not resize `out` from {tuple(out.shape)} "
+            f"to {tuple(res.shape)}; sparse resize_ is not implemented. "
+            "Preallocate `out` with the mask's shape."
+        )
+    # ``Tensor.copy_`` between sparse COO tensors replaces nnz, indices, values
+    # and the coalesced flag wholesale (measured native behaviour), which is
+    # exactly the .out contract. The functional result is always freshly
+    # allocated, so it cannot alias ``out`` and no self-copy guard is needed.
+    out.copy_(res)
     return out
