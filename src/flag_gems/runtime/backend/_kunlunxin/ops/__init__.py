@@ -219,6 +219,10 @@ from .mvlgamma import mvlgamma
 from .nan_to_num import nan_to_num
 from .nanmedian import nanmedian, nanmedian_dim, nanmedian_dim_values, nanmedian_out
 from .narrow_copy import narrow_copy
+from .native_batch_norm_legit_functional import (
+    _native_batch_norm_legit_functional,
+    native_batch_norm_legit_functional,
+)
 from .native_batch_norm_legit_no_training import (
     _native_batch_norm_legit_no_training,
     native_batch_norm_legit_no_training,
@@ -375,6 +379,7 @@ __all__ = [
     "_is_all_true",
     "_pdist_forward",
     "_jagged_to_padded_dense_forward",
+    "_native_batch_norm_legit_functional",
     "_native_batch_norm_legit_no_training",
     "_safe_softmax",
     "_thnn_fused_lstm_cell_backward_impl",
@@ -653,6 +658,7 @@ __all__ = [
     "nanmedian_dim_values",
     "nanmedian_out",
     "narrow_copy",
+    "native_batch_norm_legit_functional",
     "native_batch_norm_legit_no_training",
     "ne",
     "ne_scalar",
