@@ -367,6 +367,7 @@ from .xlogy import (
     xlogy_tensor_scalar,
     xlogy_tensor_scalar_out,
 )
+from .xor import xor, xor_scalar
 from .zero import zero, zero_, zero_out
 from .zeros import zeros
 from .zeros_like import zeros_like
@@ -845,7 +846,9 @@ __all__ = [
     "xlogy_scalar_tensor_out",
     "xlogy_tensor_scalar",
     "xlogy_tensor_scalar_out",
+    "xor",
     "xor_",
+    "xor_scalar",
     "xor_scalar_",
     "zero",
     "zero_",
