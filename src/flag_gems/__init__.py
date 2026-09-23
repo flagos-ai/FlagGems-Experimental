@@ -197,6 +197,8 @@ _FULL_CONFIG = (
     ),
     ("_nested_sum_backward", _nested_sum_backward),
     ("_nested_view_from_buffer_copy", _nested_view_from_buffer_copy),
+    ("_new_zeros_with_same_feature_meta", _new_zeros_with_same_feature_meta),
+    ("_new_zeros_with_same_feature_meta.out", _new_zeros_with_same_feature_meta_out),
     ("_pdist_backward", _pdist_backward),
     ("_pdist_forward", _pdist_forward),
     ("_prelu_kernel", _prelu_kernel),
