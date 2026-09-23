@@ -58,6 +58,7 @@ from .baddbmm import baddbmm
 from .batch_norm import batch_norm, batch_norm_backward
 from .batch_norm_no_update import _batch_norm_no_update, batch_norm_no_update
 from .bernoulli_ import bernoulli_
+from .binary_cross_entropy_backward import binary_cross_entropy_backward
 from .bitwise_and import (
     bitwise_and_scalar,
     bitwise_and_scalar_,
@@ -157,6 +158,7 @@ from .glu import glu, glu_backward
 from .greater import greater, greater_out, greater_scalar, greater_scalar_out
 from .groupnorm import group_norm, group_norm_backward
 from .gt import gt, gt_scalar
+from .gt_scalar_ import gt_scalar_
 from .hadamard_transform import hadamard_transform
 from .hardsigmoid import hardsigmoid, hardsigmoid_out
 from .hstack import hstack
@@ -177,9 +179,11 @@ from .jagged_to_padded_dense_forward import (
 from .kron import kron
 from .layernorm import layer_norm, layer_norm_backward
 from .lcm import lcm
+from .lcm_ import lcm_
 from .le import le, le_scalar
 from .leaky_relu import leaky_relu, leaky_relu_, leaky_relu_out
 from .lerp import lerp_scalar, lerp_scalar_, lerp_tensor, lerp_tensor_
+from .less_ import less_
 from .less_equal import less_equal, less_equal_scalar
 from .lgamma import lgamma
 from .lift_fresh_copy import lift_fresh_copy
@@ -220,6 +224,10 @@ from .mvlgamma import mvlgamma
 from .nan_to_num import nan_to_num
 from .nanmedian import nanmedian, nanmedian_dim, nanmedian_dim_values, nanmedian_out
 from .narrow_copy import narrow_copy
+from .native_batch_norm_legit_functional import (
+    _native_batch_norm_legit_functional,
+    native_batch_norm_legit_functional,
+)
 from .native_batch_norm_legit_no_training import (
     _native_batch_norm_legit_no_training,
     native_batch_norm_legit_no_training,
@@ -271,7 +279,9 @@ from .randn_like import randn_like
 from .randperm import randperm
 from .reciprocal import reciprocal, reciprocal_
 from .reflection_pad1d import reflection_pad1d, reflection_pad1d_out
+from .reflection_pad1d_backward import reflection_pad1d_backward
 from .reflection_pad2d import reflection_pad2d, reflection_pad2d_out
+from .reflection_pad3d import reflection_pad3d
 from .reflection_pad3d_backward import reflection_pad3d_backward
 from .relu import relu, relu_
 from .repeat import repeat
@@ -309,10 +319,12 @@ from .softmax import softmax, softmax_backward
 from .softplus import softplus
 from .softshrink import softshrink, softshrink_out
 from .sort import sort, sort_stable
+from .special_chebyshev_polynomial_u import special_chebyshev_polynomial_u
 from .special_erfc import special_erfc
 from .special_gammaln_out import special_gammaln_out
 from .special_log_softmax import special_log_softmax
 from .special_logsumexp import special_logsumexp
+from .special_multigammaln import special_multigammaln
 from .special_xlog1py import special_xlog1py
 from .sqrt import sqrt, sqrt_
 from .square_ import square_
@@ -362,6 +374,7 @@ from .xlogy import (
     xlogy_tensor_scalar,
     xlogy_tensor_scalar_out,
 )
+from .xor import xor, xor_scalar
 from .zero import zero, zero_, zero_out
 from .zeros import zeros
 from .zeros_like import zeros_like
@@ -375,6 +388,7 @@ __all__ = [
     "_is_all_true",
     "_pdist_forward",
     "_jagged_to_padded_dense_forward",
+    "_native_batch_norm_legit_functional",
     "_native_batch_norm_legit_no_training",
     "_safe_softmax",
     "_thnn_fused_lstm_cell_backward_impl",
@@ -436,6 +450,7 @@ __all__ = [
     "batch_norm",
     "batch_norm_backward",
     "batch_norm_no_update",
+    "binary_cross_entropy_backward",
     "bernoulli_",
     "bitwise_and_scalar",
     "bitwise_and_scalar_",
@@ -562,6 +577,7 @@ __all__ = [
     "group_norm_backward",
     "gt",
     "gt_scalar",
+    "gt_scalar_",
     "hadamard_transform",
     "hardsigmoid",
     "hardsigmoid_out",
@@ -583,6 +599,7 @@ __all__ = [
     "layer_norm",
     "layer_norm_backward",
     "lcm",
+    "lcm_",
     "le",
     "le_scalar",
     "leaky_relu",
@@ -592,6 +609,7 @@ __all__ = [
     "lerp_scalar_",
     "lerp_tensor",
     "lerp_tensor_",
+    "less_",
     "less_equal",
     "less_equal_scalar",
     "lgamma",
@@ -654,6 +672,7 @@ __all__ = [
     "nanmedian_dim_values",
     "nanmedian_out",
     "narrow_copy",
+    "native_batch_norm_legit_functional",
     "native_batch_norm_legit_no_training",
     "ne",
     "ne_scalar",
@@ -704,9 +723,11 @@ __all__ = [
     "reciprocal",
     "reciprocal_",
     "reflection_pad1d",
+    "reflection_pad1d_backward",
     "reflection_pad1d_out",
     "reflection_pad2d",
     "reflection_pad2d_out",
+    "reflection_pad3d",
     "reflection_pad3d_backward",
     "relu",
     "relu_",
@@ -770,10 +791,12 @@ __all__ = [
     "softshrink_out",
     "sort",
     "sort_stable",
+    "special_chebyshev_polynomial_u",
     "special_erfc",
     "special_gammaln_out",
     "special_log_softmax",
     "special_logsumexp",
+    "special_multigammaln",
     "special_xlog1py",
     "sqrt",
     "sqrt_",
@@ -837,7 +860,9 @@ __all__ = [
     "xlogy_scalar_tensor_out",
     "xlogy_tensor_scalar",
     "xlogy_tensor_scalar_out",
+    "xor",
     "xor_",
+    "xor_scalar",
     "xor_scalar_",
     "zero",
     "zero_",
