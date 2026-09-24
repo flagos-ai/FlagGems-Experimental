@@ -12497,6 +12497,20 @@ ops:
   - Tensor
   stages:
   - stable: '2.2'
+- id: slow_conv_transpose3d
+  description: 'Applies a 3D transposed convolution operator over an input image composed
+    of several input planes.
+
+    '
+  for:
+  - slow_conv_transpose3d
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Convolution
+  stages:
+  - alpha: '5.4'
 - id: smooth_l1_loss
   description: Compute the smooth L1 loss between input and target tensors.
   for:
