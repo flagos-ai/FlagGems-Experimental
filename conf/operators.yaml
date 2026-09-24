@@ -83,9 +83,7 @@ ops:
 - id: _make_per_tensor_quantized_tensor
   description: 'Wraps an integer tensor (uint8/int8/int32) into a per-tensor affine
     quantized tensor: the values are copied verbatim into the quantized tensor''s
-    int representation and scale/zero_point become the per-tensor qparams.
-
-    '
+    int representation and scale/zero_point become the per-tensor qparams.'
   for:
   - _make_per_tensor_quantized_tensor
   labels:
