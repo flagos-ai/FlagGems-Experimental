@@ -867,6 +867,7 @@ from flag_gems.ops.sparse_coo_tensor import (
     sparse_coo_tensor_indices_size,
     sparse_coo_tensor_size,
     sparse_coo_tensor_size_out,
+)
 from flag_gems.ops.sparse_compressed_tensor import (
     sparse_compressed_tensor,
     sparse_compressed_tensor_size,
@@ -1966,12 +1967,12 @@ __all__ = [
     "softshrink_out",
     "sort",
     "sort_stable",
+    "sparse_compressed_tensor",
+    "sparse_compressed_tensor_size",
     "sparse_coo_tensor_indices",
     "sparse_coo_tensor_indices_size",
     "sparse_coo_tensor_size",
     "sparse_coo_tensor_size_out",
-    "sparse_compressed_tensor",
-    "sparse_compressed_tensor_size",
     "sparse_dim",
     "sparse_resize_",
     "sparse_sampled_addmm",
