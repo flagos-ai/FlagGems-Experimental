@@ -741,6 +741,38 @@ def test_accuracy_sparse_mask_out_zero_entries():
 
 
 @pytest.mark.sparse_mask
+@pytest.mark.sparse_mask_out
+def test_accuracy_sparse_mask_out_reuses_one_buffer_across_calls():
+    # ONE buffer, TWO calls with different masks/nnz: the second call must fully
+    # replace the state left by the first (nnz, indices, values, coalesced flag)
+    # rather than merging into it or returning a new tensor -- the whole point
+    # of the .out contract when a caller recycles a buffer in a loop.
+    self_t = torch.randn((4, 6), device=flag_gems.device)
+    ref_self = utils.to_reference(self_t)
+    out_buf = torch.sparse_coo_tensor(
+        torch.zeros(2, 0, dtype=torch.int64, device=flag_gems.device),
+        torch.zeros(0, device=flag_gems.device),
+        (4, 6),
+    )
+
+    for mask_nnz, seed, coalesced in ((9, 31, True), (2, 37, False)):
+        # nnz and coalesced flag differ between the two calls, so stale state
+        # from call 1 cannot masquerade as the result of call 2.
+        mask = _make_coo_mask((4, 6), mask_nnz, torch.float32, seed=seed)
+        assert mask._nnz() == mask_nnz, "mask fixture lost entries"
+        ref_mask = utils.to_reference(mask)
+        ref_out = torch.ops.aten.sparse_mask(ref_self, ref_mask)
+
+        ret = flag_gems.sparse_mask_out(self_t, mask, out=out_buf)
+
+        assert ret is out_buf
+        assert out_buf._nnz() == mask_nnz, "stale nnz from the previous call"
+        assert out_buf.is_coalesced() == ref_out.is_coalesced()
+        utils.gems_assert_close(out_buf._indices(), ref_out._indices(), torch.int64)
+        utils.gems_assert_close(out_buf._values(), ref_out._values(), torch.float32)
+
+
+@pytest.mark.sparse_mask
 def test_accuracy_sparse_mask_sparse_self_fast_join_routing():
     # FALSIFIABLE routing contract of the sparse x sparse branch (this test
     # fails against the pre-fix implementation, which never sorts): at or above
