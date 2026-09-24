@@ -13119,7 +13119,7 @@ ops:
   kind:
   - Tensor
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: sparse_coo_tensor
   description: 'Host-side sparse COO constructor: validates int64 indices, values
     and size and stores the components verbatim (duplicates stay uncoalesced,
