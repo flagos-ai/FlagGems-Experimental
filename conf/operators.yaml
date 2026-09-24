@@ -4056,6 +4056,32 @@ ops:
     - Tensor
   stages:
     - alpha: '5.4'
+- id: dstack
+  description: 'Stack tensors in sequence along the third axis (depth-wise): every
+    input is promoted with atleast_3d and concatenated along dim 2, mirroring
+    `aten::dstack`.
+
+    '
+  for:
+  - dstack
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
+- id: dstack_out
+  description: A variant of dstack() that writes the result into the out tensor.
+  for:
+  - dstack.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: dswiglu
   description: 'Swish-Gated Linear Unit, a variant of GLU with the Swish activation
     function.
