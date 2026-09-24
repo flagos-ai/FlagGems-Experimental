@@ -27,6 +27,25 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.1'
+- id: _coalesce
+  description: 'Merges the duplicate entries of an uncoalesced sparse coordinate
+    (COO) tensor: the index columns are sorted in lexicographic order and the
+    values of duplicate columns are added together, producing a fresh coalesced
+    tensor. The strict worker behind `aten::coalesce`: an already-coalesced
+    input is rejected, exactly as the native kernels assert. Registration uses
+    the SparseCUDA key, the only key that reaches `aten::_coalesce` for a COO
+    input on this build.
+
+    '
+  for:
+  - _coalesce
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _dim_arange
   description: 'Returns a 1-D int64 tensor containing 0..n-1 where n is the size
     of `like` along `dim`, mirroring `aten::_dim_arange`.
