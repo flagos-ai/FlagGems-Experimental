@@ -92,7 +92,7 @@ ops:
   kind:
   - Quantization
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _make_per_tensor_quantized_tensor_out
   description: A variant of `_make_per_tensor_quantized_tensor()` that writes the
     result into the `out` tensor and returns it.
@@ -104,7 +104,7 @@ ops:
   kind:
   - Quantization
   stages:
-  - alpha: '5.4'
+  - alpha: '5.5'
 - id: _reshape_alias
   description: 'Creates a view of the input tensor with the given size and stride,
 
