@@ -2765,6 +2765,23 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: coalesce
+  description: 'Sorts the index columns of a sparse coordinate (COO) tensor in lexicographic
+    order and adds together the values of duplicate columns, returning a fresh coalesced
+    tensor (the same object when the input is already coalesced or has zero stored
+    entries). The input tensor is never modified. Registration uses the CompositeImplicitAutograd
+    key, the only key that reaches `aten::coalesce` on this build.
+
+    '
+  for:
+  - coalesce
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: coalesced_
   description: 'Sets the `coalesced` flag of a sparse coordinate (COO) tensor in place
 
