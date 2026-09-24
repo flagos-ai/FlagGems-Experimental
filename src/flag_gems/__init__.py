@@ -246,6 +246,7 @@ _FULL_CONFIG = (
     ("_scaled_mm.out", scaled_mm_out, lambda: torch_ge("2.5")),
     ("_segment_reduce_backward", _segment_reduce_backward),
     ("_segment_reduce_backward.out", _segment_reduce_backward_out),
+    ("_slow_conv2d_backward.output_mask", _slow_conv2d_backward),
     ("_softmax", softmax),
     ("_softmax.out", softmax_out),
     ("_softmax_backward_data", softmax_backward),
