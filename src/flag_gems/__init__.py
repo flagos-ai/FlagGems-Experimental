@@ -494,6 +494,7 @@ _FULL_CONFIG = (
         copy_,
         lambda: version.parse(torch.__version__) >= version.parse("2.4"),
     ),
+    ("copy_sparse_to_sparse_", copy_sparse_to_sparse_, None, (SPARSE_DISPATCH_KEY,)),
     ("copysign", copysign),
     ("copysign.out", copysign_out),
     ("copysign_.Tensor", copysign_),

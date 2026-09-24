@@ -321,6 +321,7 @@ from flag_gems.ops.conv_depthwise2d import _conv_depthwise2d
 from flag_gems.ops.conv_transpose1d import conv_transpose1d
 from flag_gems.ops.conv_transpose2d import conv_transpose2d
 from flag_gems.ops.copy import copy, copy_
+from flag_gems.ops.copy_sparse_to_sparse_ import copy_sparse_to_sparse_
 from flag_gems.ops.copysign import copysign, copysign_out
 from flag_gems.ops.copysign_ import copysign_
 from flag_gems.ops.cos import cos, cos_
@@ -1292,6 +1293,7 @@ __all__ = [
     "conv_transpose2d",
     "copy",
     "copy_",
+    "copy_sparse_to_sparse_",
     "copysign",
     "copysign_",
     "copysign_out",
