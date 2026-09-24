@@ -309,6 +309,7 @@ from flag_gems.ops.clip import clip, clip_
 from flag_gems.ops.col2im import col2im
 from flag_gems.ops.col_indices import col_indices
 from flag_gems.ops.column_stack import column_stack, column_stack_out
+from flag_gems.ops.combinations import combinations
 from flag_gems.ops.concat import concat
 from flag_gems.ops.concatenate import concatenate
 from flag_gems.ops.conj_physical import conj_physical
@@ -1279,6 +1280,7 @@ __all__ = [
     "col_indices",
     "column_stack",
     "column_stack_out",
+    "combinations",
     "concat",
     "concatenate",
     "conj_physical",
