@@ -27,6 +27,29 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.1'
+- id: _choose_qparams_per_tensor
+  description: 'Returns the affine quantization parameters `(scale, zero_point)` of
+    a tensor for a
+
+    per-tensor quantizer, mirroring `aten::_choose_qparams_per_tensor`: a Triton
+
+    fused min/max stream with a pinned last-arrival reduction for contiguous inputs
+    and a
+
+    shape/stride-walking strided kernel for non-contiguous ones, followed by the
+
+    reference scale/zero-point arithmetic.
+    '
+  for:
+  - _choose_qparams_per_tensor
+  labels:
+  - aten
+  - KernelGen
+  - reduction
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.4'
 - id: _dim_arange
   description: 'Returns a 1-D int64 tensor containing 0..n-1 where n is the size
     of `like` along `dim`, mirroring `aten::_dim_arange`.
