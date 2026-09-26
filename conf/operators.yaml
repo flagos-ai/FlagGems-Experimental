@@ -79,6 +79,32 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.4'
+- id: _fw_primal_copy
+  description: Returns a freshly allocated contiguous copy of the forward-AD primal
+    of the input at the given level.
+  for:
+  - _fw_primal_copy
+  labels:
+  - aten
+  - KernelGen
+  - pointwise
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: _fw_primal_copy_out
+  description: A variant of `_fw_primal_copy()` that writes the primal copy into the
+    `out` tensor and returns it.
+  for:
+  - _fw_primal_copy.out
+  labels:
+  - aten
+  - KernelGen
+  - pointwise
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
 - id: _has_same_storage_numel
   description: 'Returns True if the two tensors have the same number of elements in
     their underlying storages.
