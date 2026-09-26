@@ -123,6 +123,20 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _unpack_dual
+  description: 'Unpacks a dual tensor into its forward-mode AD primal and tangent
+    pair, mirroring `aten::_unpack_dual`. The primal is a zero-copy aliasing view
+    of the input and the tangent is the input''s stored forward gradient (or None
+    for a non-dual tensor), so the operator is pure metadata: no kernel is launched.'
+  for:
+  - _unpack_dual
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
 - id: _values
   description: 'Returns the values tensor of a sparse COO tensor as a zero-copy
     view.

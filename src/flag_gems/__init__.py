@@ -263,6 +263,7 @@ _FULL_CONFIG = (
         lambda: version.parse(torch.__version__) >= version.parse("2.4"),
     ),
     ("_unique2", _unique2),
+    ("_unpack_dual", _unpack_dual, None, (AUTOGRAD_DISPATCH_KEY,)),
     ("_unsafe_index", unsafe_index),
     ("_unsafe_masked_index", _unsafe_masked_index),
     ("_unsafe_masked_index_put_accumulate", _unsafe_masked_index_put_accumulate),
