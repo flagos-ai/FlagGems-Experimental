@@ -67,6 +67,23 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
+- id: _empty_per_channel_affine_quantized
+  description: 'Allocates an uninitialized per-channel-affine quantized tensor with
+    the supplied scales, zero_points and axis, mirroring
+    `aten::_empty_per_channel_affine_quantized`. The data buffer is left
+    uninitialized, so the contract under test is the quantizer metadata.
+
+    '
+  for:
+  - _empty_per_channel_affine_quantized
+  labels:
+  - aten
+  - KernelGen
+  - skip_precision_check
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
 - id: _flash_attention_forward
   description: Run the canonical FlashAttention forward operator.
   for:
