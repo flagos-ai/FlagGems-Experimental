@@ -290,6 +290,18 @@ _FULL_CONFIG = (
         (AUTOGRAD_DISPATCH_KEY,),
     ),
     (
+        "_values_copy",
+        _values_copy,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
+    (
+        "_values_copy.out",
+        _values_copy_out,
+        None,
+        (SPARSE_DISPATCH_KEY,),
+    ),
+    (
         "_weight_int4pack_mm_with_scales_and_zeros",
         _weight_int4pack_mm_with_scales_and_zeros,
     ),
