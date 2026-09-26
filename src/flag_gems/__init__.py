@@ -68,6 +68,13 @@ registrar = GeneralOpRegistrar
 current_work_registrar = None
 AUTOGRAD_DISPATCH_KEY = torch._C.DispatchKey.Autograd.name
 CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
+# can_cast takes only dtype metadata: ATen registers it as a
+# CompositeImplicitAutograd op with no tensor argument, so its dispatch table
+# holds no backend key and a device-key registration is never selected.
+# The extra key below is the key the native kernel occupies.
+COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
+    torch._C.DispatchKey.CompositeImplicitAutograd.name
+)
 SPARSE_CSR_DISPATCH_KEY = "SparseCsr" + backend_info.dispatch_key
 SPARSE_DISPATCH_KEY = "Sparse" + backend_info.dispatch_key
 
@@ -433,6 +440,12 @@ _FULL_CONFIG = (
     ("broadcast_tensors", broadcast_tensors),
     ("broadcast_to", broadcast_to),
     ("bucketize.Tensor", bucketize),
+    (
+        "can_cast",
+        can_cast,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
     ("cat", cat),
     ("cat.out", cat_out),
     ("cauchy", cauchy),
