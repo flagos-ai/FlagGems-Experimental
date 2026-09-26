@@ -826,6 +826,7 @@ from flag_gems.ops.softplus import softplus, softplus_backward
 from flag_gems.ops.softshrink import softshrink, softshrink_out
 from flag_gems.ops.sort import sort, sort_stable
 from flag_gems.ops.sparse_dim import sparse_dim
+from flag_gems.ops.sparse_resize_ import sparse_resize_
 from flag_gems.ops.sparse_sampled_addmm import (
     sparse_sampled_addmm,
     sparse_sampled_addmm_out,
@@ -1890,6 +1891,7 @@ __all__ = [
     "sort",
     "sort_stable",
     "sparse_dim",
+    "sparse_resize_",
     "sparse_sampled_addmm",
     "sparse_sampled_addmm_out",
     "special_airy_ai",
