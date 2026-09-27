@@ -25,6 +25,9 @@ from flag_gems.runtime import torch_device_fn
 logger = logging.getLogger(__name__)
 
 
+_FILL_BLOCK = 4096
+
+
 @triton.jit
 def _fill_zero_kernel(out_ptr, n_elements, BLOCK: tl.constexpr):
     pid = tl.program_id(axis=0)
@@ -81,7 +84,7 @@ def _new_zeros_with_same_feature_meta(
     n = out.numel()
     if n == 0:
         return out
-    BLOCK = 4096
+    BLOCK = _FILL_BLOCK
     grid = ((n + BLOCK - 1) // BLOCK,)
     with torch_device_fn.device(out.device):
         _fill_zero_kernel[grid](out, n, BLOCK=BLOCK, num_warps=8)
@@ -115,7 +118,7 @@ def _new_zeros_with_same_feature_meta_out(
     n = out.numel()
     if n == 0:
         return out
-    BLOCK = 4096
+    BLOCK = _FILL_BLOCK
     grid = ((n + BLOCK - 1) // BLOCK,)
     with torch_device_fn.device(out.device):
         _fill_zero_kernel[grid](out, n, BLOCK=BLOCK, num_warps=8)
