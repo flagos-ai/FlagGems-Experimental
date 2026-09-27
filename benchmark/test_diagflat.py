@@ -25,9 +25,31 @@ from . import base, consts, utils
 # elements, so the flat element counts here are kept far below the harness's
 # default 1G-element sizes (a (1024*1024*1024,) input would draw a 2^60-element
 # output). 1-D sizes exercise the contiguous row-loop kernel across the small/
-# mid/large cb-num_warps tuning table; the 2-D square with a transposed view
-# exercises the non-contiguous gather kernel.
+# mid/large cb-num_warps tuning table; the (128, 128) entry adds a contiguous
+# 2-D input to the same kernel. The groups below extend that contiguous-kernel
+# coverage to genuinely 2-D/3-D inputs (test_diagflat_2d, test_diagflat_3d) and
+# feed permuted views to the gather kernel (_rowloop_gather, which maps the
+# logical flat index through per-dimension divisors/strides) in
+# test_diagflat_noncontig. diagflat flattens any-ndim input in logical order
+# internally, so every group measures the real flag_gems.diagflat entry path.
 DIAGFLAT_SHAPES = [(1024,), (16384,), (65536,), (128, 128)]
+
+# Every dim is >= 2 so the 2-D/3-D cases are genuinely multi-dimensional (a
+# 1-D input would silently measure the same 1-D path again). The three sizes
+# per group mirror the 1-D tuning table: n=64 -> m<=512 (cb=512, nw=4),
+# n=1024 -> 512<m<=2048 (cb=1024, nw=4), n=65536 -> m>2048 (cb=1024, nw=8);
+# the output stays at most (65536)^2 = 4.3e9 elements, the same budget as the
+# existing (65536,) case.
+DIAGFLAT_2D_SHAPES = [(8, 8), (32, 32), (256, 256)]
+DIAGFLAT_3D_SHAPES = [(4, 4, 4), (16, 8, 8), (64, 32, 32)]
+# (base_shape, perm) pairs: the benchmark input is the permuted VIEW. All dims
+# are >= 2, so each view is genuinely non-contiguous (no 1-D-style no-op
+# transpose in sight).
+DIAGFLAT_NONCONTIG_SHAPES = [
+    ((16, 8), (1, 0)),
+    ((256, 256), (1, 0)),
+    ((64, 32, 32), (2, 0, 1)),
+]
 
 
 def _input_fn(shape, dtype, device):
@@ -45,10 +67,68 @@ class DiagflatBenchmark(base.Benchmark):
             yield (inp,)
 
 
+class Diagflat2dBenchmark(DiagflatBenchmark):
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = DIAGFLAT_2D_SHAPES
+
+
+class Diagflat3dBenchmark(DiagflatBenchmark):
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = DIAGFLAT_3D_SHAPES
+
+
+class DiagflatNonContigBenchmark(DiagflatBenchmark):
+    # Shapes are (base_shape, perm) pairs; the yielded input is the permuted
+    # (non-contiguous) VIEW, so both native and gems flatten it in logical
+    # order through the gather kernel.
+    def set_shapes(self, shape_file_path=None):
+        self.shapes = DIAGFLAT_NONCONTIG_SHAPES
+
+    def get_input_iter(self, cur_dtype):
+        for base_shape, perm in self.shapes:
+            inp = utils.generate_tensor_input(base_shape, cur_dtype, self.device)
+            inp = inp.permute(*perm)
+            assert not inp.is_contiguous()
+            yield (inp,)
+
+
 @pytest.mark.diagflat
 def test_diagflat():
     bench = DiagflatBenchmark(
         op_name="diagflat",
+        torch_op=torch.ops.aten.diagflat,
+        gems_op=flag_gems.diagflat,
+        dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.diagflat
+def test_diagflat_2d():
+    bench = Diagflat2dBenchmark(
+        op_name="diagflat_2d",
+        torch_op=torch.ops.aten.diagflat,
+        gems_op=flag_gems.diagflat,
+        dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.diagflat
+def test_diagflat_3d():
+    bench = Diagflat3dBenchmark(
+        op_name="diagflat_3d",
+        torch_op=torch.ops.aten.diagflat,
+        gems_op=flag_gems.diagflat,
+        dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
+    )
+    bench.run()
+
+
+@pytest.mark.diagflat
+def test_diagflat_noncontig():
+    bench = DiagflatNonContigBenchmark(
+        op_name="diagflat_noncontig",
         torch_op=torch.ops.aten.diagflat,
         gems_op=flag_gems.diagflat,
         dtypes=consts.FLOAT_DTYPES + consts.INT_DTYPES + consts.BOOL_DTYPES,
