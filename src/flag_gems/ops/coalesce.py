@@ -29,6 +29,12 @@ logger = logging.getLogger(__name__)
 
 _MAX_S = 6
 
+# ``_small_path`` packs the whole index array into a single program's lanes
+# (BLOCK = 1024); inputs with more stored entries would be silently truncated,
+# so ``coalesce`` routes them to ``_scan_path`` instead. Must stay in sync with
+# the BLOCK constant inside ``_small_path``.
+_SMALL_PATH_MAX = 1024
+
 
 @triton.jit
 def _hist_kernel(
@@ -94,7 +100,7 @@ def _scatter_kernel(
     pack_ptr,
     blk_tot_ptr,
     blk_off_ptr,
-    val32_ptr,
+    acc_ptr,
     out_idx_ptr,
     n,
     nb2,
@@ -106,6 +112,7 @@ def _scatter_kernel(
     BT: tl.constexpr,
     P1: tl.constexpr,
     P2: tl.constexpr,
+    ACC: tl.constexpr,
     S: tl.constexpr,
     BLOCK: tl.constexpr,
 ):
@@ -144,8 +151,20 @@ def _scatter_kernel(
     pc = libdevice.popc(wv & ((1 << b) - 1)).to(tl.int32)
     blk2 = w >> 13
     pos = base + pc + tl.load(blk_off_ptr + blk2, mask=mask, other=0)
-    v = tl.load(val_ptr + offs, mask=mask, other=0).to(tl.float32)
-    tl.atomic_add(val32_ptr + pos, v, mask=mask)
+    v = tl.load(val_ptr + offs, mask=mask, other=0)
+    # ACC mirrors the small-path accumulation convention (see ``_small_path``):
+    # 0 = fp64, 1 = int64, 2 = int32, 3 = fp32. The accumulator buffer is
+    # allocated with the matching dtype, so each non-float dtype accumulates
+    # exactly like the small path would (no intermediate fp32 rounding).
+    if ACC == 0:
+        va = v.to(tl.float64)
+    elif ACC == 1:
+        va = v.to(tl.int64)
+    elif ACC == 2:
+        va = v.to(tl.int32)
+    else:
+        va = v.to(tl.float32)
+    tl.atomic_add(acc_ptr + pos, va, mask=mask)
     kk = k
     if S >= 6:
         i5o = kk % s5
@@ -179,11 +198,14 @@ def _scatter_kernel(
 
 
 @triton.jit
-def _finalize_kernel(val32_ptr, out_ptr, r, BLOCK: tl.constexpr):
+def _finalize_kernel(acc_ptr, out_ptr, r, IS_BOOL: tl.constexpr, BLOCK: tl.constexpr):
     offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     mask = offs < r
-    v = tl.load(val32_ptr + offs, mask=mask, other=0)
-    tl.store(out_ptr + offs, v.to(out_ptr.dtype.element_ty), mask=mask)
+    v = tl.load(acc_ptr + offs, mask=mask, other=0)
+    if IS_BOOL:
+        tl.store(out_ptr + offs, v != 0, mask=mask)
+    else:
+        tl.store(out_ptr + offs, v.to(out_ptr.dtype.element_ty), mask=mask)
 
 
 @triton.jit
@@ -315,7 +337,16 @@ def _log2(x):
     return -1
 
 
-def _float_path(idx, val, shape, S, n, dt, dev):
+def _scan_path(idx, val, shape, S, n, dt, dev):
+    """Multi-program histogram + scan + scatter path (any nnz).
+
+    Historically this served only fp16/fp32/bf16, accumulating in fp32; it now
+    also serves the small path's dtypes whenever ``nnz > _SMALL_PATH_MAX`` so
+    that no dtype is truncated. The accumulation dtype follows the small
+    path's convention via ``ACC`` (0 = fp64, 1 = int64, 2 = int32, 3 = fp32),
+    so results match what ``_small_path`` would produce, bit for bit, just
+    without its 1024-entry ceiling.
+    """
     K = 1
     for x in shape:
         K *= x
@@ -326,14 +357,34 @@ def _float_path(idx, val, shape, S, n, dt, dev):
     B = 1024
     NW = (K + 31) // 32
 
-    buf = torch.zeros(NW + n, dtype=torch.int32, device=dev)
-    bits = buf[:NW]
+    # One allocation per purpose: ``bits`` is the per-index bit histogram and
+    # ``acc`` the per-unique-entry accumulator. They used to share a single
+    # int32 buffer (``buf = zeros(NW + n); val32 = buf[NW:].view(float32)``),
+    # which relied on the zeroed tail and made the lifetimes hard to follow.
+    bits = torch.zeros(NW, dtype=torch.int32, device=dev)
     pack = torch.empty(NW, dtype=torch.int64, device=dev)
     nb2 = (NW + 8191) // 8192
     blk_tot = torch.empty(nb2, dtype=torch.int32, device=dev)
     blk_off = torch.empty(nb2, dtype=torch.int32, device=dev)
     cnt = torch.empty(1, dtype=torch.int32, device=dev)
-    val32 = buf[NW:].view(torch.float32)
+    if dt == torch.float32:
+        acc = torch.zeros(n, dtype=torch.float32, device=dev)
+        acc_code = 3
+    elif dt == torch.float64:
+        acc = torch.zeros(n, dtype=torch.float64, device=dev)
+        acc_code = 0
+    elif dt == torch.int64:
+        acc = torch.zeros(n, dtype=torch.int64, device=dev)
+        acc_code = 1
+    else:
+        # fp16/bf16 keep fp32 accumulation (matching the historical float
+        # path); narrower ints and bool accumulate in int32 exactly like the
+        # small path. Only fp32 skips the finalize cast (see below); fp16/bf16
+        # are finalized down to their own dtype.
+        acc = torch.zeros(
+            n, dtype=torch.float32 if dt.is_floating_point else torch.int32, device=dev
+        )
+        acc_code = 3 if dt.is_floating_point else 2
     out_idx = torch.empty(S * n, dtype=torch.int64, device=dev)
 
     _hist_kernel[(triton.cdiv(n, B),)](
@@ -346,7 +397,7 @@ def _float_path(idx, val, shape, S, n, dt, dev):
         pack,
         blk_tot,
         blk_off,
-        val32,
+        acc,
         out_idx,
         n,
         nb2,
@@ -358,22 +409,34 @@ def _float_path(idx, val, shape, S, n, dt, dev):
         BT=triton.next_power_of_2(nb2),
         P1=p1,
         P2=p2,
+        ACC=acc_code,
         S=S,
         BLOCK=B,
         num_warps=8,
     )
     r = int(cnt)
     if dt == torch.float32:
-        ov = val32[:r]
+        # acc already holds fp32: serve the values directly.
+        ov = acc[:r]
     else:
         out_val = torch.empty(n, dtype=dt, device=dev)
-        _finalize_kernel[(triton.cdiv(r, B),)](val32, out_val, r, BLOCK=B)
+        _finalize_kernel[(triton.cdiv(r, B),)](
+            acc, out_val, r, IS_BOOL=(dt == torch.bool), BLOCK=B
+        )
         ov = out_val[:r]
     oi = out_idx.view(S, n)[:, :r]
     return torch.sparse_coo_tensor(oi, ov, shape)
 
 
 def _small_path(idx, val, shape, S, n, dt, dev):
+    """Single-program sort + accumulate path, correct for ``n <= _SMALL_PATH_MAX``.
+
+    The whole index array is packed into one int64 key per entry
+    (``key << shift | position``) and sorted with ``tl.sort`` inside a single
+    program, so the working set is bounded by BLOCK = 1024 lanes. Inputs above
+    that bound are routed to ``_scan_path`` by ``coalesce``; this function must
+    never see ``n > _SMALL_PATH_MAX``.
+    """
     s1, s2, s3, s4, s5 = _shapes(S, shape)
     if dt == torch.float64:
         acc_dt = torch.float64
@@ -434,10 +497,13 @@ def coalesce(self: torch.Tensor) -> torch.Tensor:
     is already coalesced (or has zero stored entries, which native treats as
     coalesced) the *same object* is returned, exactly as native does.
 
-    Two kernel paths mirror the source: a float path (fp16/fp32/bf16) built
-    on a 32-bit per-element bit histogram + word scan + atomic scatter that
-    accumulates in fp32, and a small path (fp64/ints/bool) that sorts the
-    whole index array in one program and accumulates in fp64/int64/int32.
+    Two kernel paths mirror the source: a scan path (fp16/fp32/bf16, and any
+    dtype whose stored-entry count exceeds the small path's 1024-entry
+    ceiling) built on a 32-bit per-element bit histogram + word scan + atomic
+    scatter that accumulates in fp32 for floats and fp64/int64/int32 for the
+    small path's dtypes, and a small path (fp64/ints/bool with at most 1024
+    stored entries) that sorts the whole index array in one program and
+    accumulates in fp64/int64/int32.
 
     The op is registered with the CompositeImplicitAutograd dispatch key,
     which is the only key that reaches it on this build (measured, see
@@ -496,8 +562,14 @@ def coalesce(self: torch.Tensor) -> torch.Tensor:
         ctx = torch_device_fn.device(dev)
     with ctx:
         if dt in (torch.float16, torch.float32, torch.bfloat16):
-            out = _float_path(idx, val, shape, S, n, dt, dev)
-        else:
+            out = _scan_path(idx, val, shape, S, n, dt, dev)
+        elif n <= _SMALL_PATH_MAX:
             out = _small_path(idx, val, shape, S, n, dt, dev)
+        else:
+            # The small path is single-program (BLOCK = 1024 lanes) and would
+            # silently drop everything past lane 1023; larger non-float inputs
+            # take the multi-program scan path with the same accumulation
+            # dtype the small path would have used.
+            out = _scan_path(idx, val, shape, S, n, dt, dev)
     out._coalesced_(True)
     return out
