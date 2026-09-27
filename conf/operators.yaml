@@ -2998,7 +2998,9 @@ ops:
     order and adds together the values of duplicate columns, returning a fresh coalesced
     tensor (the same object when the input is already coalesced or has zero stored
     entries). The input tensor is never modified. Registration uses the CompositeImplicitAutograd
-    key, the only key that reaches `aten::coalesce` on this build.
+    key, the only key that reaches `aten::coalesce` on this build. Hybrid COO tensors
+    (values with trailing dense dimensions, `dense_dim > 0`) are not supported and
+    raise `NotImplementedError`.
 
     '
   for:
