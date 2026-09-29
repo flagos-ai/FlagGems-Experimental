@@ -103,7 +103,6 @@ ops:
   kind:
   - Tensor
   stages:
-  stages:
   - alpha: '5.5'
 - id: _indices
   description: Returns the indices tensor of a sparse COO tensor as a zero-copy
