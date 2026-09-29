@@ -116,7 +116,6 @@ ops:
   kind:
   - Tensor
   stages:
-  stages:
   - alpha: '5.5'
 - id: _remove_batch_dim
   description: Removes a batch dimension by returning an expanded zero-copy view
