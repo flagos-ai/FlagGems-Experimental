@@ -103,7 +103,6 @@ ops:
   kind:
   - Tensor
   stages:
-  stages:
   - alpha: '5.5'
 - id: _make_dual
   description: 'Creates a dual tensor for forward-mode AD by attaching the tangent
