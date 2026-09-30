@@ -160,6 +160,30 @@ ops:
   - Tensor
   stages:
   - alpha: '5.5'
+- id: _make_dual_copy
+  description: Returns a copy of the primal of a dual tensor in freshly allocated
+    memory (the `view_copy` variant of `_make_dual`).
+  for:
+  - _make_dual_copy
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: _make_dual_copy_out
+  description: A variant of `_make_dual_copy()` that allows the output to be assigned
+    to the `out` tensor.
+  for:
+  - _make_dual_copy.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
 - id: _nested_compute_contiguous_strides_offsets
   description: 'Computes the contiguous strides and storage offsets of a nested tensor
     from its per-component sizes, mirroring
