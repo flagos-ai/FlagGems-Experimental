@@ -122,18 +122,6 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
-- id: _nested_tensor_strides
-  description: Returns a zero-copy view of the per-tensor strides metadata of a nested
-    tensor.
-  for:
-  - _nested_tensor_strides
-  labels:
-  - aten
-  - KernelGen
-  kind:
-  - Tensor
-  stages:
-  - alpha: '5.5'
 - id: _indices
   description: Returns the indices tensor of a sparse COO tensor as a zero-copy
     view.
@@ -168,6 +156,18 @@ ops:
     '
   for:
   - _nested_compute_contiguous_strides_offsets
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: _nested_tensor_strides
+  description: Returns a zero-copy view of the per-tensor strides metadata of a nested
+    tensor.
+  for:
+  - _nested_tensor_strides
   labels:
   - aten
   - KernelGen
@@ -12958,6 +12958,33 @@ ops:
     '
   for:
   - sparse_dim
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: sparse_mask
+  description: 'Projects a dense (or sparse COO) tensor onto a sparse COO mask, returning
+    a sparse COO tensor with the mask sparsity pattern and the values of the input
+    gathered at the mask indices. The mask values are not read.
+
+    '
+  for:
+  - sparse_mask
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: sparse_mask_out
+  description: A variant of `sparse_mask()` that writes the result into the `out`
+    tensor and returns it.
+  for:
+  - sparse_mask.out
   labels:
   - aten
   - KernelGen
