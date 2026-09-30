@@ -29,6 +29,7 @@ atan2_out: test_atan2
 alias_copy_out: test_alias_copy
 as_strided_copy_out: test_as_strided_copy
 _values_copy_out: test__values_copy
+_neg_view_copy_out: test__neg_view_copy
 baddbmm_out: test_baddbmm
 ccol_indices_copy_out: test_ccol_indices_copy
 nanmedian_out: test_nanmedian

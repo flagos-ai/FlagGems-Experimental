@@ -215,6 +215,8 @@ _FULL_CONFIG = (
         "_native_batch_norm_legit_no_training",
         _native_batch_norm_legit_no_training,
     ),
+    ("_neg_view_copy", _neg_view_copy),
+    ("_neg_view_copy.out", _neg_view_copy_out),
     (
         "_nested_compute_contiguous_strides_offsets",
         _nested_compute_contiguous_strides_offsets,
