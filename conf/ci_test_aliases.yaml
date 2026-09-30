@@ -59,3 +59,4 @@ segment_reduce_backward_out: test_segment_reduce
 upsample_bicubic2d_aa_backward: test_upsample_bicubic2d_aa
 upsample_linear1d_backward: test_upsample_linear1d
 col_indices_copy_out: test_col_indices_copy
+_new_zeros_with_same_feature_meta_out: test__new_zeros_with_same_feature_meta

@@ -227,6 +227,8 @@ _FULL_CONFIG = (
         (AUTOGRAD_DISPATCH_KEY,),
     ),
     ("_nested_view_from_buffer_copy", _nested_view_from_buffer_copy),
+    ("_new_zeros_with_same_feature_meta", _new_zeros_with_same_feature_meta),
+    ("_new_zeros_with_same_feature_meta.out", _new_zeros_with_same_feature_meta_out),
     (
         "_nnz",
         _nnz,
