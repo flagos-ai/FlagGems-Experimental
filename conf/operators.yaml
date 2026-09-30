@@ -122,18 +122,6 @@ ops:
   - Tensor
   stages:
   - alpha: '5.4'
-- id: _nested_tensor_strides
-  description: Returns a zero-copy view of the per-tensor strides metadata of a nested
-    tensor.
-  for:
-  - _nested_tensor_strides
-  labels:
-  - aten
-  - KernelGen
-  kind:
-  - Tensor
-  stages:
-  - alpha: '5.5'
 - id: _indices
   description: Returns the indices tensor of a sparse COO tensor as a zero-copy
     view.
@@ -168,6 +156,18 @@ ops:
     '
   for:
   - _nested_compute_contiguous_strides_offsets
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: _nested_tensor_strides
+  description: Returns a zero-copy view of the per-tensor strides metadata of a nested
+    tensor.
+  for:
+  - _nested_tensor_strides
   labels:
   - aten
   - KernelGen
@@ -279,6 +279,21 @@ ops:
     tensor and returns it.
   for:
   - _values_copy.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: _version
+  description: 'Returns the version counter of a tensor: an integer bumped by one
+    on every dispatched in-place call. Inference tensors do not track a version
+    counter and raise RuntimeError, mirroring aten::_version.
+
+    '
+  for:
+  - _version
   labels:
   - aten
   - KernelGen
