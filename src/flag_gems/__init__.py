@@ -478,6 +478,7 @@ _FULL_CONFIG = (
         None,
         (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
     ),
+    ("cartesian_prod", cartesian_prod),
     ("cat", cat),
     ("cat.out", cat_out),
     ("cauchy", cauchy),
