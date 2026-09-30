@@ -115,6 +115,9 @@ from flag_gems.ops._native_batch_norm_legit_functional import (
 from flag_gems.ops._native_batch_norm_legit_no_training import (
     _native_batch_norm_legit_no_training,
 )
+from flag_gems.ops._nested_compute_contiguous_strides_offsets import (
+    _nested_compute_contiguous_strides_offsets,
+)
 from flag_gems.ops._nested_sum_backward import _nested_sum_backward
 from flag_gems.ops._nested_tensor_strides import _nested_tensor_strides
 from flag_gems.ops._nested_view_from_buffer_copy import _nested_view_from_buffer_copy
@@ -1090,6 +1093,7 @@ __all__ = [
     "_native_batch_norm_legit_no_stats_out",
     "_native_batch_norm_legit_no_training",
     "_native_batch_norm_legit_out",
+    "_nested_compute_contiguous_strides_offsets",
     "_nested_sum_backward",
     "_nested_tensor_strides",
     "_nested_view_from_buffer_copy",
