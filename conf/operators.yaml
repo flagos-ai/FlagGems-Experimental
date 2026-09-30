@@ -28,8 +28,8 @@ ops:
   stages:
   - alpha: '5.1'
 - id: _dim_arange
-  description: 'Returns a 1-D int64 tensor containing 0..n-1 where n is the size
-    of `like` along `dim`, mirroring `aten::_dim_arange`.
+  description: 'Returns a 1-D int64 tensor containing 0..n-1 where n is the size of
+    `like` along `dim`, mirroring `aten::_dim_arange`.
 
     '
   for:
