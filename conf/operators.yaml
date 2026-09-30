@@ -121,12 +121,13 @@ ops:
   kind:
   - Tensor
   stages:
+  - alpha: '5.5'
   - alpha: '5.4'
-- id: _nested_tensor_strides
-  description: Returns a zero-copy view of the per-tensor strides metadata of a nested
-    tensor.
+- id: _indices
+  description: Returns the indices tensor of a sparse COO tensor as a zero-copy
+    view.
   for:
-  - _nested_tensor_strides
+  - _indices
   labels:
   - aten
   - KernelGen
@@ -134,11 +135,23 @@ ops:
   - Tensor
   stages:
   - alpha: '5.5'
-- id: _indices
-  description: Returns the indices tensor of a sparse COO tensor as a zero-copy
-    view.
+- id: _indices_copy
+  description: Returns a copy of the index matrix of a sparse COO tensor in freshly
+    allocated memory.
   for:
-  - _indices
+  - _indices_copy
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: _indices_copy_out
+  description: A variant of `_indices_copy()` that allows the output to be assigned
+    to the `out` tensor.
+  for:
+  - _indices_copy.out
   labels:
   - aten
   - KernelGen
@@ -168,6 +181,18 @@ ops:
     '
   for:
   - _nested_compute_contiguous_strides_offsets
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Tensor
+  stages:
+  - alpha: '5.5'
+- id: _nested_tensor_strides
+  description: Returns a zero-copy view of the per-tensor strides metadata of a nested
+    tensor.
+  for:
+  - _nested_tensor_strides
   labels:
   - aten
   - KernelGen
