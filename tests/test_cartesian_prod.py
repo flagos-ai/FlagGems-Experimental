@@ -410,3 +410,33 @@ def test_accuracy_cartesian_prod_zero_inputs_raises():
         "non-empty" in str(excinfo.value).lower()
         or "empty" in str(excinfo.value).lower()
     )
+
+
+@pytest.mark.cartesian_prod
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        torch.uint8,
+        torch.uint16,
+        torch.uint32,
+        torch.uint64,
+        torch.int8,
+        torch.int64,
+        torch.float64,
+    ],
+)
+def test_accuracy_cartesian_prod_wider_dtype_table(dtype):
+    # The kernel launch maps the input dtype through _TORCH_TO_TL; a dtype
+    # missing from that table raises KeyError where native answers. The CI
+    # dtype sweeps (tests SWEEP_DTYPES, benchmark consts) do not include the
+    # unsigned 16/32/64 lanes, so this test pins them (and the neighbouring
+    # int8/int64/float64 lanes) explicitly, in the merged diagflat #683
+    # pattern. Every entry must round-trip against native exactly.
+    lengths = [3, 2]
+    inp, ref_inp = _make_case(lengths, dtype)
+    ref_out = torch.ops.aten.cartesian_prod(ref_inp)
+    res_out = flag_gems.cartesian_prod(inp)
+    assert res_out.dtype == ref_out.dtype == dtype
+    assert tuple(res_out.shape) == (math.prod(lengths), 2)
+    assert res_out.tolist() == ref_out.tolist()
+    utils.gems_assert_equal(res_out, ref_out)

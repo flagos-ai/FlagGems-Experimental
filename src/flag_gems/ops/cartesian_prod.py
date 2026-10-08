@@ -41,6 +41,9 @@ _TORCH_TO_TL = {
     torch.int32: tl.int32,
     torch.int64: tl.int64,
     torch.uint8: tl.uint8,
+    torch.uint16: tl.uint16,
+    torch.uint32: tl.uint32,
+    torch.uint64: tl.uint64,
     torch.bool: tl.int1,
 }
 
