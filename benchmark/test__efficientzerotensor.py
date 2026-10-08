@@ -29,10 +29,14 @@ setattr(
     MarkDecorator(Mark("_efficientzerotensor", (), {}, _ispytest=True), _ispytest=True),
 )
 
-# 1-D sizes cover the small (allocated) and large (lazy, data_ptr == 0) cases;
+# Sizes cover the small (allocated) and large (lazy, data_ptr == 0) cases;
 # creation cost is O(1) in the tensor size, so the sweep mostly varies the
-# requested metadata.
-ZERO_SIZES = [(16,), (65536,), (1048576,)]
+# requested metadata. The 2-D and 3-D entries answer the reviewer's point that
+# only 1-D shapes were covered: every dim is >= 2 so the shapes are genuinely
+# multi-dimensional, and each stays inside the 1-D case's element budget
+# (the operator's cost is O(1) in numel, so these measure the same
+# stride-0-expansion path at different metadata shapes).
+ZERO_SIZES = [(16,), (65536,), (1048576,), (256, 256), (128, 128, 64)]
 
 
 class EfficientZeroTensorBenchmark(base.Benchmark):
@@ -46,7 +50,7 @@ class EfficientZeroTensorBenchmark(base.Benchmark):
         # dtype/device sweep (a third positional would bind to the .out
         # overload's `out` parameter instead).
         for shape in self.shapes:
-            yield ([shape[0]], {"dtype": cur_dtype, "device": self.device})
+            yield (list(shape), {"dtype": cur_dtype, "device": self.device})
 
 
 @pytest.mark._efficientzerotensor
