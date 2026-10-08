@@ -120,7 +120,6 @@ def _input_fn_out(shape, dtype, device):
     for args in _input_fn(shape, dtype, device):
         inp, weight, kernel_size, bias, stride, padding, op, dilation = args
         n, cin, hin, win = inp.shape
-        cout = weight.shape[1]
         kh, kw = kernel_size
         sh, sw = stride
         ph, pw = padding
