@@ -37,6 +37,7 @@ scaled_mm_out: test_scaled_mm
 searchsorted_out: test_searchsorted
 searchsorted_scalar_out: test_searchsorted
 segment_reduce_out: test_segment_reduce
+slow_conv_dilated2d_out: test_slow_conv_dilated2d
 
 # Compound / alternative names
 arange_start_step: test_arange
