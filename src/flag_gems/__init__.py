@@ -1188,6 +1188,8 @@ _FULL_CONFIG = (
     ("slice.Tensor", slice),
     ("slice_backward", slice_backward),
     ("slice_scatter", slice_scatter),
+    ("slow_conv_dilated2d", slow_conv_dilated2d),
+    ("slow_conv_dilated2d.out", slow_conv_dilated2d_out),
     ("slow_conv_dilated3d", slow_conv_dilated3d),
     ("slow_conv_dilated3d.out", slow_conv_dilated3d_out),
     ("slow_conv_transpose3d", slow_conv_transpose3d),

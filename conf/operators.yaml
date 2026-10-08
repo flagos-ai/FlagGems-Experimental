@@ -12808,6 +12808,35 @@ ops:
   - Tensor
   stages:
   - stable: '2.2'
+- id: slow_conv_dilated2d
+  description: 'Applies a dilated 2-D convolution over an input tensor (NCHW) with
+    explicit `stride`, `padding` and `dilation` control.
+
+    '
+  for:
+  - slow_conv_dilated2d
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Convolution
+  stages:
+  - alpha: '5.5'
+- id: slow_conv_dilated2d_out
+  description: 'Applies a dilated 2-D convolution over an input tensor (NCHW) with
+    explicit `stride`, `padding` and `dilation` control, writing into a
+    caller-supplied ``out`` buffer.
+
+    '
+  for:
+  - slow_conv_dilated2d.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Convolution
+  stages:
+  - alpha: '5.5'
 - id: slow_conv_dilated3d
   description: 'Computes a 3D dilated convolution directly (no im2col unfolding) over
     a batched input of shape (N, C_in, D, H, W).
