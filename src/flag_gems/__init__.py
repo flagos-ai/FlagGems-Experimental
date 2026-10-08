@@ -77,9 +77,12 @@ CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
 # the layout-less call forms, but an explicit layout= argument selects the
 # composite key instead (measured with sentinels on a fresh process per key:
 # layout= -> CompositeImplicitAutograd, layout=None for every other form ->
-# device key). Both keys are therefore registered, exactly as the accepted
-# sparse_csr_tensor integration does; registering the device key alone would
-# ship an unreachable implementation for every layout-qualified call.
+# device key). Both keys are therefore registered -- the plain device key
+# unconditionally by register_impl (runtime/op_registrar.py always calls
+# lib.impl on the device key first) and CompositeImplicitAutograd via the
+# extra-key tuple below -- exactly as the accepted sparse_csr_tensor
+# integration does; registering the device key alone would ship an
+# unreachable implementation for every layout-qualified call.
 COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
     torch._C.DispatchKey.CompositeImplicitAutograd.name
 )
