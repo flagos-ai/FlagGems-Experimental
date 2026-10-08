@@ -623,11 +623,6 @@ _FULL_CONFIG = (
     ("diff", diff),
     ("digamma", digamma),
     ("digamma_", digamma_),
-    # aten::dim is not a dispatcher operator on this build (it is a JIT
-    # primitive plus a Python Tensor method; probes: probe1..probe14 in the
-    # run dir). A device-key registration is unreachable dead code, so the
-    # entry registers no extra dispatch key and the implementation is tested
-    # through its direct call path, mirroring the can_cast investigation.
     ("dim", dim),
     ("dist", dist),
     ("div.out", true_divide_out),
@@ -1206,6 +1201,16 @@ _FULL_CONFIG = (
     ("softshrink.out", softshrink_out),
     ("sort", sort),
     ("sort.stable", sort_stable),
+    (
+        "sparse_compressed_tensor.comp_plain_value",
+        sparse_compressed_tensor,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_compressed_tensor.comp_plain_value_size",
+        sparse_compressed_tensor_size,
+    ),
     (
         "sparse_coo_tensor.indices",
         sparse_coo_tensor_indices,
