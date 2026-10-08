@@ -56,19 +56,25 @@ observations the assertions below mirror:
 
 import pytest
 import torch
-from _pytest.mark.structures import Mark, MarkDecorator
 
 import flag_gems
 
 from . import accuracy_utils as utils
 from .conftest import QUICK_MODE
 
-# ``sparse_bsc_tensor`` starts with a letter, but the marker is registered
-# explicitly anyway so the file does not depend on a repo-wide marker list.
+# ``sparse_bsc_tensor`` does not start with an underscore, but the marker is
+# registered explicitly anyway so the file does not depend on a repo-wide
+# marker list. Build the decorator from the PUBLIC ``pytest.Mark`` /
+# ``pytest.MarkDecorator`` exports (pytest >= 8.0) instead of importing the
+# private _pytest.mark.structures module, then register it on the
+# MarkGenerator so ``@pytest.mark.sparse_bsc_tensor`` and
+# ``-m sparse_bsc_tensor`` both work.
 setattr(
     pytest.mark,
     "sparse_bsc_tensor",
-    MarkDecorator(Mark("sparse_bsc_tensor", (), {}, _ispytest=True), _ispytest=True),
+    pytest.MarkDecorator(
+        pytest.Mark("sparse_bsc_tensor", (), {}, _ispytest=True), _ispytest=True
+    ),
 )
 
 _ROW_VALUE = torch.ops.aten.sparse_bsc_tensor.ccol_row_value
