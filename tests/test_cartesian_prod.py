@@ -19,20 +19,26 @@ import math
 
 import pytest
 import torch
-from _pytest.mark.structures import Mark, MarkDecorator
 
 import flag_gems
 
 from . import accuracy_utils as utils
 from .conftest import QUICK_MODE
 
-# pytest refuses attribute access for names it does not know, so register the
-# marker explicitly (the repository pattern for operators with an underscore /
-# unregistered name).
+# ``cartesian_prod`` does not start with an underscore, but pytest refuses
+# attribute access for names it does not know, so register the marker
+# explicitly (the repository pattern for operators with an underscore /
+# unregistered name). Build the decorator from the PUBLIC ``pytest.Mark`` /
+# ``pytest.MarkDecorator`` exports (pytest >= 8.0) instead of importing the
+# private _pytest.mark.structures module, then register it on the
+# MarkGenerator so ``@pytest.mark.cartesian_prod`` and ``-m cartesian_prod``
+# both work.
 setattr(
     pytest.mark,
     "cartesian_prod",
-    MarkDecorator(Mark("cartesian_prod", (), {}, _ispytest=True), _ispytest=True),
+    pytest.MarkDecorator(
+        pytest.Mark("cartesian_prod", (), {}, _ispytest=True), _ispytest=True
+    ),
 )
 
 # Each case is a list of 1-D input lengths. The output has prod(lengths) rows,
