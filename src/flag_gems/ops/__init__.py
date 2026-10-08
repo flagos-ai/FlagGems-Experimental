@@ -123,6 +123,10 @@ from flag_gems.ops._nested_sum_backward import _nested_sum_backward
 from flag_gems.ops._nested_tensor_size import _nested_tensor_size
 from flag_gems.ops._nested_tensor_strides import _nested_tensor_strides
 from flag_gems.ops._nested_view_from_buffer_copy import _nested_view_from_buffer_copy
+from flag_gems.ops._new_zeros_with_same_feature_meta import (
+    _new_zeros_with_same_feature_meta,
+    _new_zeros_with_same_feature_meta_out,
+)
 from flag_gems.ops._nnz import _nnz
 from flag_gems.ops._pdist_backward import _pdist_backward
 from flag_gems.ops._pdist_forward import _pdist_forward
@@ -1112,6 +1116,8 @@ __all__ = [
     "_nested_tensor_size",
     "_nested_tensor_strides",
     "_nested_view_from_buffer_copy",
+    "_new_zeros_with_same_feature_meta",
+    "_new_zeros_with_same_feature_meta_out",
     "_nnz",
     "_pdist_backward",
     "_pdist_forward",
