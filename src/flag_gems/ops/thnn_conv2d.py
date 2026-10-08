@@ -216,6 +216,58 @@ def thnn_conv2d(
     reaches 256, tf32x3 below that), fp64 through a direct accumulation kernel.
     """
     logger.debug("GEMS THNN_CONV2D")
+    return _thnn_conv2d_impl(self, weight, kernel_size, bias, stride, padding, None)
+
+
+def thnn_conv2d_out(
+    self,
+    weight,
+    kernel_size,
+    bias=None,
+    stride=1,
+    padding=0,
+    *,
+    out: torch.Tensor,
+) -> torch.Tensor:
+    """aten::thnn_conv2d.out - the base overload writing into a caller-supplied
+    out and returning that SAME object.
+
+    Shares the whole body with thnn_conv2d: identical validation, identical
+    kernels, identical result (the only difference is where the result is
+    written). The measured native contract (torch 2.8.0a0, CUDA) is reproduced:
+      * the SAME object comes back, including for a wrong-shape buffer, which
+        is resized in place to the result shape;
+      * a zero-element buffer is resized to the result shape and written;
+      * a same-shape buffer keeps its strides, and a non-contiguous buffer is
+        staged and copied back (native's own strided write is measured to go
+        through the buffer's storage in a way that is NOT a correct strided
+        write - see the implementation comment in _thnn_conv2d_impl - so
+        correctness here means copy semantics, not bug reproduction);
+      * dtype/device mismatches are rejected by the dispatcher before any
+        kernel runs ('expected scalar type Float but found Double'), so no
+        extra dtype/device validation is added here;
+      * the 4-D output contract is unchanged: a 3-D input is still rejected by
+        this implementation's own validation, exactly as the base overload
+        rejects it (native's .out rejects a 3-D input too, with 'Expected 4D
+        input tensor').
+    """
+    logger.debug("GEMS THNN_CONV2D_OUT")
+    return _thnn_conv2d_impl(self, weight, kernel_size, bias, stride, padding, out)
+
+
+def _thnn_conv2d_impl(
+    self, weight, kernel_size, bias=None, stride=1, padding=0, out_arg=None
+) -> torch.Tensor:
+    """Shared body of thnn_conv2d and thnn_conv2d_out.
+
+    `out_arg is None` allocates a fresh result (the base overload); otherwise
+    the caller's buffer is used and returned. The statement ORDER of the base
+    path is the pre-refactor one (normalize -> validate -> output -> early
+    return -> dtype dispatch -> launch), so the base overload's observable
+    behaviour is unchanged: an empty result still returns ahead of the dtype
+    check, and the out buffer is only touched after every validation has passed
+    (the .out overload's own buffer handling sits where the allocation used to).
+    """
     x = self
     # The Triton kernels index the operand storage linearly (a flat x, and a
     # weight understood as [C_out, C_in * KH * KW]), so reproduce the
@@ -258,12 +310,34 @@ def thnn_conv2d(
     H_out = (H + 2 * PH - KH) // SH + 1
     W_out = (W + 2 * PW - KW) // SW + 1
 
-    out = torch.empty((N, C_out, H_out, W_out), device=x.device, dtype=x.dtype)
+    expected_shape = (N, C_out, H_out, W_out)
+    if out_arg is None:
+        out = torch.empty(expected_shape, device=x.device, dtype=x.dtype)
+    else:
+        # Native routes the caller's buffer through at::native::resize_output:
+        # the SAME object comes back, resized when its shape differs. dtype and
+        # device are validated by the dispatcher before the kernel is reached
+        # (measured: 'expected scalar type Float but found Double'), so nothing
+        # is re-validated here. A buffer whose shape already matches keeps its
+        # strides: the kernels write a dense (N, C_out, H_out, W_out) result,
+        # so a NON-CONTIGUOUS buffer is staged contiguously and copied back
+        # rather than written through a view (native's own strided write is
+        # measured not to be a correct strided write on this build).
+        out_arg.resize_(expected_shape)
+        if out_arg.is_contiguous():
+            out = out_arg
+        else:
+            out = torch.empty(expected_shape, device=x.device, dtype=x.dtype)
 
     total_pix = N * H_out * W_out
     K_total = C_in * KH * KW
     if total_pix == 0 or C_out == 0:
-        return out
+        # The early return keeps its original position, ahead of the dtype
+        # dispatch: an empty result never raises the unsupported-dtype TypeError
+        # (unchanged base-overload behaviour). The .out path receives the
+        # caller's buffer here (resized), so the identity contract holds on the
+        # no-kernel path too.
+        return out if out_arg is None else out_arg.copy_(out)
 
     dt = x.dtype
     if dt in (torch.float16, torch.bfloat16):
@@ -304,7 +378,7 @@ def thnn_conv2d(
                 BLOCK_N=BN,
                 num_warps=4,
             )
-        return out
+        return out if out_arg is None else out_arg.copy_(out)
 
     if KH == 1 and KW == 1:
         # 1x1 conv is a pure strided GEMM (identity im2col): no padding mask, huge M.
@@ -359,4 +433,4 @@ def thnn_conv2d(
             BLOCK_K=BLOCK_K,
             num_warps=num_warps,
         )
-    return out
+    return out if out_arg is None else out_arg.copy_(out)

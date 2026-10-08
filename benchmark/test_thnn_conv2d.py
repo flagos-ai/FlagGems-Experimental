@@ -95,3 +95,61 @@ def _run_thnn_conv2d_bench():
         dtypes=consts.FLOAT_DTYPES,
     )
     bench.run()
+
+
+def _input_fn_out(shape, dtype, device):
+    # Same positional convention as _input_fn, plus the out buffer. The harness
+    # (base.Benchmark.unpack_to_args_kwargs) turns a trailing dict into keyword
+    # arguments and passes everything else positionally, so the out tensor has
+    # to travel as {"out": buffer}: `out` is keyword-only in
+    # aten::thnn_conv2d.out and in flag_gems.thnn_conv2d_out, and a positional
+    # buffer would be read as a 7th positional argument.
+    (
+        batch,
+        input_c,
+        input_h,
+        input_w,
+        out_c,
+        kernel_h,
+        kernel_w,
+        stride,
+        padding,
+    ) = shape
+    for args in _input_fn(shape, dtype, device):
+        inp = args[0]
+        h_out = (input_h + 2 * padding - kernel_h) // stride + 1
+        w_out = (input_w + 2 * padding - kernel_w) // stride + 1
+        out = torch.empty((batch, out_c, h_out, w_out), dtype=inp.dtype, device=device)
+        yield args + ({"out": out},)
+
+
+class ThnnConv2DOutBenchmark(ThnnConv2DBenchmark):
+    # Identical shape list to the base benchmark (the .out overload shares the
+    # compute), only the input iterator differs: it has to supply the buffer.
+    def get_input_iter(self, cur_dtype):
+        for shape in self.shapes:
+            yield from _input_fn_out(shape, cur_dtype, self.device)
+
+
+@pytest.mark.thnn_conv2d_out
+def test_thnn_conv2d_out():
+    # cudnn picks tf32 algorithms for the conv reference unless disallowed;
+    # the previous value is restored so the benchmark does not leak the
+    # setting into the rest of the process.
+    saved_tf32 = torch.backends.cudnn.allow_tf32
+    torch.backends.cudnn.allow_tf32 = False
+    try:
+        _run_thnn_conv2d_out_bench()
+    finally:
+        torch.backends.cudnn.allow_tf32 = saved_tf32
+
+
+def _run_thnn_conv2d_out_bench():
+    bench = ThnnConv2DOutBenchmark(
+        input_fn=_input_fn_out,
+        op_name="thnn_conv2d_out",
+        torch_op=torch.ops.aten.thnn_conv2d.out,
+        gems_op=flag_gems.thnn_conv2d_out,
+        dtypes=consts.FLOAT_DTYPES,
+    )
+    bench.run()

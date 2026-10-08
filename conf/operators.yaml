@@ -14444,6 +14444,19 @@ ops:
   - NeuralNetwork
   stages:
   - alpha: '5.5'
+- id: thnn_conv2d_out
+  description: >-
+    A variant of 'thnn_conv2d' that assigns the result to the given 'out'
+    parameter.
+  for:
+  - thnn_conv2d.out
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Convolution
+  stages:
+  - alpha: '5.5'
 - id: thnn_differentiable_gru_cell_backward
   description: Computes differentiable gradients for a fused GRU cell.
   for:
