@@ -184,9 +184,13 @@ def _make_per_tensor_quantized_tensor_out(
     build): the functional result is computed first, ``out`` is resized to the
     result's sizes when they differ (resizing a quantized CUDA tensor raises
     the native ``resize_`` error, exactly as it does natively), the result
-    dtype must match ``out``'s dtype, and a quantized ``copy_`` moves both the
-    raw int representation and the per-tensor qparams into ``out``. ``out``
-    itself is returned.
+    dtype must match ``out``'s dtype (native wording: "Expected out tensor to
+    have dtype ..., but got ... instead"), then ``out``'s device must match
+    the input's device (same wording shape, measured on the CUDA build: a
+    cross-device buffer is a clean RuntimeError, never a raw copy_ failure or
+    an internal qscheme assert), and a quantized ``copy_`` moves both the raw
+    int representation and the per-tensor qparams into ``out``. ``out`` itself
+    is returned.
     """
     logger.debug("GEMS _MAKE_PER_TENSOR_QUANTIZED_TENSOR_OUT")
     qdtype = _quantized_dtype(self)
@@ -197,6 +201,14 @@ def _make_per_tensor_quantized_tensor_out(
     if out.dtype != qdtype:
         raise RuntimeError(
             f"Expected out tensor to have dtype {qdtype}, but got {out.dtype} instead"
+        )
+    if out.device != self.device:
+        # Native checks the device AFTER the dtype (measured: the both-wrong
+        # case reports the dtype first) and rejects a mismatched buffer with
+        # the same RuntimeError wording before any copy is attempted.
+        raise RuntimeError(
+            f"Expected out tensor to have device {self.device}, "
+            f"but got {out.device} instead"
         )
     res = _allocate_output(self, qdtype, scale, zero_point)
     _fill_int_repr(self, res)
