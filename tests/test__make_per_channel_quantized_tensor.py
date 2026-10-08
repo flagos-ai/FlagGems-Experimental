@@ -16,7 +16,6 @@
 
 import pytest
 import torch
-from _pytest.mark.structures import Mark, MarkDecorator
 
 import flag_gems
 
@@ -25,22 +24,27 @@ from .conftest import QUICK_MODE
 
 # ``_make_per_channel_quantized_tensor`` starts with an underscore, and
 # ``pytest.mark`` refuses to generate a marker via attribute access for such
-# names. Register both markers directly on the MarkGenerator so
-# ``@pytest.mark._make_per_channel_quantized_tensor`` and the ``_out`` variant
-# (plus ``-m``) all work.
+# names (MarkGenerator.__getattr__ raises AttributeError("Marker name must NOT
+# start with underscore"), so registering the name in pytest.ini or via
+# pytest_configure cannot enable the decorator -- it is the attribute access
+# itself that is refused). Build the decorators from the PUBLIC
+# ``pytest.Mark`` / ``pytest.MarkDecorator`` exports (pytest >= 8.0) instead
+# of importing the private _pytest.mark.structures module, then register them
+# on the MarkGenerator so ``@pytest.mark._make_per_channel_quantized_tensor``
+# and the ``_out`` variant (plus ``-m``) all work.
 setattr(
     pytest.mark,
     "_make_per_channel_quantized_tensor",
-    MarkDecorator(
-        Mark("_make_per_channel_quantized_tensor", (), {}, _ispytest=True),
+    pytest.MarkDecorator(
+        pytest.Mark("_make_per_channel_quantized_tensor", (), {}, _ispytest=True),
         _ispytest=True,
     ),
 )
 setattr(
     pytest.mark,
     "_make_per_channel_quantized_tensor_out",
-    MarkDecorator(
-        Mark("_make_per_channel_quantized_tensor_out", (), {}, _ispytest=True),
+    pytest.MarkDecorator(
+        pytest.Mark("_make_per_channel_quantized_tensor_out", (), {}, _ispytest=True),
         _ispytest=True,
     ),
 )
