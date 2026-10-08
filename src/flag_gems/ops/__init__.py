@@ -862,6 +862,10 @@ from flag_gems.ops.softmax import (
 from flag_gems.ops.softplus import softplus, softplus_backward
 from flag_gems.ops.softshrink import softshrink, softshrink_out
 from flag_gems.ops.sort import sort, sort_stable
+from flag_gems.ops.sparse_bsc_tensor import (
+    sparse_bsc_tensor_ccol_row_value,
+    sparse_bsc_tensor_ccol_row_value_size,
+)
 from flag_gems.ops.sparse_coo_tensor import (
     sparse_coo_tensor_indices,
     sparse_coo_tensor_indices_size,
@@ -1963,6 +1967,8 @@ __all__ = [
     "softshrink_out",
     "sort",
     "sort_stable",
+    "sparse_bsc_tensor_ccol_row_value",
+    "sparse_bsc_tensor_ccol_row_value_size",
     "sparse_coo_tensor_indices",
     "sparse_coo_tensor_indices_size",
     "sparse_coo_tensor_size",
