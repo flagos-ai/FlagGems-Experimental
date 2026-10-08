@@ -1103,13 +1103,17 @@ def test_sparse_bsc_tensor_repeated_dispatch():
 
 @pytest.mark.sparse_bsc_tensor
 def test_sparse_bsc_tensor_dispatch_sentinel():
-    # Registration-path check: a sentinel wrapper on the key this operator is
-    # registered on must intercept the call forms that reach these two ATen
-    # overloads, proving the shipped implementation is what executes rather
-    # than the native kernel. Per-key reachability was measured first (probe B
-    # on CPU, probe D on CUDA): both overloads compute the plain device key,
-    # and the sparse keys never see either call, which is why no sparse key is
-    # registered in _FULL_CONFIG.
+    # Registration-path check: a sentinel wrapper on each key this operator is
+    # registered on must intercept the call forms that select that key,
+    # proving the shipped implementation is what executes rather than the
+    # native kernel. Per-key reachability was measured with labelled poison
+    # sentinels per (overload, key) pair in a fresh process: a call that omits
+    # layout= resolves on the plain device key, an explicit
+    # layout=torch.sparse_bsc argument selects CompositeImplicitAutograd, and
+    # the sparse keys never see either call, which is why no sparse key is
+    # registered in _FULL_CONFIG. Before the composite key was added the
+    # layout-qualified forms were dead code (the poison proof hit only the
+    # native composite), the same defect the CSC sibling fixed.
     #
     # Scope note (measured, probe L): the Python builtin
     # ``torch.sparse_bsc_tensor`` does NOT route through these two operators --
@@ -1168,9 +1172,63 @@ def test_sparse_bsc_tensor_dispatch_sentinel():
     dev = flag_gems.device
     ccol, row, values = _bsc_components((4, 4), (2, 2), 2, 25, dev)
 
+    def sentinel_size_comp(
+        ccol_indices,
+        row_indices,
+        values,
+        size,
+        *,
+        dtype=None,
+        layout=None,
+        device=None,
+        pin_memory=False,
+    ):
+        hits.append("size/comp")
+        return flag_gems.sparse_bsc_tensor_ccol_row_value_size(
+            ccol_indices,
+            row_indices,
+            values,
+            size,
+            dtype=dtype,
+            layout=layout,
+            device=device,
+            pin_memory=pin_memory,
+        )
+
+    def sentinel_value_comp(
+        ccol_indices,
+        row_indices,
+        values,
+        *,
+        dtype=None,
+        layout=None,
+        device=None,
+        pin_memory=False,
+    ):
+        hits.append("value/comp")
+        return flag_gems.sparse_bsc_tensor_ccol_row_value(
+            ccol_indices,
+            row_indices,
+            values,
+            dtype=dtype,
+            layout=layout,
+            device=device,
+            pin_memory=pin_memory,
+        )
+
     try:
         lib.impl("sparse_bsc_tensor.ccol_row_value_size", sentinel_size, "CUDA")
         lib.impl("sparse_bsc_tensor.ccol_row_value", sentinel_value, "CUDA")
+        lib.impl(
+            "sparse_bsc_tensor.ccol_row_value_size",
+            sentinel_size_comp,
+            "CompositeImplicitAutograd",
+        )
+        lib.impl(
+            "sparse_bsc_tensor.ccol_row_value",
+            sentinel_value_comp,
+            "CompositeImplicitAutograd",
+        )
         # The packet entry points.
         assert (
             torch.ops.aten.sparse_bsc_tensor.ccol_row_value_size(
@@ -1191,6 +1249,24 @@ def test_sparse_bsc_tensor_dispatch_sentinel():
 
         assert hits.count("size") >= 1, hits
         assert hits.count("value") >= 1, hits
+
+        # Composite-key forms (explicit layout=): before the composite key was
+        # registered these calls bypassed the wrapper entirely, so the counter
+        # below fails if the extra key is dropped again.
+        hits.clear()
+        assert (
+            torch.ops.aten.sparse_bsc_tensor.ccol_row_value_size(
+                ccol, row, values, [4, 4], layout=torch.sparse_bsc, device=dev
+            )._nnz()
+            == 2
+        )
+        assert (
+            torch.ops.aten.sparse_bsc_tensor.ccol_row_value(
+                ccol, row, values, layout=torch.sparse_bsc, device=dev
+            )._nnz()
+            == 2
+        )
+        assert hits == ["size/comp", "value/comp"], hits
     finally:
         lib._destroy()
 
