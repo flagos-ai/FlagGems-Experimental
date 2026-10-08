@@ -862,15 +862,15 @@ from flag_gems.ops.softmax import (
 from flag_gems.ops.softplus import softplus, softplus_backward
 from flag_gems.ops.softshrink import softshrink, softshrink_out
 from flag_gems.ops.sort import sort, sort_stable
+from flag_gems.ops.sparse_compressed_tensor import (
+    sparse_compressed_tensor,
+    sparse_compressed_tensor_size,
+)
 from flag_gems.ops.sparse_coo_tensor import (
     sparse_coo_tensor_indices,
     sparse_coo_tensor_indices_size,
     sparse_coo_tensor_size,
     sparse_coo_tensor_size_out,
-)
-from flag_gems.ops.sparse_compressed_tensor import (
-    sparse_compressed_tensor,
-    sparse_compressed_tensor_size,
 )
 from flag_gems.ops.sparse_dim import sparse_dim
 from flag_gems.ops.sparse_resize_ import sparse_resize_
