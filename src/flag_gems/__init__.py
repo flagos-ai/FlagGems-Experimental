@@ -348,6 +348,12 @@ _FULL_CONFIG = (
         (SPARSE_DISPATCH_KEY,),
     ),
     (
+        "_version",
+        _version,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
         "_weight_int4pack_mm_with_scales_and_zeros",
         _weight_int4pack_mm_with_scales_and_zeros,
     ),
