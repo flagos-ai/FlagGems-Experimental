@@ -848,6 +848,10 @@ from flag_gems.ops.slow_conv_dilated3d import (
     slow_conv_dilated3d,
     slow_conv_dilated3d_out,
 )
+from flag_gems.ops.slow_conv_transpose2d import (
+    slow_conv_transpose2d,
+    slow_conv_transpose2d_out,
+)
 from flag_gems.ops.slow_conv_transpose3d import slow_conv_transpose3d
 from flag_gems.ops.smooth_l1_loss import (
     smooth_l1_loss,
@@ -1959,6 +1963,8 @@ __all__ = [
     "slow_conv_dilated2d_out",
     "slow_conv_dilated3d",
     "slow_conv_dilated3d_out",
+    "slow_conv_transpose2d",
+    "slow_conv_transpose2d_out",
     "slow_conv_transpose3d",
     "smooth_l1_loss",
     "smooth_l1_loss_backward",
