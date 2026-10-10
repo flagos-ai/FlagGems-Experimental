@@ -875,6 +875,10 @@ from flag_gems.ops.sparse_coo_tensor import (
     sparse_coo_tensor_size,
     sparse_coo_tensor_size_out,
 )
+from flag_gems.ops.sparse_csr_tensor import (
+    sparse_csr_tensor_crow_col_value,
+    sparse_csr_tensor_crow_col_value_size,
+)
 from flag_gems.ops.sparse_dim import sparse_dim
 from flag_gems.ops.sparse_mask import sparse_mask, sparse_mask_out
 from flag_gems.ops.sparse_resize_ import sparse_resize_
@@ -1982,6 +1986,8 @@ __all__ = [
     "sparse_coo_tensor_indices_size",
     "sparse_coo_tensor_size",
     "sparse_coo_tensor_size_out",
+    "sparse_csr_tensor_crow_col_value",
+    "sparse_csr_tensor_crow_col_value_size",
     "sparse_dim",
     "sparse_mask",
     "sparse_mask_out",
