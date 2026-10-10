@@ -72,6 +72,10 @@ CONJUGATE_DISPATCH_KEY = torch._C.DispatchKey.Conjugate.name
 # CompositeImplicitAutograd op with no tensor argument, so its dispatch table
 # holds no backend key and a device-key registration is never selected.
 # The extra key below is the key the native kernel occupies.
+# Native kernels for a handful of ops live ONLY on this key (pure composites
+# with no backend key at all); a device-key registration would never be
+# selected for their real inputs. Measured per op (can_cast,
+# sparse_coo_tensor.indices/.indices_size, coalesce).
 COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY = (
     torch._C.DispatchKey.CompositeImplicitAutograd.name
 )
@@ -553,6 +557,12 @@ _FULL_CONFIG = (
     ("clamp_min_", clamp_min_),
     ("clip", clip),
     ("clip_", clip_),
+    (
+        "coalesce",
+        coalesce,
+        None,
+        (COMPOSITE_IMPLICIT_AUTOGRAD_DISPATCH_KEY,),
+    ),
     ("col2im", col2im),
     ("col_indices", col_indices, None, (AUTOGRAD_DISPATCH_KEY,)),
     (
