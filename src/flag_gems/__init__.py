@@ -299,6 +299,7 @@ _FULL_CONFIG = (
         None,
         (SPARSE_DISPATCH_KEY, SPARSE_CSR_DISPATCH_KEY),
     ),
+    ("_slow_conv2d_forward", _slow_conv2d_forward),
     ("_softmax", softmax),
     ("_softmax.out", softmax_out),
     ("_softmax_backward_data", softmax_backward),
