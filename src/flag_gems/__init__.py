@@ -124,6 +124,11 @@ _FULL_CONFIG = (
     ("_cholesky_solve_helper", _cholesky_solve_helper),
     ("_choose_qparams_per_tensor", _choose_qparams_per_tensor),
     ("_chunk_cat", _chunk_cat),
+    # `aten::_coalesce` has real SparseCPU/SparseCUDA kernels (plus an
+    # Autograd pass-through) on this build; the plain device key is dead code
+    # for a COO input, so the sparse accelerators key is what intercepts the
+    # tested call path (measured: runs/_coalesce/probe_dispatch_fresh.log).
+    ("_coalesce", _coalesce, None, (SPARSE_DISPATCH_KEY,)),
     ("_coalesced_", _coalesced_, None, (AUTOGRAD_DISPATCH_KEY,)),
     ("_compute_linear_combination", _compute_linear_combination),
     ("_compute_linear_combination.out", _compute_linear_combination_out),
