@@ -24,10 +24,11 @@ import flag_gems
 
 from . import base, consts, utils
 
-# The shape here is the 1-D "row" shape given to every list item; the output
-# is that shape promoted to (1, N, K) with K = number of inputs. Small row
-# counts are enough to separate the kernels without wasting memory, and
-# (1024,)-class rows exercise the multi-block row grids.
+# The shape here is the shape given to every list item; the output is that
+# shape promoted to (1, N, K) with K = number of inputs. Mostly 1-D "row"
+# shapes; (4096, 8) is a 2-D item that exercises the multi-column fused path
+# with many rows. Small row counts are enough to separate the kernels without
+# wasting memory, and (1024,)-class rows exercise the multi-block row grids.
 DSTACK_ROW_SHAPES = [(256,), (1024,), (4096,), (4096, 8)]
 # Rank >= 4 inputs run the fused_nd kernel.
 DSTACK_ND_SHAPES = [(16, 8, 32, 4), (16, 8, 4, 4)]

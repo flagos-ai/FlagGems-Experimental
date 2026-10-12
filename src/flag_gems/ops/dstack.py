@@ -234,6 +234,10 @@ def _dstack_fused3(
     pid_i = tl.program_id(1)
     pid_r = tl.program_id(0)
     pid_k = tl.program_id(2)
+    # Ndim is the number of columns (from tensors[0].shape[1], i.e. the last
+    # promoted dim) and equals the per-row element count the non-contiguous
+    # path decodes via m = rows // Ndim, n = rows % Ndim. Keep them coupled:
+    # a caller passing a different Ndim would mis-decode the row index.
 
     base = pid_i * W
     in_ptr = tl.load(meta_ptr + base + 0)
@@ -363,6 +367,11 @@ def _run_3d(tensors, dev, dtype, out=None):
             return out
 
         uniform = all(k == Ks[0] for k in Ks)
+        # The fast path is capped at NMAX inputs: the tile4/tile8 kernels take
+        # one scalar pointer argument per input (p0..p3 / p0..p7) and the
+        # caller zero-pads the unused slots, which the kernels mask out via
+        # cmask. Raising NMAX requires new kernel signatures (one added
+        # pointer parameter per slot), not just this constant.
         if contig_all and uniform and Nt <= NMAX:
             K = Ks[0]
             if K == 1:
@@ -393,6 +402,7 @@ def _run_3d(tensors, dev, dtype, out=None):
         # (stride(0), stride(1), stride(2)-equivalents) are exactly what the
         # CONTIG=False branch indexes with, so the recorded values stay valid).
         metas = []
+        k_off = 0
         for idx, t in enumerate(tensors):
             d = t.dim()
             if d == 1:
@@ -403,13 +413,10 @@ def _run_3d(tensors, dev, dtype, out=None):
             else:
                 s0, s1, s2 = t.stride(0), t.stride(1), t.stride(2)
             if contig_all:
-                metas.append([t.data_ptr(), 0, Ks[idx]])
+                metas.append([t.data_ptr(), k_off, Ks[idx]])
             else:
-                metas.append([t.data_ptr(), 0, Ks[idx], s0, s1, s2])
-        k_off = 0
-        for row in metas:
-            row[1] = k_off
-            k_off += row[2]
+                metas.append([t.data_ptr(), k_off, Ks[idx], s0, s1, s2])
+            k_off += Ks[idx]
         meta = torch.tensor(metas, dtype=torch.int64, device=dev)
         maxK = max(Ks)
         BR, BK = (128, 1) if maxK == 1 else (1, 512)
@@ -489,6 +496,9 @@ def _cpp_dtype_name(dtype):
         "bfloat16": "BFloat16",
         "int8": "Char",
         "uint8": "Byte",
+        "uint16": "UInt16",
+        "uint32": "UInt32",
+        "uint64": "UInt64",
         "int16": "Short",
         "int32": "Int",
         "int64": "Long",
