@@ -873,6 +873,10 @@ from flag_gems.ops.sparse_bsr_tensor import (
     sparse_bsr_tensor_crow_col_value,
     sparse_bsr_tensor_crow_col_value_size,
 )
+from flag_gems.ops.sparse_compressed_tensor import (
+    sparse_compressed_tensor,
+    sparse_compressed_tensor_size,
+)
 from flag_gems.ops.sparse_coo_tensor import (
     sparse_coo_tensor_indices,
     sparse_coo_tensor_indices_size,
@@ -1984,6 +1988,8 @@ __all__ = [
     "sort_stable",
     "sparse_bsr_tensor_crow_col_value",
     "sparse_bsr_tensor_crow_col_value_size",
+    "sparse_compressed_tensor",
+    "sparse_compressed_tensor_size",
     "sparse_coo_tensor_indices",
     "sparse_coo_tensor_indices_size",
     "sparse_coo_tensor_size",
