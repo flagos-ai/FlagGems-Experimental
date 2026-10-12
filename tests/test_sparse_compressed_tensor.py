@@ -55,11 +55,9 @@ same overload is reached for both call forms. Including it would add a second
 hit per call without proving a second routing path.
 """
 
+import flag_gems
 import pytest
 import torch
-from _pytest.mark.structures import Mark, MarkDecorator
-
-import flag_gems
 
 from . import accuracy_utils as utils
 from .conftest import QUICK_MODE
@@ -69,8 +67,8 @@ from .conftest import QUICK_MODE
 setattr(
     pytest.mark,
     "sparse_compressed_tensor",
-    MarkDecorator(
-        Mark("sparse_compressed_tensor", (), {}, _ispytest=True), _ispytest=True
+    pytest.MarkDecorator(
+        pytest.Mark("sparse_compressed_tensor", (), {}, _ispytest=True), _ispytest=True
     ),
 )
 

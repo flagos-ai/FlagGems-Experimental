@@ -31,11 +31,9 @@ sizes below span small to large block grids while keeping the component build
 cheap.
 """
 
+import flag_gems
 import pytest
 import torch
-from _pytest.mark.structures import Mark, MarkDecorator
-
-import flag_gems
 
 from . import base, consts
 
@@ -44,8 +42,8 @@ from . import base, consts
 setattr(
     pytest.mark,
     "sparse_compressed_tensor",
-    MarkDecorator(
-        Mark("sparse_compressed_tensor", (), {}, _ispytest=True), _ispytest=True
+    pytest.MarkDecorator(
+        pytest.Mark("sparse_compressed_tensor", (), {}, _ispytest=True), _ispytest=True
     ),
 )
 
