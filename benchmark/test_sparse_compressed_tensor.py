@@ -31,9 +31,10 @@ sizes below span small to large block grids while keeping the component build
 cheap.
 """
 
-import flag_gems
 import pytest
 import torch
+
+import flag_gems
 
 from . import base, consts
 

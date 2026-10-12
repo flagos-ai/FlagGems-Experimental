@@ -55,9 +55,10 @@ same overload is reached for both call forms. Including it would add a second
 hit per call without proving a second routing path.
 """
 
-import flag_gems
 import pytest
 import torch
+
+import flag_gems
 
 from . import accuracy_utils as utils
 from .conftest import QUICK_MODE
