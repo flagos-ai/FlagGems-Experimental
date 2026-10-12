@@ -608,7 +608,7 @@ def test_exception_dstack_out_cast(out_dtype):
         flag_gems.dstack_out([a, b], out=out)
 
 
-@pytest.mark.dstack
+@pytest.mark.dstack_out
 @pytest.mark.parametrize("out_dtype", [torch.float32, torch.float64, torch.float16])
 def test_accuracy_dstack_out_float_cast(out_dtype):
     # float -> float casts are always allowed: values land in out's dtype.
