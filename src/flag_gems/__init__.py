@@ -1278,8 +1278,6 @@ _FULL_CONFIG = (
     (
         "sparse_bsr_tensor.crow_col_value",
         sparse_bsr_tensor_crow_col_value,
-        "sparse_compressed_tensor.comp_plain_value",
-        sparse_compressed_tensor,
         None,
         (AUTOGRAD_DISPATCH_KEY,),
     ),
@@ -1288,6 +1286,14 @@ _FULL_CONFIG = (
         sparse_bsr_tensor_crow_col_value_size,
         None,
         (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
+        "sparse_compressed_tensor.comp_plain_value",
+        sparse_compressed_tensor,
+        None,
+        (AUTOGRAD_DISPATCH_KEY,),
+    ),
+    (
         "sparse_compressed_tensor.comp_plain_value_size",
         sparse_compressed_tensor_size,
     ),
