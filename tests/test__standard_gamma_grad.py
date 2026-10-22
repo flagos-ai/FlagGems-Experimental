@@ -65,6 +65,20 @@ REGIMES = [
 ]
 
 
+def _assert_close(res, ref, dtype, reduce_dim=1, atol=1e-4):
+    """Compare on the CPU, in both CI phases.
+
+    ``utils.gems_assert_close`` asserts that the reference already lives on the
+    CPU when ``--ref=cpu`` is active. The reference here is the ATen device
+    kernel computed on the same inputs (this operator has no CPU kernel of its
+    own), so the two results are moved to the CPU explicitly instead and
+    compared with the repository's per-dtype tolerances.
+    """
+    flag_gems.testing.assert_close(
+        res.cpu(), ref.cpu(), dtype, reduce_dim=reduce_dim, atol=atol
+    )
+
+
 def _make_inputs(shape, dtype, alpha_range, output_range):
     alpha = torch.empty(shape, dtype=dtype, device=flag_gems.device).uniform_(
         *alpha_range
@@ -95,7 +109,7 @@ def test__standard_gamma_grad(shape, regime, dtype, caplog):
     assert "GEMS _STANDARD_GAMMA_GRAD" in caplog.text
     assert res_out.dtype == ref_out.dtype
     assert res_out.shape == ref_out.shape
-    utils.gems_assert_close(res_out, ref_out, dtype)
+    _assert_close(res_out, ref_out, dtype)
 
 
 @pytest.mark._standard_gamma_grad
@@ -117,7 +131,7 @@ def test__standard_gamma_grad_non_contiguous(dtype, caplog):
 
     assert "GEMS _STANDARD_GAMMA_GRAD" in caplog.text
     assert res_out.is_contiguous()
-    utils.gems_assert_close(res_out, ref_out, dtype)
+    _assert_close(res_out, ref_out, dtype)
 
 
 @pytest.mark._standard_gamma_grad
@@ -130,7 +144,7 @@ def test__standard_gamma_grad_broadcast(dtype):
     res_out = flag_gems._standard_gamma_grad(alpha, x)
 
     assert res_out.shape == (4, 8)
-    utils.gems_assert_close(res_out, ref_out, dtype)
+    _assert_close(res_out, ref_out, dtype)
 
 
 @pytest.mark._standard_gamma_grad
