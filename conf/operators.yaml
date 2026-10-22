@@ -350,6 +350,27 @@ ops:
   - Quantization
   stages:
   - alpha: '5.5'
+- id: _mixed_dtypes_linear
+  description: 'Linear layer over a packed integer weight, mirroring
+    `aten::_mixed_dtypes_linear`: the uint8 weight holds per-column int8 codes, or
+
+    int4 nibbles when its column count is half the length of `scale`, and is
+    dequantized by `scale` inside the GEMM epilogue. An optional bias and an
+
+    optional `relu`/`silu` activation are applied before the single rounding cast
+    to the activation dtype.
+
+    '
+  for:
+  - _mixed_dtypes_linear
+  labels:
+  - aten
+  - KernelGen
+  - NeuralNetwork
+  kind:
+  - NeuralNetwork
+  stages:
+  - alpha: '5.5'
 - id: _neg_view_copy
   description: Returns a freshly allocated contiguous tensor holding the negated values
     of `self`, mirroring `aten::_neg_view_copy`. Unlike `aten::_neg_view` (which returns

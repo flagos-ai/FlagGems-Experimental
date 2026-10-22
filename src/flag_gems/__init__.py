@@ -275,6 +275,7 @@ _FULL_CONFIG = (
         (QUANTIZED_DISPATCH_KEY,),
     ),
     ("_masked_scale", _masked_scale),
+    ("_mixed_dtypes_linear", _mixed_dtypes_linear),
     ("_native_batch_norm_legit", _native_batch_norm_legit),
     ("_native_batch_norm_legit.no_stats", _native_batch_norm_legit_no_stats),
     (

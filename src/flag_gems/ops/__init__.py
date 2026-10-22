@@ -118,6 +118,7 @@ from flag_gems.ops._make_per_tensor_quantized_tensor import (
     _make_per_tensor_quantized_tensor_out,
 )
 from flag_gems.ops._masked_scale import _masked_scale
+from flag_gems.ops._mixed_dtypes_linear import _mixed_dtypes_linear
 from flag_gems.ops._native_batch_norm_legit import (
     _native_batch_norm_legit,
     _native_batch_norm_legit_no_stats,
@@ -1167,6 +1168,7 @@ __all__ = [
     "_make_per_tensor_quantized_tensor",
     "_make_per_tensor_quantized_tensor_out",
     "_masked_scale",
+    "_mixed_dtypes_linear",
     "_native_batch_norm_legit",
     "_native_batch_norm_legit_functional",
     "_native_batch_norm_legit_no_stats",
