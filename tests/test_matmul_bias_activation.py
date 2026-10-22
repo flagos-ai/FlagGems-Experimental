@@ -66,3 +66,54 @@ def test_matmul_bias_activation(M, N, K, dtype):
         res_out = flag_gems.matmul_bias_activation(input_tensor, weight, bias)
 
     utils.gems_assert_close(res_out, ref_out, dtype, reduce_dim=K)
+
+
+# The kernel has four bias modes (scalar, ``(N,)``, ``(1, N)`` and full
+# ``(M, N)``) that differ only in how the epilogue reads the bias. The cases
+# above only exercise ``(N,)``, so each mode gets its own case here.
+BIAS_SHAPES = [(), (1,), (1, 256), (64, 256), (256,)]
+
+
+@pytest.mark.matmul_bias_activation
+@pytest.mark.parametrize("bias_shape", BIAS_SHAPES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_matmul_bias_activation_bias_broadcast(bias_shape, dtype):
+    M, N, K = 64, 256, 128
+    input_tensor = torch.randn((M, K), dtype=dtype, device=flag_gems.device)
+    weight = torch.randn((K, N), dtype=dtype, device=flag_gems.device)
+    bias = torch.randn(bias_shape, dtype=dtype, device=flag_gems.device)
+
+    ref_out = torch.relu(
+        torch.mm(
+            utils.to_reference(input_tensor, True),
+            utils.to_reference(weight, True),
+        )
+        + utils.to_reference(bias, True)
+    )
+    res_out = flag_gems.matmul_bias_activation(input_tensor, weight, bias)
+
+    assert res_out.shape == (M, N)
+    utils.gems_assert_close(res_out, ref_out, dtype, reduce_dim=K)
+
+
+@pytest.mark.matmul_bias_activation
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_matmul_bias_activation_non_contiguous_weight(dtype):
+    # A transposed weight is the layout a ``Linear`` wrapper produces for
+    # ``x @ W.T``; the kernel walks the operand strides rather than assuming a
+    # contiguous matrix.
+    M, N, K = 128, 96, 256
+    input_tensor = torch.randn((M, K), dtype=dtype, device=flag_gems.device)
+    weight_t = torch.randn((N, K), dtype=dtype, device=flag_gems.device).t()
+    assert not weight_t.is_contiguous()
+    bias = torch.randn((N,), dtype=dtype, device=flag_gems.device)
+
+    ref_out = torch.relu(
+        torch.mm(
+            utils.to_reference(input_tensor, True), utils.to_reference(weight_t, True)
+        )
+        + utils.to_reference(bias, True)
+    )
+    res_out = flag_gems.matmul_bias_activation(input_tensor, weight_t, bias)
+
+    utils.gems_assert_close(res_out, ref_out, dtype, reduce_dim=K)
