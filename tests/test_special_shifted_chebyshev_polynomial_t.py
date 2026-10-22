@@ -77,29 +77,25 @@ def test_special_shifted_chebyshev_polynomial_t_scalar_n(shape, dtype, caplog):
 
 # The scalar-degree path has three kernels: a compile-time unrolled one for
 # ``0 <= n <= 24``, a dynamic loop above that, and a zero-result kernel for
-# ``n < 0`` (the Chebyshev polynomial is zero there, matching ATen). The cases
-# below drive each of them; the tensor-degree path picks its branch per element
-# from the same table, so those degrees are swept as tensors too.
+# ``n < 0`` (the Chebyshev polynomial is undefined there and ATen returns 0).
+# The cases below drive each of them; the tensor-degree path picks its branch
+# per element from the same table, so those degrees are swept as tensors too.
 #
-# Tolerance depends on the degree, and deliberately so: the three-term
-# recurrence is ill-conditioned in float32 as ``n`` grows, and *both* the ATen
-# device kernel and this one drift from the float64 truth (measured at degree
-# 4096: 6.5e-3 for ATen, 5.8e-3 here). Demanding 1e-4 there would test float32
-# arithmetic rather than this kernel, so the high-degree float32 cases are
-# compared against the ATen device result of the same dtype with a tolerance
-# that still catches a real defect (7% of the observed drift). float64 matches
-# ATen bit-for-bit at every degree, so it keeps the default tolerance against
-# the float64 reference.
+# The tolerance grows with the degree, and deliberately so: the three-term
+# recurrence is ill-conditioned in float32 as n grows, and both the ATen device
+# kernel and this one drift from the float64 truth by the same order (measured
+# at n=4096: 6.5e-3 for ATen, 5.8e-3 here). A 1e-4 bound there would test
+# float32 arithmetic rather than the kernel; 2e-2 still rejects a wrong branch,
+# a wrong kernel or a shape/layout error. float64 matches ATen bit-for-bit at
+# every degree and keeps the default tolerance.
 SCALAR_DEGREES = [0, 1, 3, 24, 25, 255, 4096, -1, -7]
-HIGH_DEGREE_FP32_ATOL = 2e-3
+HIGH_DEGREE_FP32_ATOL = 2e-2
 
 
-def _reference_for(x, n, dtype):
+def _atol_for(dtype, n):
     if dtype is torch.float32 and abs(int(n)) > 255:
-        # Same-dtype device reference; see the tolerance note above.
-        return torch.ops.aten.special_shifted_chebyshev_polynomial_t(x, n)
-    ref_x = utils.to_reference(x, True)
-    return torch.ops.aten.special_shifted_chebyshev_polynomial_t(ref_x, n)
+        return HIGH_DEGREE_FP32_ATOL
+    return 1e-4
 
 
 @pytest.mark.special_shifted_chebyshev_polynomial_t
@@ -108,11 +104,15 @@ def _reference_for(x, n, dtype):
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 def test_special_shifted_chebyshev_polynomial_t_scalar_degrees(shape, n, dtype):
     x = torch.rand(shape, dtype=dtype, device=flag_gems.device)
-    ref_out = _reference_for(x, n, dtype)
+    # The reference is always built by the shared helper, so this works under
+    # both CI phases (device reference, and --ref=cpu which requires a CPU
+    # reference tensor).
+    ref_out = torch.ops.aten.special_shifted_chebyshev_polynomial_t(
+        utils.to_reference(x, True), n
+    )
     res_out = flag_gems.special_shifted_chebyshev_polynomial_t(x, n)
 
-    atol = HIGH_DEGREE_FP32_ATOL if dtype is torch.float32 and abs(n) > 255 else 1e-4
-    utils.gems_assert_close(res_out, ref_out, dtype, atol=atol)
+    utils.gems_assert_close(res_out, ref_out, dtype, atol=_atol_for(dtype, n))
 
 
 @pytest.mark.special_shifted_chebyshev_polynomial_t
@@ -120,7 +120,7 @@ def test_special_shifted_chebyshev_polynomial_t_scalar_degrees(shape, n, dtype):
 def test_special_shifted_chebyshev_polynomial_t_tensor_degrees(dtype):
     # One tile mixing all three kernel regimes: the per-element branch choice
     # must agree with the scalar paths. float64 only, so the recurrence's
-    # float32 drift does not mask a mis-selected branch.
+    # float32 drift cannot mask a mis-selected branch.
     x = torch.rand((4, 8), dtype=dtype, device=flag_gems.device)
     n = torch.tensor(
         [[0, 1, 3, 24, 25, 255, 4096, -1]] * 4, dtype=torch.long, device=x.device
