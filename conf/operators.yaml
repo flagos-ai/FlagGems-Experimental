@@ -572,6 +572,28 @@ ops:
   - Convolution
   stages:
   - alpha: '5.5'
+- id: _standard_gamma_grad
+  description: 'Reparameterized gradient of a standard-Gamma sample with respect to
+    its shape parameter, mirroring `aten::_standard_gamma_grad`:
+
+    `out[i] = -dF(alpha[i], x[i])/dalpha / f(alpha[i], x[i])`, evaluated with
+
+    ATen''s three-way branch structure (a Taylor/Bernoulli series for small `x`, a
+    Rice saddle-point expansion for large `alpha`, and a bivariate rational
+
+    approximation otherwise) while broadcasting `alpha` and `x` as the reference
+    does.
+
+    '
+  for:
+  - _standard_gamma_grad
+  labels:
+  - aten
+  - KernelGen
+  kind:
+  - Math
+  stages:
+  - alpha: '5.5'
 - id: _unpack_dual
   description: 'Unpacks a dual tensor into its forward-mode AD primal and tangent
     pair, mirroring `aten::_unpack_dual`. The primal is a zero-copy aliasing view
