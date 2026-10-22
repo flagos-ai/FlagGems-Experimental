@@ -181,5 +181,7 @@ def run(self, *, hermitian=False):
     return (LD, pivots)
 
 
-# Alias for FlagGems import convention
+# Aliases for the FlagGems import convention: the generic operator name is
+# ``ldl_factor`` and the ATen-facing name is ``linalg_ldl_factor``.
+ldl_factor = run
 linalg_ldl_factor = run
