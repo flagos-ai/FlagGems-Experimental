@@ -40,8 +40,11 @@ def shifted_chebyshev_polynomial_t_kernel(x, n):
     x_shifted = tl.where(x_shifted > 1.0, 1.0, x_shifted)
     x_shifted = tl.where(x_shifted < -1.0, -1.0, x_shifted)
 
-    # T_n(y) = cos(n * arccos(y))
-    return tl_extra_shim.cos(n * tl_extra_shim.acos(x_shifted))
+    # T_n(y) = cos(n * arccos(y)). The polynomial is undefined for n < 0 and
+    # the eager kernel returns 0 there (measured against ATen for n = -1, -2);
+    # cos(n * arccos(y)) would instead return T_|n|(y).
+    res = tl_extra_shim.cos(n * tl_extra_shim.acos(x_shifted))
+    return tl.where(n < 0, 0.0, res)
 
 
 # Kernel for scalar n (n is not a tensor)
@@ -54,7 +57,9 @@ def shifted_chebyshev_polynomial_t_kernel_scalar_n(x, n):
     x_shifted = tl.where(x_shifted > 1.0, 1.0, x_shifted)
     x_shifted = tl.where(x_shifted < -1.0, -1.0, x_shifted)
 
-    return tl_extra_shim.cos(n * tl_extra_shim.acos(x_shifted))
+    # Same n < 0 contract as the tensor path above.
+    res = tl_extra_shim.cos(n * tl_extra_shim.acos(x_shifted))
+    return tl.where(n < 0, 0.0, res)
 
 
 def special_shifted_chebyshev_polynomial_t(x, n):
@@ -65,7 +70,11 @@ def special_shifted_chebyshev_polynomial_t(x, n):
             f"Unsupported dtype {x.dtype}: "
             "shifted_chebyshev_polynomial_t has no Half/BFloat16 implementation"
         )
-    # Handle scalar n
+    # Handle scalar n. A negative scalar degree is the zero polynomial: the
+    # eager kernel returns 0, and the scalar kernel below leaves that to the
+    # pointwise wrapper, so short-circuit it here.
     if not isinstance(n, torch.Tensor):
+        if n < 0:
+            return torch.zeros_like(x)
         return shifted_chebyshev_polynomial_t_kernel_scalar_n(x, n)
     return shifted_chebyshev_polynomial_t_kernel(x, n)
