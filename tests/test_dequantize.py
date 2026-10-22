@@ -51,3 +51,40 @@ def test_dequantize(shape, scale, zero_point):
 
     # Output is always float32
     utils.gems_assert_close(res_out, ref_out, dtype=torch.float32)
+
+
+# ``dequantize`` accepts every per-tensor affine quantized dtype, and the
+# Hygon specialization reads the payload differently per dtype: a qint8 tensor
+# is reinterpreted in place with ``view(torch.int8)``, while quint8/qint32 must
+# go through ``int_repr()`` because their storage reinterpreted as int8 would
+# change the stored values. The qint8-only cases above never execute the second
+# branch, so each payload dtype is covered here explicitly.
+QINT_DTYPES = [
+    (torch.quint8, 128),
+    (torch.qint8, 0),
+    (torch.qint32, 0),
+]
+
+
+@pytest.mark.dequantize
+@pytest.mark.skipif(
+    flag_gems.vendor_name == "cambricon", reason="Issue #5254: Not supported"
+)
+@pytest.mark.parametrize("shape", QUANT_SHAPES)
+@pytest.mark.parametrize("dtype,zero_point", QINT_DTYPES)
+def test_dequantize_quantized_dtypes(shape, dtype, zero_point):
+    fp_tensor = torch.randn(shape, device="cpu")
+    # qint32 stores its payload as int32, so the scale has to be small enough
+    # that the quantized range still covers the fp32 values.
+    scale = 1e-4 if dtype is torch.qint32 else 0.1
+    q_tensor = torch.quantize_per_tensor(
+        fp_tensor, scale=scale, zero_point=zero_point, dtype=dtype
+    ).to(flag_gems.device)
+
+    ref_out = torch.dequantize(utils.to_reference(q_tensor))
+
+    with flag_gems.use_gems():
+        res_out = torch.dequantize(q_tensor)
+
+    assert res_out.shape == ref_out.shape
+    utils.gems_assert_close(res_out, ref_out, dtype=torch.float32, atol=1e-3)
