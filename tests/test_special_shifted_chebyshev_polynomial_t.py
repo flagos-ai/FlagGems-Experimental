@@ -73,3 +73,81 @@ def test_special_shifted_chebyshev_polynomial_t_scalar_n(shape, dtype, caplog):
     assert "GEMS SPECIAL_SHIFTED_CHEBYSHEV_POLYNOMIAL_T" in caplog.text
 
     utils.gems_assert_close(res_out, ref_out, dtype)
+
+
+# The scalar-degree path has three kernels: a compile-time unrolled one for
+# ``0 <= n <= 24``, a dynamic loop above that, and a zero-result kernel for
+# ``n < 0`` (the Chebyshev polynomial is zero there, matching ATen). The cases
+# below drive each of them; the tensor-degree path picks its branch per element
+# from the same table, so those degrees are swept as tensors too.
+#
+# Tolerance depends on the degree, and deliberately so: the three-term
+# recurrence is ill-conditioned in float32 as ``n`` grows, and *both* the ATen
+# device kernel and this one drift from the float64 truth (measured at degree
+# 4096: 6.5e-3 for ATen, 5.8e-3 here). Demanding 1e-4 there would test float32
+# arithmetic rather than this kernel, so the high-degree float32 cases are
+# compared against the ATen device result of the same dtype with a tolerance
+# that still catches a real defect (7% of the observed drift). float64 matches
+# ATen bit-for-bit at every degree, so it keeps the default tolerance against
+# the float64 reference.
+SCALAR_DEGREES = [0, 1, 3, 24, 25, 255, 4096, -1, -7]
+HIGH_DEGREE_FP32_ATOL = 2e-3
+
+
+def _reference_for(x, n, dtype):
+    if dtype is torch.float32 and abs(int(n)) > 255:
+        # Same-dtype device reference; see the tolerance note above.
+        return torch.ops.aten.special_shifted_chebyshev_polynomial_t(x, n)
+    ref_x = utils.to_reference(x, True)
+    return torch.ops.aten.special_shifted_chebyshev_polynomial_t(ref_x, n)
+
+
+@pytest.mark.special_shifted_chebyshev_polynomial_t
+@pytest.mark.parametrize("shape", [(64,), (16, 32)])
+@pytest.mark.parametrize("n", SCALAR_DEGREES)
+@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+def test_special_shifted_chebyshev_polynomial_t_scalar_degrees(shape, n, dtype):
+    x = torch.rand(shape, dtype=dtype, device=flag_gems.device)
+    ref_out = _reference_for(x, n, dtype)
+    res_out = flag_gems.special_shifted_chebyshev_polynomial_t(x, n)
+
+    atol = HIGH_DEGREE_FP32_ATOL if dtype is torch.float32 and abs(n) > 255 else 1e-4
+    utils.gems_assert_close(res_out, ref_out, dtype, atol=atol)
+
+
+@pytest.mark.special_shifted_chebyshev_polynomial_t
+@pytest.mark.parametrize("dtype", [torch.float64] if utils.fp64_is_supported else [])
+def test_special_shifted_chebyshev_polynomial_t_tensor_degrees(dtype):
+    # One tile mixing all three kernel regimes: the per-element branch choice
+    # must agree with the scalar paths. float64 only, so the recurrence's
+    # float32 drift does not mask a mis-selected branch.
+    x = torch.rand((4, 8), dtype=dtype, device=flag_gems.device)
+    n = torch.tensor(
+        [[0, 1, 3, 24, 25, 255, 4096, -1]] * 4, dtype=torch.long, device=x.device
+    )
+
+    ref_x = utils.to_reference(x, True)
+    ref_n = n.to(ref_x.device).to(ref_x.dtype)
+    ref_out = torch.ops.aten.special_shifted_chebyshev_polynomial_t(ref_x, ref_n)
+    res_out = flag_gems.special_shifted_chebyshev_polynomial_t(x, n)
+
+    utils.gems_assert_close(res_out, ref_out, dtype)
+
+
+@pytest.mark.special_shifted_chebyshev_polynomial_t
+@pytest.mark.parametrize("dtype", [torch.float64] if utils.fp64_is_supported else [])
+def test_special_shifted_chebyshev_polynomial_t_degree_broadcast(dtype):
+    # A degree tensor of a different shape reaches the broadcast kernel, which
+    # walks per-dimension strides instead of flat indices.
+    x = torch.rand((4, 1, 8), dtype=dtype, device=flag_gems.device)
+    n = torch.tensor(
+        [[3, 25, -2, 0, 7, 24, 1, 4096]], dtype=torch.long, device=x.device
+    )
+
+    ref_x = utils.to_reference(x, True)
+    ref_n = n.to(ref_x.device).to(ref_x.dtype)
+    ref_out = torch.ops.aten.special_shifted_chebyshev_polynomial_t(ref_x, ref_n)
+    res_out = flag_gems.special_shifted_chebyshev_polynomial_t(x, n)
+
+    assert res_out.shape == (4, 1, 8)
+    utils.gems_assert_close(res_out, ref_out, dtype)
