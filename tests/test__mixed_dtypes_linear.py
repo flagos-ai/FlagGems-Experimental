@@ -19,7 +19,6 @@ import torch
 
 import flag_gems
 
-from . import accuracy_utils as utils
 from . import conftest as cfg
 
 # The operator name starts with an underscore, so ``pytest.mark`` cannot build
@@ -51,6 +50,20 @@ else:
     ]
     MODES = ["int8", "int4"]
     ACTIVATIONS = [None, "relu", "silu"]
+
+
+def _assert_close(res, ref, dtype, reduce_dim=1, atol=1e-4):
+    """Compare on the CPU, in both CI phases.
+
+    ``utils.gems_assert_close`` asserts that the reference already lives on the
+    CPU when ``--ref=cpu`` is active. The reference here is the ATen device
+    kernel computed on the same inputs (this operator has no CPU kernel of its
+    own), so the two results are moved to the CPU explicitly instead and
+    compared with the repository's per-dtype tolerances.
+    """
+    flag_gems.testing.assert_close(
+        res.cpu(), ref.cpu(), dtype, reduce_dim=reduce_dim, atol=atol
+    )
 
 
 def _codes(weight, mode):
@@ -139,7 +152,7 @@ def test__mixed_dtypes_linear(shape, mode, activation, dtype, has_bias, caplog):
     assert "GEMS _MIXED_DTYPES_LINEAR" in caplog.text
     assert res_out.dtype == dtype
     assert res_out.shape == ref_out.shape
-    utils.gems_assert_close(res_out, ref_out.to(dtype), dtype, reduce_dim=shape[1])
+    _assert_close(res_out, ref_out.to(dtype), dtype, reduce_dim=shape[1])
 
 
 @pytest.mark._mixed_dtypes_linear
@@ -157,7 +170,7 @@ def test__mixed_dtypes_linear_matches_aten(mode, dtype):
     )
     ref_out = _reference(x, weight, scale, bias, "relu", mode, dtype)
 
-    utils.gems_assert_close(aten_out, ref_out.to(dtype), dtype, reduce_dim=K)
+    _assert_close(aten_out, ref_out.to(dtype), dtype, reduce_dim=K)
 
 
 @pytest.mark._mixed_dtypes_linear
@@ -178,9 +191,7 @@ def test__mixed_dtypes_linear_3d_input(mode, dtype):
     res_out = flag_gems._mixed_dtypes_linear(x, weight, scale)
 
     assert res_out.shape == (2, 3, N)
-    utils.gems_assert_close(
-        res_out, ref_out.to(dtype).reshape(2, 3, N), dtype, reduce_dim=K
-    )
+    _assert_close(res_out, ref_out.to(dtype).reshape(2, 3, N), dtype, reduce_dim=K)
 
 
 @pytest.mark._mixed_dtypes_linear
