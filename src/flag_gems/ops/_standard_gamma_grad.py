@@ -274,7 +274,12 @@ def _select(alpha, x, STEPS: tl.constexpr):
             mid, _rational_branch(alpha, x, True, log_alpha, log_x), result
         )
     if tl.sum(saddle.to(tl.int32)) > 0:
-        result = tl.where(saddle, _saddle_branch(alpha, x, True), result)
+        # Correctly-rounded division in this branch: the quotient here is
+        # `alpha - x`-conditioned and the hardware reciprocal sequence costs
+        # ~2x the attainable absolute accuracy (measured 5.9e-5 vs 3.5e-5
+        # against the fp64 reference for alpha in [16, 128]). The measured
+        # latency difference is under 1%, so accuracy wins.
+        result = tl.where(saddle, _saddle_branch(alpha, x, False), result)
     if need_series:
         if _digamma_in_window(alpha):
             psi = _digamma_window(alpha)
