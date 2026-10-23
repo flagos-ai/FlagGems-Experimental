@@ -155,3 +155,21 @@ def test__standard_gamma_grad_rejects_bad_dtype():
     x = torch.ones((4,), dtype=torch.int64, device=flag_gems.device)
     with pytest.raises(RuntimeError):
         flag_gems._standard_gamma_grad(alpha, x)
+
+
+@pytest.mark._standard_gamma_grad
+@pytest.mark.parametrize("dtype", DTYPE_LIST)
+def test__standard_gamma_grad_high_rank_broadcast(dtype):
+    # A broadcast result above the strided kernel's rank cap takes the
+    # materialise-then-flat route; both paths must agree with the reference.
+    shape = (2, 1, 1, 1, 1, 1, 1, 1, 4)
+    alpha = torch.empty(shape, dtype=dtype, device=flag_gems.device).uniform_(0.5, 4.5)
+    x = torch.empty(
+        (1, 2, 1, 1, 1, 1, 1, 1, 4), dtype=dtype, device=flag_gems.device
+    ).uniform_(0.5, 4.5)
+
+    ref_out = torch.ops.aten._standard_gamma_grad(alpha, x)
+    res_out = flag_gems._standard_gamma_grad(alpha, x)
+
+    assert res_out.shape == ref_out.shape
+    _assert_close(res_out, ref_out, dtype)

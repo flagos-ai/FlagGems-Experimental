@@ -55,6 +55,9 @@ _NUM_WARPS = 1
 _SMALL_BLOCK = 128
 _SMALL_NUM_WARPS = 1
 _SMALL_LIMIT = 1 << 14
+# Highest rank the strided kernel is instantiated for; above it the operands
+# are materialised instead.
+_MAX_RANK = 8
 _PSI_STEPS = 3
 
 
@@ -346,10 +349,7 @@ def _sgg_strided(
     a_ptr,
     x_ptr,
     o_ptr,
-    a_st,
-    x_st,
-    o_st,
-    divs,
+    meta_ptr,
     total,
     STEPS: tl.constexpr,
     RANK: tl.constexpr,
@@ -362,13 +362,16 @@ def _sgg_strided(
     oa = tl.zeros((BLOCK,), dtype=tl.int64)
     ox = tl.zeros((BLOCK,), dtype=tl.int64)
     oo = tl.zeros((BLOCK,), dtype=tl.int64)
+    # ``meta_ptr`` holds ``[a_stride..., x_stride..., o_stride..., div...]``,
+    # each RANK entries, so no per-dimension value has to be a separate kernel
+    # argument (and nothing has to be a Python tuple).
     for d in tl.static_range(RANK):
-        q = divs[d]
+        q = tl.load(meta_ptr + 3 * RANK + d)
         i = rem // q
         rem = rem - i * q
-        oa += i * a_st[d]
-        ox += i * x_st[d]
-        oo += i * o_st[d]
+        oa += i * tl.load(meta_ptr + d)
+        ox += i * tl.load(meta_ptr + RANK + d)
+        oo += i * tl.load(meta_ptr + 2 * RANK + d)
     a = tl.load(a_ptr + oa, mask=mask, other=1.0)
     x = tl.load(x_ptr + ox, mask=mask, other=1.0)
     out = _compute(a, x, STEPS)
@@ -438,16 +441,37 @@ def _standard_gamma_grad(alpha, output):
     for d in range(rank - 1, -1, -1):
         divs[d] = acc
         acc *= int(bcast[d])
+    # A rank above the documented cap is handled by materialising the operands:
+    # correctness first, and the flat kernel is the fastest path anyway.
+    if rank > _MAX_RANK:
+        flat_a = av.contiguous()
+        flat_x = xv.contiguous()
+        with torch_device_fn.device(alpha.device):
+            _sgg_flat[(triton.cdiv(n, _BLOCK),)](
+                flat_a,
+                flat_x,
+                out,
+                n,
+                STEPS=_PSI_STEPS,
+                BLOCK=_BLOCK,
+                num_warps=_NUM_WARPS,
+            )
+        return out
+
+    # One int64 metadata tensor instead of three stride tuples plus one divisor
+    # tuple: newer Triton releases reject tuple arguments at dispatch time.
+    meta = torch.tensor(
+        list(av.stride()) + list(xv.stride()) + list(out.stride()) + divs,
+        dtype=torch.int64,
+        device=alpha.device,
+    )
     grid = (triton.cdiv(n, _BLOCK),)
     with torch_device_fn.device(alpha.device):
         _sgg_strided[grid](
             av,
             xv,
             out,
-            av.stride(),
-            xv.stride(),
-            out.stride(),
-            tuple(divs),
+            meta,
             n,
             STEPS=_PSI_STEPS,
             RANK=rank,
