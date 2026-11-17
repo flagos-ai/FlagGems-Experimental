@@ -40,7 +40,7 @@ jobs:
       authorized: ${{ steps.makeDecision.outputs.continue }}
     steps:
       - id: checkUser
-        uses: tspascoal/get-user-teams-membership@b2546c5affc730fd8e3d8483ae9ad3621938c2f9  # v4.0.2
+        uses: tspascoal/get-user-teams-membership@239f45b779d25e70c2e669134c6ed90826f008a1  # v4.0.3
         with:
           username: ${{ github.actor }}
           team: 'FlagGems'
@@ -146,7 +146,7 @@ jobs:
           tools/run_tests.py --ops ${{ inputs.operators }} --gpus ${{ inputs.gpus }}
 
       - name: Upload results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: random-test
           path: results/
